@@ -41,8 +41,12 @@ else
     fi
 fi
 
-# --- clang-tidy (only .cpp files) ---------------------------------------
-[[ ${#staged_cpp[@]} -eq 0 ]] && exit 0
+# --- clang-tidy (only src/ .cpp files; CI lints src/, not tests/) -------
+tidy_cpp=()
+for f in "${staged_cpp[@]+"${staged_cpp[@]}"}"; do
+    [[ "$f" == src/*.cpp ]] && tidy_cpp+=("$f")
+done
+[[ ${#tidy_cpp[@]} -eq 0 ]] && exit 0
 
 if [[ -z "$tidy" ]]; then
     echo "warning: clang-tidy not found, skipping (install: brew install llvm)"
@@ -60,4 +64,4 @@ if [[ -z "$build_dir" ]]; then
 fi
 
 echo "==> clang-tidy ($build_dir)"
-"$tidy" -p "$build_dir" "${staged_cpp[@]}"
+"$tidy" -p "$build_dir" "${tidy_cpp[@]}"
