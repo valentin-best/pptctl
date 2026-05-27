@@ -165,3 +165,35 @@ TEST_CASE("Presentation: loads three_slides.pptx — counts 3 slides") {
 
     CHECK(pres.slide_count() == 3);
 }
+
+TEST_CASE("Presentation: parses the theme color scheme") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    const auto& scheme = pres.color_scheme();
+    CHECK(scheme.name == "Office");
+    // The standard Office scheme has all 12 slots populated.
+    REQUIRE(scheme.colors.size() == 12);
+
+    auto color_of = [&](const std::string& name) -> std::string {
+        for (const auto& c : scheme.colors) {
+            if (c.name == name) {
+                return c.value;
+            }
+        }
+        return {};
+    };
+
+    // Slots emitted in canonical OOXML order.
+    CHECK(scheme.colors.front().name == "dk1");
+    CHECK(scheme.colors.back().name == "folHlink");
+
+    // dk1 comes from a:sysClr/@lastClr; accents from a:srgbClr/@val. Uppercased.
+    CHECK(color_of("dk1") == "000000");
+    CHECK(color_of("lt1") == "FFFFFF");
+    CHECK(color_of("accent1") == "4F81BD");
+    CHECK(color_of("hlink") == "0000FF");
+    CHECK(color_of("folHlink") == "800080");
+}
