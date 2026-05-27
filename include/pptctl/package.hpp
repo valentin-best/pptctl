@@ -22,8 +22,8 @@ class Package {
 
     Package(const Package&) = delete;
     Package& operator=(const Package&) = delete;
-    Package(Package&&) noexcept;
-    Package& operator=(Package&&) noexcept;
+    Package(Package&& other) noexcept;
+    Package& operator=(Package&& other) noexcept;
 
     // Open a .pptx file. Returns false on error.
     [[nodiscard]] bool open(const std::string& path);

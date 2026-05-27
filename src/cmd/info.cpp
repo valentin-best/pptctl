@@ -18,7 +18,7 @@ namespace {
 
 std::string human_bytes(std::size_t n) {
     constexpr double kKi = 1024.0;
-    double v = static_cast<double>(n);
+    auto v = static_cast<double>(n);
     const char* unit = "B";
     if (v >= kKi) { v /= kKi; unit = "KiB"; }
     if (v >= kKi) { v /= kKi; unit = "MiB"; }
@@ -32,7 +32,7 @@ std::string human_bytes(std::size_t n) {
 std::string join(const std::vector<std::string>& xs, std::string_view sep) {
     std::string out;
     for (std::size_t i = 0; i < xs.size(); ++i) {
-        if (i) {
+        if (i != 0U) {
             out.append(sep);
         }
         out.append(xs[i]);

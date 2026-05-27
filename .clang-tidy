@@ -1,0 +1,22 @@
+---
+Checks: >-
+  -*,
+  bugprone-*,
+  -bugprone-exception-escape,
+  -bugprone-unhandled-exception-at-new,
+  clang-analyzer-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  readability-*,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -readability-magic-numbers,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes
+
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/include/pptctl/.*'
+FormatStyle: file

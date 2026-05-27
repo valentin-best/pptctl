@@ -23,7 +23,7 @@ struct Package::Impl {
     ~Impl() { close(); }
 
     void close() {
-        if (reader) {
+        if (reader != nullptr) {
             mz_zip_reader_close(reader);
             mz_zip_reader_delete(&reader);
             reader = nullptr;
@@ -55,7 +55,7 @@ bool Package::open(const std::string& path) {
     impl_->parts.clear();
 
     impl_->reader = mz_zip_reader_create();
-    if (!impl_->reader) {
+    if (impl_->reader == nullptr) {
         return false;
     }
     if (mz_zip_reader_open_file(impl_->reader, path.c_str()) != MZ_OK) {
@@ -67,7 +67,8 @@ bool Package::open(const std::string& path) {
     int err = mz_zip_reader_goto_first_entry(impl_->reader);
     while (err == MZ_OK) {
         mz_zip_file* info = nullptr;
-        if (mz_zip_reader_entry_get_info(impl_->reader, &info) == MZ_OK && info && info->filename) {
+        if (mz_zip_reader_entry_get_info(impl_->reader, &info) == MZ_OK && info != nullptr &&
+            info->filename != nullptr) {
             // Skip directory entries.
             const std::size_t len = std::strlen(info->filename);
             if (len > 0 && info->filename[len - 1] != '/') {
@@ -86,12 +87,12 @@ std::size_t Package::part_count() const noexcept { return impl_->parts.size(); }
 std::vector<std::string> Package::part_names() const { return impl_->parts; }
 
 std::vector<std::byte> Package::read_part(std::string_view name) const {
-    if (!impl_->reader) {
+    if (impl_->reader == nullptr) {
         return {};
     }
 
     // minizip-ng wants a C-string for locate.
-    std::string name_str(name);
+    const std::string name_str(name);
     if (mz_zip_reader_locate_entry(impl_->reader, name_str.c_str(), 0) != MZ_OK) {
         return {};
     }
