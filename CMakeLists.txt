@@ -75,6 +75,12 @@ set(MZ_ZSTD OFF CACHE BOOL "" FORCE)
 set(MZ_OPENSSL OFF CACHE BOOL "" FORCE)
 set(MZ_LIBBSD OFF CACHE BOOL "" FORCE)
 set(MZ_FETCH_LIBS ON CACHE BOOL "" FORCE)
+# On Windows there's no system zlib, so minizip-ng fetches zlib-ng, whose `zlib`
+# target is an ALIAS. minizip-ng's install() rules then choke on installing an
+# alias target. We only consume these deps from the build tree, never install
+# them, so skip their install rules entirely. (The MINIZIP::minizip alias we
+# link against is created independently of the install block.)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     minizip-ng
     GIT_REPOSITORY https://github.com/zlib-ng/minizip-ng.git
