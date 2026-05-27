@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch when a new push lands.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc13
+            os: ubuntu-24.04
+            preset: linux-release
+            cc: gcc-13
+            cxx: g++-13
+            apt: gcc-13 g++-13
+          - name: linux-clang18
+            os: ubuntu-24.04
+            preset: linux-release
+            cc: clang-18
+            cxx: clang++-18
+            apt: clang-18
+          - name: macos-arm64
+            os: macos-15
+            preset: macos-release
+            cc: clang
+            cxx: clang++
+
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ${{ matrix.apt }}
+
+      - name: Install build tools (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja || true
+
+      - name: Cache FetchContent downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/${{ matrix.preset }}/_deps/*-src
+            build/${{ matrix.preset }}/_deps/*-subbuild
+          key: deps-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
+
+      - name: Smoke test the binary
+        run: |
+          ./build/${{ matrix.preset }}/pptctl --version
+          ./build/${{ matrix.preset }}/pptctl info tests/fixtures/three_slides.pptx
