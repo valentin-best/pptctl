@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Pre-commit hook: clang-format + clang-tidy on staged C++ files.
+# Install with: scripts/install-hooks.sh
+set -euo pipefail
+
+staged_cpp=()
+staged_hpp=()
+while IFS= read -r f; do
+    [[ "$f" == *.cpp ]] && staged_cpp+=("$f")
+    [[ "$f" == *.hpp ]] && staged_hpp+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+all_staged=("${staged_cpp[@]+"${staged_cpp[@]}"}" "${staged_hpp[@]+"${staged_hpp[@]}"}")
+[[ ${#all_staged[@]} -eq 0 ]] && exit 0
+
+# Locate a tool: check PATH, then the Homebrew LLVM 18 prefix on macOS.
+find_tool() {
+    if command -v "$1" &>/dev/null; then printf '%s' "$1"; return; fi
+    local p="/opt/homebrew/opt/llvm@18/bin/$1"
+    [[ -x "$p" ]] && printf '%s' "$p"
+}
+
+fmt="${CLANG_FORMAT:-$(find_tool clang-format || true)}"
+tidy="${CLANG_TIDY:-$(find_tool clang-tidy || true)}"
+
+# --- clang-format -------------------------------------------------------
+if [[ -z "$fmt" ]]; then
+    echo "warning: clang-format not found, skipping (install: brew install llvm)"
+else
+    echo "==> clang-format"
+    bad=()
+    for f in "${all_staged[@]}"; do
+        [[ -f "$f" ]] || continue
+        "$fmt" --dry-run --Werror "$f" 2>/dev/null || bad+=("$f")
+    done
+    if [[ ${#bad[@]} -gt 0 ]]; then
+        printf 'error: formatting violation(s):\n'
+        printf '  %s\n' "${bad[@]}"
+        printf 'Fix with: %s -i %s\n' "$fmt" "${bad[*]}"
+        exit 1
+    fi
+fi
+
+# --- clang-tidy (only .cpp files) ---------------------------------------
+[[ ${#staged_cpp[@]} -eq 0 ]] && exit 0
+
+if [[ -z "$tidy" ]]; then
+    echo "warning: clang-tidy not found, skipping (install: brew install llvm)"
+    exit 0
+fi
+
+build_dir=""
+for d in build/macos-release build/linux-release build/debug build/release; do
+    [[ -f "$d/compile_commands.json" ]] && build_dir="$d" && break
+done
+
+if [[ -z "$build_dir" ]]; then
+    echo "warning: no compile_commands.json — run cmake first; skipping clang-tidy"
+    exit 0
+fi
+
+echo "==> clang-tidy ($build_dir)"
+"$tidy" -p "$build_dir" "${staged_cpp[@]}"
