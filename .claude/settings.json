@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh project item-list:*)",
+      "Bash(gh project view:*)",
+      "Bash(gh repo view:*)"
+    ]
+  }
+}

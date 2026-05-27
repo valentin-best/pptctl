@@ -4,6 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development — only `info` is implemented; the other subcommands are stubs that print "not yet implemented".
 
+## Project workflow & status
+
+Work is planned in `ROADMAP.md` / `PLAN.md` and tracked in GitHub **milestones** (`Phase 0` … `Phase 8`, version-tagged) and **Project #5** (`valentin-best/pptctl`, a private repo). Phases are sequential: each is a shippable version (`Phase 1` → v0.1.0 `info`, `Phase 2` → v0.2.0 `extract`, …).
+
+- **To see where things stand and what to do next, run `/next`** — it reports the current phase, its open issues, and a recommended next task. Prefer it over re-deriving status by hand.
+- Work issue-by-issue within the current phase. Reference the issue number in commits/PRs.
+- Phases 0 and 1 are largely already built; their open issues are the remaining **gaps** only (e.g. Windows CI, `.clang-tidy`, theme colors, relationship resolution, fixtures). Phases 3–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
+- Don't publish the roadmap, make the repo public, or post launch content until something has actually shipped (a deliberate choice — see `ROADMAP.md`).
+
 ## Build, test, run
 
 Requires CMake ≥ 3.24, Ninja, and a C++20 compiler with `std::format` (Apple Clang ≥ 16, LLVM Clang ≥ 17, GCC ≥ 13, MSVC ≥ 19.30). Dependencies are fetched automatically via CMake `FetchContent` — no system packages, vcpkg, or conan.
