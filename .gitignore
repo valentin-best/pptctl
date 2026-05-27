@@ -63,3 +63,6 @@ coverage/
 # Local config
 .envrc
 local.cmake
+
+# Real-world validation decks (issue #6) — not committed (size/licensing)
+tests/real_world/
