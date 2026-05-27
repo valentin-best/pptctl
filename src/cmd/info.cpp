@@ -1,13 +1,12 @@
 // pptctl info — prints metadata about a .pptx file.
 
+#include <cstddef>
+#include <filesystem>
+#include <format>
 #include <nlohmann/json.hpp>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/print.hpp>
-
-#include <cstddef>
-#include <filesystem>
-#include <format>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,9 +19,18 @@ std::string human_bytes(std::size_t n) {
     constexpr double kKi = 1024.0;
     auto v = static_cast<double>(n);
     const char* unit = "B";
-    if (v >= kKi) { v /= kKi; unit = "KiB"; }
-    if (v >= kKi) { v /= kKi; unit = "MiB"; }
-    if (v >= kKi) { v /= kKi; unit = "GiB"; }
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "KiB";
+    }
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "MiB";
+    }
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "GiB";
+    }
     if (n < 1024) {
         return std::format("{} {}", n, unit);
     }
@@ -55,9 +63,8 @@ int info(const std::string& path, bool json) {
         return 1;
     }
 
-    const auto file_size = std::filesystem::exists(path)
-                               ? std::filesystem::file_size(path)
-                               : std::size_t{0};
+    const auto file_size =
+        std::filesystem::exists(path) ? std::filesystem::file_size(path) : std::size_t{0};
     const auto canvas = pres.canvas();
     const auto media = pres.media();
 
@@ -87,16 +94,23 @@ int info(const std::string& path, bool json) {
         constexpr int kLabelW = 20;
         pptctl::println("{:<{}}{}  ({})", "file", kLabelW, path, human_bytes(file_size));
         pptctl::println("{:<{}}{}", "slides", kLabelW, pres.slide_count());
-        pptctl::println("{:<{}}{:.2f}in × {:.2f}in", "canvas", kLabelW,
-                        canvas.width_inches(), canvas.height_inches());
+        pptctl::println("{:<{}}{:.2f}in × {:.2f}in",
+                        "canvas",
+                        kLabelW,
+                        canvas.width_inches(),
+                        canvas.height_inches());
         pptctl::println("{:<{}}{}", "masters", kLabelW, pres.master_count());
         pptctl::println("{:<{}}{}", "layouts", kLabelW, pres.layout_count());
         if (!pres.fonts().empty()) {
             pptctl::println("{:<{}}{}", "fonts referenced", kLabelW, join(pres.fonts(), ", "));
         }
-        pptctl::println("{:<{}}{} images ({}), {} video, {} audio", "media", kLabelW,
-                        media.image_count, human_bytes(media.image_bytes),
-                        media.video_count, media.audio_count);
+        pptctl::println("{:<{}}{} images ({}), {} video, {} audio",
+                        "media",
+                        kLabelW,
+                        media.image_count,
+                        human_bytes(media.image_bytes),
+                        media.video_count,
+                        media.audio_count);
         pptctl::println("{:<{}}{}", "parts in package", kLabelW, pkg.part_count());
     }
     return 0;

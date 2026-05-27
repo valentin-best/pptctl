@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include <pptctl/package.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <pptctl/package.hpp>
 #include <string>
 #include <vector>
 
@@ -38,20 +38,32 @@ struct MediaSummary {
 };
 
 class Presentation {
-   public:
+ public:
     explicit Presentation(Package& package);
 
     // Load presentation metadata. Returns false if the package isn't a valid pptx.
     [[nodiscard]] bool load();
 
-    [[nodiscard]] std::size_t slide_count() const noexcept { return slide_count_; }
-    [[nodiscard]] CanvasSize canvas() const noexcept { return canvas_; }
-    [[nodiscard]] std::size_t master_count() const noexcept { return master_count_; }
-    [[nodiscard]] std::size_t layout_count() const noexcept { return layout_count_; }
-    [[nodiscard]] const std::vector<std::string>& fonts() const noexcept { return fonts_; }
-    [[nodiscard]] const MediaSummary& media() const noexcept { return media_; }
+    [[nodiscard]] std::size_t slide_count() const noexcept {
+        return slide_count_;
+    }
+    [[nodiscard]] CanvasSize canvas() const noexcept {
+        return canvas_;
+    }
+    [[nodiscard]] std::size_t master_count() const noexcept {
+        return master_count_;
+    }
+    [[nodiscard]] std::size_t layout_count() const noexcept {
+        return layout_count_;
+    }
+    [[nodiscard]] const std::vector<std::string>& fonts() const noexcept {
+        return fonts_;
+    }
+    [[nodiscard]] const MediaSummary& media() const noexcept {
+        return media_;
+    }
 
-   private:
+ private:
     Package* package_;
     std::size_t slide_count_ = 0;
     CanvasSize canvas_{};

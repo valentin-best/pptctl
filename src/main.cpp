@@ -36,13 +36,9 @@ int main(int argc, char** argv) {
     std::string info_path;
     bool info_json = false;
     auto* info_cmd = app.add_subcommand("info", "Quick metadata about a .pptx file");
-    info_cmd->add_option("file", info_path, "path to .pptx")
-        ->required()
-        ->check(CLI::ExistingFile);
+    info_cmd->add_option("file", info_path, "path to .pptx")->required()->check(CLI::ExistingFile);
     info_cmd->add_flag("--json", info_json, "emit machine-readable JSON");
-    info_cmd->callback([&]() {
-        std::exit(pptctl::cmd::info(info_path, info_json));
-    });
+    info_cmd->callback([&]() { std::exit(pptctl::cmd::info(info_path, info_json)); });
 
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
@@ -51,12 +47,14 @@ int main(int argc, char** argv) {
         ->callback([] { std::exit(not_implemented("extract")); });
     app.add_subcommand("lint", "Static analysis for .pptx files (not yet implemented)")
         ->callback([] { std::exit(not_implemented("lint")); });
-    app.add_subcommand("optimize", "Reduce file size (not yet implemented)")
-        ->callback([] { std::exit(not_implemented("optimize")); });
+    app.add_subcommand("optimize", "Reduce file size (not yet implemented)")->callback([] {
+        std::exit(not_implemented("optimize"));
+    });
     app.add_subcommand("diff", "Semantic diff between two .pptx files (not yet implemented)")
         ->callback([] { std::exit(not_implemented("diff")); });
-    app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")
-        ->callback([] { std::exit(not_implemented("merge")); });
+    app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")->callback([] {
+        std::exit(not_implemented("merge"));
+    });
     app.add_subcommand("fill", "Template-fill a .pptx from JSON data (not yet implemented)")
         ->callback([] { std::exit(not_implemented("fill")); });
 

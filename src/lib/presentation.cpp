@@ -1,13 +1,11 @@
 // pptctl/presentation.cpp — reads presentation.xml, counts slides/masters/layouts,
 // extracts canvas dimensions, fonts referenced in the theme, and media summary.
 
-#include <pptctl/presentation.hpp>
-
-#include <pugixml.hpp>
-
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <pptctl/presentation.hpp>
+#include <pugixml.hpp>
 #include <set>
 #include <string>
 #include <string_view>
