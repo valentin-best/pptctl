@@ -1,10 +1,10 @@
 // Tests for the Package and Presentation layers.
 
 #include <doctest/doctest.h>
-#include <pptctl/package.hpp>
-#include <pptctl/presentation.hpp>
 
 #include <algorithm>
+#include <pptctl/package.hpp>
+#include <pptctl/presentation.hpp>
 #include <string>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -56,6 +56,88 @@ TEST_CASE("Package: read_part returns empty for missing part") {
     pptctl::Package pkg;
     REQUIRE(pkg.open(fixture("minimal.pptx")));
     CHECK(pkg.read_part("does/not/exist.xml").empty());
+}
+
+TEST_CASE("Package: content_type resolves an explicit Override by part path") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.content_type("ppt/presentation.xml") ==
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml");
+    CHECK(pkg.content_type("ppt/slides/slide1.xml") ==
+          "application/vnd.openxmlformats-officedocument.presentationml.slide+xml");
+}
+
+TEST_CASE("Package: content_type accepts a leading-slash part path") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.content_type("/ppt/presentation.xml") ==
+          "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml");
+}
+
+TEST_CASE("Package: content_type falls back to a Default by extension") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    // No Override for .rels parts; resolved via Default Extension="rels".
+    CHECK(pkg.content_type("_rels/.rels") ==
+          "application/vnd.openxmlformats-package.relationships+xml");
+    // A .xml part with no Override falls back to Default Extension="xml".
+    CHECK(pkg.content_type("ppt/_rels/presentation.xml.rels") ==
+          "application/vnd.openxmlformats-package.relationships+xml");
+}
+
+TEST_CASE("Package: content_type is empty for an unknown extension") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.content_type("ppt/media/nope.zzz").empty());
+}
+
+TEST_CASE("Package: relationships parses the package root (_rels/.rels)") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    const auto rels = pkg.relationships("");
+    CHECK(rels.size() == 4);
+
+    auto by_id = [&](const std::string& id) -> const pptctl::Relationship* {
+        for (const auto& r : rels) {
+            if (r.id == id)
+                return &r;
+        }
+        return nullptr;
+    };
+    const auto* r1 = by_id("rId1");
+    REQUIRE(r1 != nullptr);
+    CHECK(r1->target == "ppt/presentation.xml");
+    CHECK_FALSE(r1->external);
+    CHECK(r1->type.find("officeDocument") != std::string::npos);
+}
+
+TEST_CASE("Package: relationships resolves relative targets against the source dir") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    // slide1.xml.rels has Target="../slideLayouts/slideLayout7.xml".
+    const auto rels = pkg.relationships("ppt/slides/slide1.xml");
+    REQUIRE(rels.size() == 1);
+    CHECK(rels[0].id == "rId1");
+    CHECK(rels[0].target == "ppt/slideLayouts/slideLayout7.xml");
+}
+
+TEST_CASE("Package: relationships is empty for a part with no .rels file") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.relationships("ppt/theme/theme1.xml").empty());
+}
+
+TEST_CASE("Package: resolve returns the target part name for a known id") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.resolve("ppt/slides/slide1.xml", "rId1") == "ppt/slideLayouts/slideLayout7.xml");
+    CHECK(pkg.resolve("", "rId1") == "ppt/presentation.xml");
+}
+
+TEST_CASE("Package: resolve is empty for an unknown id") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("minimal.pptx")));
+    CHECK(pkg.resolve("ppt/slides/slide1.xml", "rId999").empty());
 }
 
 TEST_CASE("Presentation: loads minimal.pptx — 1 slide, 16:9 canvas") {
