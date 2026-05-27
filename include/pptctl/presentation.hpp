@@ -37,6 +37,22 @@ struct MediaSummary {
     std::size_t image_bytes = 0;
 };
 
+// One slot of a theme's color scheme (a:clrScheme), e.g. {"accent1", "4F81BD"}.
+struct ThemeColor {
+    std::string name;   // slot name without the "a:" prefix: dk1, lt1, accent1, …
+    std::string value;  // 6-digit RRGGBB hex, uppercase, no leading '#'
+};
+
+// A theme's color scheme: the scheme name plus its ordered color slots.
+struct ColorScheme {
+    std::string name;                // a:clrScheme/@name, e.g. "Office"
+    std::vector<ThemeColor> colors;  // in OOXML slot order
+
+    [[nodiscard]] bool empty() const noexcept {
+        return colors.empty();
+    }
+};
+
 class Presentation {
  public:
     explicit Presentation(Package& package);
@@ -59,6 +75,9 @@ class Presentation {
     [[nodiscard]] const std::vector<std::string>& fonts() const noexcept {
         return fonts_;
     }
+    [[nodiscard]] const ColorScheme& color_scheme() const noexcept {
+        return color_scheme_;
+    }
     [[nodiscard]] const MediaSummary& media() const noexcept {
         return media_;
     }
@@ -70,6 +89,7 @@ class Presentation {
     std::size_t master_count_ = 0;
     std::size_t layout_count_ = 0;
     std::vector<std::string> fonts_;
+    ColorScheme color_scheme_{};
     MediaSummary media_{};
 };
 

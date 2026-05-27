@@ -82,6 +82,13 @@ int info(const std::string& path, bool json) {
         out["masters"] = pres.master_count();
         out["layouts"] = pres.layout_count();
         out["fonts"] = pres.fonts();
+        const auto& scheme = pres.color_scheme();
+        out["theme_color_scheme"] = scheme.name;
+        auto colors = nlohmann::json::object();
+        for (const auto& c : scheme.colors) {
+            colors[c.name] = c.value;
+        }
+        out["theme_colors"] = colors;
         out["media"] = {
             {"images", media.image_count},
             {"images_bytes", media.image_bytes},
@@ -103,6 +110,18 @@ int info(const std::string& path, bool json) {
         pptctl::println("{:<{}}{}", "layouts", kLabelW, pres.layout_count());
         if (!pres.fonts().empty()) {
             pptctl::println("{:<{}}{}", "fonts referenced", kLabelW, join(pres.fonts(), ", "));
+        }
+        const auto& scheme = pres.color_scheme();
+        if (!scheme.colors.empty()) {
+            std::vector<std::string> swatches;
+            swatches.reserve(scheme.colors.size());
+            for (const auto& c : scheme.colors) {
+                swatches.push_back(std::format("{} #{}", c.name, c.value));
+            }
+            const std::string value =
+                scheme.name.empty() ? join(swatches, ", ")
+                                    : std::format("{} — {}", scheme.name, join(swatches, ", "));
+            pptctl::println("{:<{}}{}", "theme colors", kLabelW, value);
         }
         pptctl::println("{:<{}}{} images ({}), {} video, {} audio",
                         "media",
