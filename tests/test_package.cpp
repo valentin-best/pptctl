@@ -166,6 +166,52 @@ TEST_CASE("Presentation: loads three_slides.pptx — counts 3 slides") {
     CHECK(pres.slide_count() == 3);
 }
 
+TEST_CASE("Presentation: images_deck.pptx — 12 slides, 12 embedded images") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    CHECK(pres.slide_count() == 12);
+    const auto& media = pres.media();
+    CHECK(media.image_count == 12);
+    CHECK(media.image_bytes > 0);
+    CHECK(media.video_count == 0);
+    CHECK(media.audio_count == 0);
+}
+
+TEST_CASE("Presentation: notes_and_masters.pptx — multiple masters") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("notes_and_masters.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    CHECK(pres.slide_count() == 4);
+    CHECK(pres.master_count() == 2);
+}
+
+TEST_CASE("Package: notes_and_masters.pptx carries notes and a second master") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("notes_and_masters.pptx")));
+
+    const auto names = pkg.part_names();
+    auto has = [&](const std::string& n) {
+        return std::find(names.begin(), names.end(), n) != names.end();
+    };
+    CHECK(has("ppt/notesSlides/notesSlide1.xml"));
+    CHECK(has("ppt/slideMasters/slideMaster2.xml"));
+
+    // The injected master is reachable from the presentation's relationships.
+    const auto rels = pkg.relationships("ppt/presentation.xml");
+    bool master2_linked = false;
+    for (const auto& r : rels) {
+        if (r.target == "ppt/slideMasters/slideMaster2.xml") {
+            master2_linked = true;
+        }
+    }
+    CHECK(master2_linked);
+}
+
 TEST_CASE("Presentation: parses the theme color scheme") {
     pptctl::Package pkg;
     REQUIRE(pkg.open(fixture("minimal.pptx")));
