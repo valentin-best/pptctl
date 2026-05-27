@@ -36,6 +36,11 @@ jobs:
             preset: macos-release
             cc: clang
             cxx: clang++
+          - name: windows-msvc
+            os: windows-2022
+            preset: windows-release
+            cc: cl
+            cxx: cl
 
     env:
       CC: ${{ matrix.cc }}
@@ -55,6 +60,10 @@ jobs:
         run: |
           brew install cmake ninja || true
 
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Cache FetchContent downloads
         uses: actions/cache@v4
         with:
@@ -72,10 +81,17 @@ jobs:
       - name: Test
         run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
 
-      - name: Smoke test the binary
+      - name: Smoke test the binary (Unix)
+        if: runner.os != 'Windows'
         run: |
           ./build/${{ matrix.preset }}/pptctl --version
           ./build/${{ matrix.preset }}/pptctl info tests/fixtures/three_slides.pptx
+
+      - name: Smoke test the binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          .\build\${{ matrix.preset }}\pptctl.exe --version
+          .\build\${{ matrix.preset }}\pptctl.exe info tests\fixtures\three_slides.pptx
 
   lint:
     name: lint (clang-tidy)

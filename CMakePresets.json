@@ -87,6 +87,26 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Linux"
             }
+        },
+        {
+            "name": "windows-debug",
+            "displayName": "Windows Debug (MSVC)",
+            "inherits": "debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Windows Release (MSVC)",
+            "inherits": "release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
         }
     ],
     "buildPresets": [
@@ -96,7 +116,9 @@
         {"name": "macos-debug", "configurePreset": "macos-debug"},
         {"name": "macos-release", "configurePreset": "macos-release"},
         {"name": "linux-debug", "configurePreset": "linux-debug"},
-        {"name": "linux-release", "configurePreset": "linux-release"}
+        {"name": "linux-release", "configurePreset": "linux-release"},
+        {"name": "windows-debug", "configurePreset": "windows-debug"},
+        {"name": "windows-release", "configurePreset": "windows-release"}
     ],
     "testPresets": [
         {
