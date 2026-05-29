@@ -112,6 +112,7 @@ endif()
 add_library(pptctl_lib STATIC
     src/lib/package.cpp
     src/lib/presentation.cpp
+    src/lib/slide.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -127,6 +128,7 @@ target_link_libraries(pptctl_lib
 add_executable(pptctl
     src/main.cpp
     src/cmd/info.cpp
+    src/cmd/extract.cpp
 )
 target_link_libraries(pptctl
     PRIVATE
@@ -140,6 +142,7 @@ enable_testing()
 add_executable(pptctl_tests
     tests/test_main.cpp
     tests/test_package.cpp
+    tests/test_slide.cpp
 )
 target_link_libraries(pptctl_tests
     PRIVATE

@@ -135,9 +135,15 @@ bool Presentation::load() {
     }
     auto sld_id_lst = pres.child("p:sldIdLst");
     if (sld_id_lst) {
-        for (auto _ : sld_id_lst.children("p:sldId")) {
-            (void)_;
+        for (auto sld_id : sld_id_lst.children("p:sldId")) {
             ++slide_count_;
+            const char* rid = sld_id.attribute("r:id").as_string("");
+            if (rid[0] != '\0') {
+                std::string target = package_->resolve("ppt/presentation.xml", rid);
+                if (!target.empty()) {
+                    slide_parts_.push_back(std::move(target));
+                }
+            }
         }
     }
 
