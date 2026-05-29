@@ -13,6 +13,7 @@ namespace pptctl::cmd {
 // under src/cmd/. Add a forward declaration here and a CLI11 subcommand
 // registration in main() when you add a new one.
 int info(const std::string& path, bool json);
+int extract(const std::string& path);
 
 }  // namespace pptctl::cmd
 
@@ -40,11 +41,18 @@ int main(int argc, char** argv) {
     info_cmd->add_flag("--json", info_json, "emit machine-readable JSON");
     info_cmd->callback([&]() { std::exit(pptctl::cmd::info(info_path, info_json)); });
 
+    // --- extract -------------------------------------------------------------
+    std::string extract_path;
+    auto* extract_cmd =
+        app.add_subcommand("extract", "Extract slide text content as a structured dump");
+    extract_cmd->add_option("file", extract_path, "path to .pptx")
+        ->required()
+        ->check(CLI::ExistingFile);
+    extract_cmd->callback([&]() { std::exit(pptctl::cmd::extract(extract_path)); });
+
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
     // shows the full planned surface area to users.
-    app.add_subcommand("extract", "Extract slide content as JSON/markdown (not yet implemented)")
-        ->callback([] { std::exit(not_implemented("extract")); });
     app.add_subcommand("lint", "Static analysis for .pptx files (not yet implemented)")
         ->callback([] { std::exit(not_implemented("lint")); });
     app.add_subcommand("optimize", "Reduce file size (not yet implemented)")->callback([] {

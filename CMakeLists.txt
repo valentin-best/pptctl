@@ -128,6 +128,7 @@ target_link_libraries(pptctl_lib
 add_executable(pptctl
     src/main.cpp
     src/cmd/info.cpp
+    src/cmd/extract.cpp
 )
 target_link_libraries(pptctl
     PRIVATE
