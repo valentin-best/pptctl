@@ -87,6 +87,39 @@ constexpr const char* kRichParagraphs = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// One placeholder (with type + xfrm), a picture, a table, a chart, and a
+// connector — to exercise kind detection, placeholder type, and geometry.
+constexpr const char* kMixedShapes = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Title 1"/><p:cNvSpPr/>
+        <p:nvPr><p:ph type="ctrTitle"/></p:nvPr></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="685800" y="2130425"/><a:ext cx="7772400" cy="2898775"/></a:xfrm></p:spPr>
+      <p:txBody><a:bodyPr/><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+    </p:sp>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="3" name="Picture 3"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill/><p:spPr/>
+    </p:pic>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="4" name="Table 4"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"/></a:graphic>
+    </p:graphicFrame>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="5" name="Chart 5"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"/></a:graphic>
+    </p:graphicFrame>
+    <p:cxnSp>
+      <p:nvCxnSpPr><p:cNvPr id="6" name="Connector 6"/></p:nvCxnSpPr>
+      <p:spPr/>
+    </p:cxnSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -174,4 +207,26 @@ TEST_CASE("Slide: parses levels, empty paragraphs, fields, and breaks") {
     CHECK(paras[3].runs[1].text == "\n");
     CHECK(paras[3].runs[2].text == "3");
     CHECK(paras[3].runs[2].is_field);
+}
+
+TEST_CASE("Slide: detects shape kinds, placeholder type, and geometry") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kMixedShapes));
+    REQUIRE(slide.shapes().size() == 5);
+    const auto& s = slide.shapes();
+
+    CHECK(s[0].kind == pptctl::ShapeKind::Placeholder);
+    REQUIRE(s[0].placeholder_type.has_value());
+    CHECK(*s[0].placeholder_type == "ctrTitle");
+    REQUIRE(s[0].geometry.has_value());
+    CHECK(s[0].geometry->off_x == 685800);
+    CHECK(s[0].geometry->ext_cy == 2898775);
+
+    CHECK(s[1].kind == pptctl::ShapeKind::Picture);
+    CHECK(s[1].name == "Picture 3");
+    CHECK_FALSE(s[1].geometry.has_value());  // no a:xfrm
+
+    CHECK(s[2].kind == pptctl::ShapeKind::Table);
+    CHECK(s[3].kind == pptctl::ShapeKind::Chart);
+    CHECK(s[4].kind == pptctl::ShapeKind::Connector);
 }
