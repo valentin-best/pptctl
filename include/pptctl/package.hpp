@@ -9,6 +9,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -62,6 +64,11 @@ class Package {
     // Resolve a single relationship id within source_part to its target part
     // name. Returns empty if the id is unknown or the target is external.
     [[nodiscard]] std::string resolve(std::string_view source_part, std::string_view rel_id) const;
+
+    // Uncompressed size of a part, read from the ZIP entry metadata without
+    // decompressing it. Returns nullopt if the part doesn't exist or no
+    // package is open.
+    [[nodiscard]] std::optional<std::uint64_t> part_size(std::string_view name) const;
 
  private:
     struct Impl;

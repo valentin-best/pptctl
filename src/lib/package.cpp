@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <pptctl/package.hpp>
 #include <pugixml.hpp>
 #include <string>
@@ -312,6 +314,21 @@ std::string Package::resolve(std::string_view source_part, std::string_view rel_
         }
     }
     return {};
+}
+
+std::optional<std::uint64_t> Package::part_size(std::string_view name) const {
+    if (!impl_->is_open()) {
+        return std::nullopt;
+    }
+    const std::string name_str(name);
+    if (mz_zip_reader_locate_entry(impl_->reader, name_str.c_str(), 0) != MZ_OK) {
+        return std::nullopt;
+    }
+    mz_zip_file* info = nullptr;
+    if (mz_zip_reader_entry_get_info(impl_->reader, &info) != MZ_OK || info == nullptr) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint64_t>(info->uncompressed_size);
 }
 
 }  // namespace pptctl
