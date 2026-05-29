@@ -403,3 +403,28 @@ TEST_CASE("Slide: flags a linked (external) picture") {
     CHECK(pic.picture->rel_id == "rId5");
     CHECK_FALSE(pic.picture->alt_text.has_value());
 }
+
+TEST_CASE("Slide: resolves an embedded picture to its media part on load") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
+
+    const pptctl::Picture* pic = nullptr;
+    for (const auto& s : slide.shapes()) {
+        if (s.kind == pptctl::ShapeKind::Picture && s.picture.has_value()) {
+            pic = &*s.picture;
+            break;  // slide 1 has a single picture; take the first
+        }
+    }
+    REQUIRE(pic != nullptr);
+    // Expected values come from the generated fixture (tests/fixtures/
+    // generate_fixtures.py): rId2 -> ppt/media/image1.png, a 120-byte PNG.
+    CHECK(pic->target == "ppt/media/image1.png");
+    CHECK(pic->content_type == "image/png");
+    REQUIRE(pic->size_bytes.has_value());
+    CHECK(*pic->size_bytes == 120);
+}

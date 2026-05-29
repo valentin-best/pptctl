@@ -186,6 +186,26 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
     }
 }
 
+// Resolves each embedded picture's blip rId to its media part via the package's
+// relationship graph, recursing into group children. Linked (external) and
+// unresolved pictures are left as parsed.
+// NOLINTNEXTLINE(misc-no-recursion)
+void resolve_pictures(const Package& pkg, std::string_view part_name, std::vector<Shape>& shapes) {
+    for (auto& shape : shapes) {
+        if (shape.picture && !shape.picture->linked && !shape.picture->rel_id.empty()) {
+            Picture& pic = *shape.picture;
+            pic.target = pkg.resolve(part_name, pic.rel_id);
+            if (!pic.target.empty()) {
+                pic.content_type = pkg.content_type(pic.target);
+                pic.size_bytes = pkg.part_size(pic.target);
+            }
+        }
+        if (!shape.children.empty()) {
+            resolve_pictures(pkg, part_name, shape.children);
+        }
+    }
+}
+
 }  // namespace
 
 bool Slide::parse(std::string_view xml) {
@@ -210,7 +230,11 @@ bool Slide::load(const Package& pkg, std::string_view part_name) {
     if (bytes.empty()) {
         return false;
     }
-    return parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    if (!parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) {
+        return false;
+    }
+    resolve_pictures(pkg, part_name_, shapes_);
+    return true;
 }
 
 }  // namespace pptctl
