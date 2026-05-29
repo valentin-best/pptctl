@@ -63,6 +63,9 @@ class Presentation {
     [[nodiscard]] std::size_t slide_count() const noexcept {
         return slide_count_;
     }
+    [[nodiscard]] const std::vector<std::string>& slide_parts() const noexcept {
+        return slide_parts_;
+    }
     [[nodiscard]] CanvasSize canvas() const noexcept {
         return canvas_;
     }
@@ -85,6 +88,7 @@ class Presentation {
  private:
     Package* package_;
     std::size_t slide_count_ = 0;
+    std::vector<std::string> slide_parts_;
     CanvasSize canvas_{};
     std::size_t master_count_ = 0;
     std::size_t layout_count_ = 0;

@@ -2,10 +2,19 @@
 
 #include <doctest/doctest.h>
 
+#include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
 #include <string>
 
+#ifndef PPTCTL_FIXTURES_DIR
+#define PPTCTL_FIXTURES_DIR "tests/fixtures"
+#endif
+
 namespace {
+
+std::string fixture(const char* name) {
+    return std::string(PPTCTL_FIXTURES_DIR) + "/" + name;
+}
 
 // A minimal slide with an empty shape tree.
 constexpr const char* kEmptySlide = R"(<?xml version="1.0"?>
@@ -276,4 +285,60 @@ TEST_CASE("Slide: recurses into group shapes preserving reading order") {
     CHECK(group.children[0].paragraphs.at(0).text() == "A");
     CHECK(group.children[1].name == "Inner B");
     CHECK(group.children[1].paragraphs.at(0).text() == "B");
+}
+
+TEST_CASE("Presentation: slide_parts returns slide part names in order") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    const auto& parts = pres.slide_parts();
+    REQUIRE(parts.size() == 3);
+    CHECK(parts[0] == "ppt/slides/slide1.xml");
+    CHECK(parts[1] == "ppt/slides/slide2.xml");
+    CHECK(parts[2] == "ppt/slides/slide3.xml");
+    CHECK(parts.size() == pres.slide_count());
+}
+
+TEST_CASE("Slide: loads slide1 text from three_slides.pptx") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
+    CHECK(slide.part_name() == "ppt/slides/slide1.xml");
+
+    // The first slide's title placeholder reads "Slide 1".
+    bool found_title = false;
+    for (const auto& s : slide.shapes()) {
+        for (const auto& p : s.paragraphs) {
+            if (p.text() == "Slide 1") {
+                found_title = true;
+            }
+        }
+    }
+    CHECK(found_title);
+}
+
+TEST_CASE("Slide: images_deck slides carry picture shapes") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+    REQUIRE_FALSE(pres.slide_parts().empty());
+
+    bool any_picture = false;
+    for (const auto& part : pres.slide_parts()) {
+        pptctl::Slide slide;
+        REQUIRE(slide.load(pkg, part));
+        for (const auto& s : slide.shapes()) {
+            if (s.kind == pptctl::ShapeKind::Picture) {
+                any_picture = true;
+            }
+        }
+    }
+    CHECK(any_picture);
 }
