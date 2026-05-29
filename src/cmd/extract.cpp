@@ -3,6 +3,9 @@
 // This is a minimal human-readable dump. Structured formats (--format
 // json|md|txt) and the versioned schema are tracked separately (#12/#13).
 
+#include <array>
+#include <cstdint>
+#include <format>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/print.hpp>
@@ -40,6 +43,46 @@ std::string_view kind_label(ShapeKind kind) {
     return "other";
 }
 
+std::string human_size(std::uint64_t bytes) {
+    if (bytes < 1024) {
+        return std::format("{} B", bytes);
+    }
+    constexpr std::array<std::string_view, 3> kUnits{"KB", "MB", "GB"};
+    double value = static_cast<double>(bytes) / 1024.0;
+    std::size_t unit = 0;
+    while (value >= 1024.0 && unit + 1 < kUnits.size()) {
+        value /= 1024.0;
+        ++unit;
+    }
+    return std::format("{:.1f} {}", value, kUnits[unit]);
+}
+
+// The "→ ..." suffix describing where a picture resolves to, plus alt text.
+std::string describe_picture(const Picture& pic) {
+    std::string out;
+    if (pic.linked) {
+        out = "→ linked (external)";
+    } else if (pic.target.empty()) {
+        out = std::format("→ unresolved ({})", pic.rel_id);
+    } else {
+        out = std::format("→ {}", pic.target);
+        std::string detail = pic.content_type;
+        if (pic.size_bytes) {
+            if (!detail.empty()) {
+                detail += ", ";
+            }
+            detail += human_size(*pic.size_bytes);
+        }
+        if (!detail.empty()) {
+            out += std::format(" ({})", detail);
+        }
+    }
+    if (pic.alt_text) {
+        out += std::format(" — {}", *pic.alt_text);
+    }
+    return out;
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 void print_shape(const Shape& shape, int depth) {
     const std::string pad(static_cast<std::size_t>(depth) * 2 + 2, ' ');
@@ -56,6 +99,8 @@ void print_shape(const Shape& shape, int depth) {
         }
     } else if (shape.kind == ShapeKind::Group) {
         pptctl::println("{}[group] \"{}\"", pad, shape.name);
+    } else if (shape.picture) {
+        pptctl::println("{}[picture] \"{}\" {}", pad, shape.name, describe_picture(*shape.picture));
     } else {
         pptctl::println("{}[{}] \"{}\"", pad, kind_label(shape.kind), shape.name);
     }
