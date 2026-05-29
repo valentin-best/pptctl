@@ -15,6 +15,31 @@ pugi::xml_node nv_cnvpr(pugi::xml_node shape_el) {
     return shape_el.first_child().child("p:cNvPr");
 }
 
+RunProperties parse_run_props(pugi::xml_node rpr) {
+    RunProperties props;
+    if (!rpr) {
+        return props;
+    }
+    if (auto a = rpr.attribute("b")) {
+        props.bold = a.as_bool();
+    }
+    if (auto a = rpr.attribute("i")) {
+        props.italic = a.as_bool();
+    }
+    if (auto a = rpr.attribute("u")) {
+        props.underlined = (std::string_view(a.as_string("")) != "none");
+    }
+    if (auto a = rpr.attribute("sz")) {
+        props.size_centipt = a.as_int();
+    }
+    if (auto latin = rpr.child("a:latin")) {
+        if (auto tf = latin.attribute("typeface")) {
+            props.font = tf.as_string("");
+        }
+    }
+    return props;
+}
+
 void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
     for (auto p : tx_body.children("a:p")) {
         Paragraph para;
@@ -24,6 +49,7 @@ void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
             if (name == "a:r") {
                 Run run;
                 run.text = node.child("a:t").text().as_string("");
+                run.props = parse_run_props(node.child("a:rPr"));
                 para.runs.push_back(std::move(run));
             }
         }
