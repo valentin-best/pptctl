@@ -120,6 +120,36 @@ constexpr const char* kMixedShapes = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A top-level shape, then a group containing two shapes — to check recursion
+// and that document order is preserved at both levels.
+constexpr const char* kGroupedShapes = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Outer"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/><a:p><a:r><a:t>Outer</a:t></a:r></a:p></p:txBody>
+    </p:sp>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="3" name="Group 3"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="4" name="Inner A"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr/>
+        <p:txBody><a:bodyPr/><a:p><a:r><a:t>A</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="5" name="Inner B"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr/>
+        <p:txBody><a:bodyPr/><a:p><a:r><a:t>B</a:t></a:r></a:p></p:txBody>
+      </p:sp>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -229,4 +259,21 @@ TEST_CASE("Slide: detects shape kinds, placeholder type, and geometry") {
     CHECK(s[2].kind == pptctl::ShapeKind::Table);
     CHECK(s[3].kind == pptctl::ShapeKind::Chart);
     CHECK(s[4].kind == pptctl::ShapeKind::Connector);
+}
+
+TEST_CASE("Slide: recurses into group shapes preserving reading order") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kGroupedShapes));
+    REQUIRE(slide.shapes().size() == 2);
+
+    CHECK(slide.shapes()[0].name == "Outer");
+
+    const auto& group = slide.shapes()[1];
+    CHECK(group.kind == pptctl::ShapeKind::Group);
+    CHECK(group.name == "Group 3");
+    REQUIRE(group.children.size() == 2);
+    CHECK(group.children[0].name == "Inner A");
+    CHECK(group.children[0].paragraphs.at(0).text() == "A");
+    CHECK(group.children[1].name == "Inner B");
+    CHECK(group.children[1].paragraphs.at(0).text() == "B");
 }

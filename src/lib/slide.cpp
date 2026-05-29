@@ -133,6 +133,9 @@ Shape parse_sp(pugi::xml_node sp_el) {
     return shape;
 }
 
+// Recurses into p:grpSp to walk nested shape trees; the depth mirrors the
+// deck's group nesting, which is shallow in practice.
+// NOLINTNEXTLINE(misc-no-recursion)
 void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
     for (auto el : tree.children()) {
         const std::string_view name = el.name();
@@ -152,6 +155,12 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
             Shape shape;
             shape.kind = ShapeKind::Connector;
             set_identity(el, shape);
+            out.push_back(std::move(shape));
+        } else if (name == "p:grpSp") {
+            Shape shape;
+            shape.kind = ShapeKind::Group;
+            set_identity(el, shape);
+            parse_sp_tree(el, shape.children);  // a grpSp nests shapes like a spTree
             out.push_back(std::move(shape));
         }
     }
