@@ -129,6 +129,38 @@ constexpr const char* kMixedShapes = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A picture whose blip is embedded (internal), with alt text on cNvPr@descr.
+constexpr const char* kEmbeddedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="2" name="Picture 2" descr="A red square"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rId2"/></p:blipFill>
+      <p:spPr/>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
+// A picture whose blip is a link to an external image.
+constexpr const char* kLinkedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="2" name="Linked"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:link="rId5"/></p:blipFill>
+      <p:spPr/>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 // A top-level shape, then a group containing two shapes — to check recursion
 // and that document order is preserved at both levels.
 constexpr const char* kGroupedShapes = R"(<?xml version="1.0"?>
@@ -341,4 +373,33 @@ TEST_CASE("Slide: images_deck slides carry picture shapes") {
         }
     }
     CHECK(any_picture);
+}
+
+TEST_CASE("Slide: captures an embedded picture's blip reference and alt text") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kEmbeddedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& pic = slide.shapes()[0];
+    CHECK(pic.kind == pptctl::ShapeKind::Picture);
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->rel_id == "rId2");
+    CHECK_FALSE(pic.picture->linked);
+    REQUIRE(pic.picture->alt_text.has_value());
+    CHECK(*pic.picture->alt_text == "A red square");
+    // parse() does not resolve — that is load()'s job.
+    CHECK(pic.picture->target.empty());
+    CHECK_FALSE(pic.picture->size_bytes.has_value());
+}
+
+TEST_CASE("Slide: flags a linked (external) picture") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kLinkedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& pic = slide.shapes()[0];
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->linked);
+    CHECK(pic.picture->rel_id == "rId5");
+    CHECK_FALSE(pic.picture->alt_text.has_value());
 }

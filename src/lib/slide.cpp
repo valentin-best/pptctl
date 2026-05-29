@@ -133,6 +133,29 @@ Shape parse_sp(pugi::xml_node sp_el) {
     return shape;
 }
 
+Shape parse_pic(pugi::xml_node pic_el) {
+    Shape shape;
+    shape.kind = ShapeKind::Picture;
+    set_identity(pic_el, shape);
+
+    Picture pic;
+    auto blip = pic_el.child("p:blipFill").child("a:blip");
+    if (auto embed = blip.attribute("r:embed")) {
+        pic.rel_id = embed.as_string("");
+    } else if (auto link = blip.attribute("r:link")) {
+        pic.rel_id = link.as_string("");
+        pic.linked = true;
+    }
+    if (auto descr = nv_cnvpr(pic_el).attribute("descr")) {
+        const std::string_view text = descr.as_string("");
+        if (!text.empty()) {
+            pic.alt_text = std::string(text);
+        }
+    }
+    shape.picture = std::move(pic);
+    return shape;
+}
+
 // Recurses into p:grpSp to walk nested shape trees; the depth mirrors the
 // deck's group nesting, which is shallow in practice.
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -142,10 +165,7 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
         if (name == "p:sp") {
             out.push_back(parse_sp(el));
         } else if (name == "p:pic") {
-            Shape shape;
-            shape.kind = ShapeKind::Picture;
-            set_identity(el, shape);
-            out.push_back(std::move(shape));
+            out.push_back(parse_pic(el));
         } else if (name == "p:graphicFrame") {
             Shape shape;
             shape.kind = graphic_frame_kind(el);
