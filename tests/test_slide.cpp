@@ -62,6 +62,31 @@ constexpr const char* kFormattedRuns = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// Bulleted paragraphs at two levels, an empty paragraph, a field, and a break.
+constexpr const char* kRichParagraphs = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Body 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:p><a:r><a:t>Top</a:t></a:r></a:p>
+        <a:p><a:pPr lvl="1"/><a:r><a:t>Nested</a:t></a:r></a:p>
+        <a:p/>
+        <a:p>
+          <a:r><a:t>Line one</a:t></a:r>
+          <a:br/>
+          <a:fld id="{GUID}" type="slidenum"><a:t>3</a:t></a:fld>
+        </a:p>
+      </p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -123,4 +148,30 @@ TEST_CASE("Slide: parses run properties and leaves unset fields empty") {
     CHECK_FALSE(bare.underlined.has_value());
     CHECK_FALSE(bare.size_centipt.has_value());
     CHECK_FALSE(bare.font.has_value());
+}
+
+TEST_CASE("Slide: parses levels, empty paragraphs, fields, and breaks") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kRichParagraphs));
+    REQUIRE(slide.shapes().size() == 1);
+    const auto& paras = slide.shapes()[0].paragraphs;
+    REQUIRE(paras.size() == 4);
+
+    CHECK(paras[0].level == 0);
+    CHECK(paras[0].text() == "Top");
+
+    CHECK(paras[1].level == 1);
+    CHECK(paras[1].text() == "Nested");
+
+    // Empty paragraph preserved as structure.
+    CHECK(paras[2].runs.empty());
+    CHECK(paras[2].text().empty());
+
+    // Run, break (newline), then a field run — in document order.
+    REQUIRE(paras[3].runs.size() == 3);
+    CHECK(paras[3].runs[0].text == "Line one");
+    CHECK_FALSE(paras[3].runs[0].is_field);
+    CHECK(paras[3].runs[1].text == "\n");
+    CHECK(paras[3].runs[2].text == "3");
+    CHECK(paras[3].runs[2].is_field);
 }

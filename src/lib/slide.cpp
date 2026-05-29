@@ -51,6 +51,16 @@ void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
                 run.text = node.child("a:t").text().as_string("");
                 run.props = parse_run_props(node.child("a:rPr"));
                 para.runs.push_back(std::move(run));
+            } else if (name == "a:fld") {
+                Run run;
+                run.text = node.child("a:t").text().as_string("");
+                run.props = parse_run_props(node.child("a:rPr"));
+                run.is_field = true;
+                para.runs.push_back(std::move(run));
+            } else if (name == "a:br") {
+                Run run;
+                run.text = "\n";
+                para.runs.push_back(std::move(run));
             }
         }
         shape.paragraphs.push_back(std::move(para));
