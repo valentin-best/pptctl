@@ -191,6 +191,27 @@ constexpr const char* kGroupedShapes = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A picture nested inside a group shape — exercises picture capture through the
+// group recursion (the same recursion resolve_pictures walks in load()).
+constexpr const char* kGroupedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 2"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="3" name="Inner Pic" descr="nested"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId7"/></p:blipFill>
+        <p:spPr/>
+      </p:pic>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -427,4 +448,22 @@ TEST_CASE("Slide: resolves an embedded picture to its media part on load") {
     CHECK(pic->content_type == "image/png");
     REQUIRE(pic->size_bytes.has_value());
     CHECK(*pic->size_bytes == 120);
+}
+
+TEST_CASE("Slide: captures a picture nested inside a group") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kGroupedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& group = slide.shapes()[0];
+    CHECK(group.kind == pptctl::ShapeKind::Group);
+    REQUIRE(group.children.size() == 1);
+
+    const auto& pic = group.children[0];
+    CHECK(pic.kind == pptctl::ShapeKind::Picture);
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->rel_id == "rId7");
+    CHECK_FALSE(pic.picture->linked);
+    REQUIRE(pic.picture->alt_text.has_value());
+    CHECK(*pic.picture->alt_text == "nested");
 }
