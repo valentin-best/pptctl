@@ -139,8 +139,8 @@ Add `tables_deck.pptx`:
 
 Regenerate via the documented invocation:
 `uv run --python 3.12 --with python-pptx tests/fixtures/generate_fixtures.py`.
-Register the new fixture in `CMakeLists.txt` if fixtures are enumerated there;
-otherwise it is reached via `PPTCTL_FIXTURES_DIR` like the others.
+No `CMakeLists.txt` change is needed: fixtures are reached as a directory via
+the `PPTCTL_FIXTURES_DIR` macro, not enumerated individually.
 
 ## Testing (`tests/test_slide.cpp`)
 
