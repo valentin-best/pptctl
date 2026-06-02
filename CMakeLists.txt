@@ -143,6 +143,8 @@ add_executable(pptctl_tests
     tests/test_main.cpp
     tests/test_package.cpp
     tests/test_slide.cpp
+    tests/test_extract.cpp
+    src/cmd/extract.cpp
 )
 target_link_libraries(pptctl_tests
     PRIVATE
@@ -152,6 +154,7 @@ target_link_libraries(pptctl_tests
 )
 target_compile_definitions(pptctl_tests PRIVATE
     PPTCTL_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures"
+    PPTCTL_GOLDEN_DIR="${CMAKE_SOURCE_DIR}/tests/golden"
 )
 add_test(NAME unit COMMAND pptctl_tests)
 

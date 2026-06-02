@@ -109,7 +109,10 @@ std::string describe_picture(const Picture& pic) {
     return out;
 }
 
-void print_chart(const Chart& chart, const std::string& pad, std::string_view name) {
+void print_chart(std::ostream& os,
+                 const Chart& chart,
+                 const std::string& pad,
+                 std::string_view name) {
     std::string header = std::format("{}[chart] \"{}\"", pad, name);
     if (!chart.chart_type.empty()) {
         header += std::format(" → {}, {} series", chart.chart_type, chart.series.size());
@@ -117,7 +120,7 @@ void print_chart(const Chart& chart, const std::string& pad, std::string_view na
     if (chart.title) {
         header += std::format(" — \"{}\"", *chart.title);
     }
-    pptctl::println("{}", header);
+    pptctl::println_to(os, "{}", header);
 
     for (const auto& s : chart.series) {
         std::string line = std::format("{}  \"{}\":", pad, s.name);
@@ -137,12 +140,15 @@ void print_chart(const Chart& chart, const std::string& pad, std::string_view na
                 }
             }
         }
-        pptctl::println("{}", line);
+        pptctl::println_to(os, "{}", line);
     }
 }
 
-void print_table(const Table& table, const std::string& pad, std::string_view name) {
-    pptctl::println("{}[table] \"{}\" {}x{}", pad, name, table.rows.size(), table.columns);
+void print_table(std::ostream& os,
+                 const Table& table,
+                 const std::string& pad,
+                 std::string_view name) {
+    pptctl::println_to(os, "{}[table] \"{}\" {}x{}", pad, name, table.rows.size(), table.columns);
     for (const auto& row : table.rows) {
         std::string line = "|";
         for (const auto& cell : row.cells) {
@@ -154,12 +160,12 @@ void print_table(const Table& table, const std::string& pad, std::string_view na
             }
             line += std::format(" {} |", text);
         }
-        pptctl::println("{}  {}", pad, line);
+        pptctl::println_to(os, "{}  {}", pad, line);
     }
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void print_shape(const Shape& shape, int depth) {
+void print_shape(std::ostream& os, const Shape& shape, int depth) {
     const std::string pad(static_cast<std::size_t>(depth) * 2 + 2, ' ');
 
     if (!shape.paragraphs.empty()) {
@@ -167,25 +173,26 @@ void print_shape(const Shape& shape, int depth) {
             const std::string bullet(static_cast<std::size_t>(para.level) * 2, ' ');
             const std::string text = para.text();
             if (shape.placeholder_type && &para == &shape.paragraphs.front()) {
-                pptctl::println("{}[{}] {}", pad, *shape.placeholder_type, text);
+                pptctl::println_to(os, "{}[{}] {}", pad, *shape.placeholder_type, text);
             } else if (!text.empty()) {
-                pptctl::println("{}{}{}", pad, bullet, text);
+                pptctl::println_to(os, "{}{}{}", pad, bullet, text);
             }
         }
     } else if (shape.kind == ShapeKind::Group) {
-        pptctl::println("{}[group] \"{}\"", pad, shape.name);
+        pptctl::println_to(os, "{}[group] \"{}\"", pad, shape.name);
     } else if (shape.picture) {
-        pptctl::println("{}[picture] \"{}\" {}", pad, shape.name, describe_picture(*shape.picture));
+        pptctl::println_to(
+            os, "{}[picture] \"{}\" {}", pad, shape.name, describe_picture(*shape.picture));
     } else if (shape.table) {
-        print_table(*shape.table, pad, shape.name);
+        print_table(os, *shape.table, pad, shape.name);
     } else if (shape.chart) {
-        print_chart(*shape.chart, pad, shape.name);
+        print_chart(os, *shape.chart, pad, shape.name);
     } else {
-        pptctl::println("{}[{}] \"{}\"", pad, kind_label(shape.kind), shape.name);
+        pptctl::println_to(os, "{}[{}] \"{}\"", pad, kind_label(shape.kind), shape.name);
     }
 
     for (const auto& child : shape.children) {
-        print_shape(child, depth + 1);
+        print_shape(os, child, depth + 1);
     }
 }
 
@@ -293,7 +300,7 @@ std::string md_escape_cell(const std::string& text) {
     return out;
 }
 
-void md_print_table(const Table& table) {
+void md_print_table(std::ostream& os, const Table& table) {
     if (table.rows.empty()) {
         return;
     }
@@ -306,7 +313,7 @@ void md_print_table(const Table& table) {
             line += md_escape_cell(cell.text());
             line += " |";
         }
-        pptctl::println("{}", line);
+        pptctl::println_to(os, "{}", line);
     }
 
     // Separator
@@ -315,7 +322,7 @@ void md_print_table(const Table& table) {
         for (std::size_t i = 0; i < table.columns; ++i) {
             sep += "---|";
         }
-        pptctl::println("{}", sep);
+        pptctl::println_to(os, "{}", sep);
     }
 
     // Data rows
@@ -326,11 +333,11 @@ void md_print_table(const Table& table) {
             line += md_escape_cell(cell.text());
             line += " |";
         }
-        pptctl::println("{}", line);
+        pptctl::println_to(os, "{}", line);
     }
 }
 
-void md_print_chart(const Chart& chart, std::string_view name) {
+void md_print_chart(std::ostream& os, const Chart& chart, std::string_view name) {
     std::string header = std::format("- [chart] \"{}\"", name);
     if (!chart.chart_type.empty()) {
         header += std::format(" — {}", chart.chart_type);
@@ -338,7 +345,7 @@ void md_print_chart(const Chart& chart, std::string_view name) {
     if (chart.title) {
         header += std::format(" — \"{}\"", *chart.title);
     }
-    pptctl::println("{}", header);
+    pptctl::println_to(os, "{}", header);
 
     for (const auto& s : chart.series) {
         std::string line = std::format("  - \"{}\":", s.name);
@@ -358,12 +365,12 @@ void md_print_chart(const Chart& chart, std::string_view name) {
                 }
             }
         }
-        pptctl::println("{}", line);
+        pptctl::println_to(os, "{}", line);
     }
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void md_print_shape(const Shape& shape, int depth) {
+void md_print_shape(std::ostream& os, const Shape& shape, int depth) {
     const std::string indent(static_cast<std::size_t>(depth) * 2, ' ');
 
     if (!shape.paragraphs.empty()) {
@@ -374,10 +381,10 @@ void md_print_shape(const Shape& shape, int depth) {
             }
             const std::string bullet_indent(static_cast<std::size_t>(para.level) * 2, ' ');
             if (shape.placeholder_type && &para == &shape.paragraphs.front()) {
-                pptctl::println(
-                    "{}{}- **[{}]** {}", indent, bullet_indent, *shape.placeholder_type, text);
+                pptctl::println_to(
+                    os, "{}{}- **[{}]** {}", indent, bullet_indent, *shape.placeholder_type, text);
             } else {
-                pptctl::println("{}{}- {}", indent, bullet_indent, text);
+                pptctl::println_to(os, "{}{}- {}", indent, bullet_indent, text);
             }
         }
     } else if (shape.picture) {
@@ -390,25 +397,25 @@ void md_print_shape(const Shape& shape, int depth) {
         if (shape.picture->alt_text) {
             line += std::format(" — {}", *shape.picture->alt_text);
         }
-        pptctl::println("{}", line);
+        pptctl::println_to(os, "{}", line);
     } else if (shape.table) {
-        md_print_table(*shape.table);
+        md_print_table(os, *shape.table);
     } else if (shape.chart) {
-        md_print_chart(*shape.chart, shape.name);
+        md_print_chart(os, *shape.chart, shape.name);
     } else if (shape.kind == ShapeKind::Group) {
-        pptctl::println("{}- [group] \"{}\"", indent, shape.name);
+        pptctl::println_to(os, "{}- [group] \"{}\"", indent, shape.name);
     } else {
-        pptctl::println("{}- [{}] \"{}\"", indent, kind_label(shape.kind), shape.name);
+        pptctl::println_to(os, "{}- [{}] \"{}\"", indent, kind_label(shape.kind), shape.name);
     }
 
     for (const auto& child : shape.children) {
-        md_print_shape(child, depth + 1);
+        md_print_shape(os, child, depth + 1);
     }
 }
 
 }  // namespace
 
-int extract(const std::string& path, const std::string& format_str) {
+int extract_to(const std::string& path, const std::string& format_str, std::ostream& os) {
     const Format fmt = parse_format(format_str);
 
     pptctl::Package pkg;
@@ -450,7 +457,7 @@ int extract(const std::string& path, const std::string& format_str) {
             slides.push_back(sj);
         }
         out["slides"] = slides;
-        pptctl::println("{}", out.dump(2));
+        pptctl::println_to(os, "{}", out.dump(2));
         return 0;
     }
 
@@ -466,36 +473,40 @@ int extract(const std::string& path, const std::string& format_str) {
 
         if (fmt == Format::Md) {
             if (n > 1) {
-                pptctl::println("");
+                pptctl::println_to(os, "");
             }
-            pptctl::println("## Slide {}", slide.index());
-            pptctl::println("");
+            pptctl::println_to(os, "## Slide {}", slide.index());
+            pptctl::println_to(os, "");
             for (const auto& shape : slide.shapes()) {
-                md_print_shape(shape, 0);
+                md_print_shape(os, shape, 0);
             }
             const std::string notes = slide.notes_text();
             if (!notes.empty()) {
-                pptctl::println("");
-                pptctl::println("> Notes: {}", notes);
+                pptctl::println_to(os, "");
+                pptctl::println_to(os, "> Notes: {}", notes);
             }
         } else {
             // txt
-            pptctl::println("slide {}", slide.index());
+            pptctl::println_to(os, "slide {}", slide.index());
             for (const auto& shape : slide.shapes()) {
-                print_shape(shape, 0);
+                print_shape(os, shape, 0);
             }
             if (!slide.notes().empty()) {
-                pptctl::println("  [notes]");
+                pptctl::println_to(os, "  [notes]");
                 for (const auto& para : slide.notes()) {
                     const std::string text = para.text();
                     if (!text.empty()) {
-                        pptctl::println("    {}", text);
+                        pptctl::println_to(os, "    {}", text);
                     }
                 }
             }
         }
     }
     return 0;
+}
+
+int extract(const std::string& path, const std::string& format_str) {
+    return extract_to(path, format_str, std::cout);
 }
 
 }  // namespace pptctl::cmd

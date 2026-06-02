@@ -1,0 +1,102 @@
+{
+  "file": "<path>",
+  "schema_version": 1,
+  "slide_count": 2,
+  "slides": [
+    {
+      "index": 1,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": {
+            "series": [
+              {
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3"
+                ],
+                "name": "Revenue",
+                "values": [
+                  100.0,
+                  200.0,
+                  150.0
+                ]
+              },
+              {
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3"
+                ],
+                "name": "Cost",
+                "values": [
+                  80.0,
+                  120.0,
+                  90.0
+                ]
+              }
+            ],
+            "title": "Revenue vs Cost",
+            "type": "bar"
+          },
+          "children": [],
+          "geometry": {
+            "ext_cx": 5486400,
+            "ext_cy": 3657600,
+            "off_x": 914400,
+            "off_y": 914400
+          },
+          "id": "2",
+          "kind": "chart",
+          "name": "Chart 1",
+          "paragraphs": [],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": {
+            "series": [
+              {
+                "categories": [
+                  "Alpha",
+                  "Beta",
+                  "Gamma"
+                ],
+                "name": "Share",
+                "values": [
+                  30.0,
+                  50.0,
+                  20.0
+                ]
+              }
+            ],
+            "title": "Market Share",
+            "type": "pie"
+          },
+          "children": [],
+          "geometry": {
+            "ext_cx": 5486400,
+            "ext_cy": 3657600,
+            "off_x": 914400,
+            "off_y": 914400
+          },
+          "id": "2",
+          "kind": "chart",
+          "name": "Chart 1",
+          "paragraphs": [],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    }
+  ]
+}

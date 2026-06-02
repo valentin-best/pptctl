@@ -1,0 +1,167 @@
+{
+  "file": "<path>",
+  "schema_version": 1,
+  "slide_count": 4,
+  "slides": [
+    {
+      "index": 1,
+      "notes": "Speaker notes for slide 1: remember to elaborate here.",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Topic 1"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "title",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Content Placeholder 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Body text for topic 1."
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "notes": "Speaker notes for slide 2: remember to elaborate here.",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Topic 2"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "title",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Content Placeholder 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Body text for topic 2."
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "notes": "Speaker notes for slide 3: remember to elaborate here.",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Topic 3"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "title",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Content Placeholder 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Body text for topic 3."
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "notes": "Speaker notes for slide 4: remember to elaborate here.",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Topic 4"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "title",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Content Placeholder 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Body text for topic 4."
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    }
+  ]
+}

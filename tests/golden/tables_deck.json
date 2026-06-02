@@ -1,0 +1,125 @@
+{
+  "file": "<path>",
+  "schema_version": 1,
+  "slide_count": 2,
+  "slides": [
+    {
+      "index": 1,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 5486400,
+            "ext_cy": 1828800,
+            "off_x": 914400,
+            "off_y": 914400
+          },
+          "id": "2",
+          "kind": "table",
+          "name": "Table 1",
+          "paragraphs": [],
+          "picture": null,
+          "placeholder_type": null,
+          "table": {
+            "columns": 2,
+            "rows": [
+              {
+                "cells": [
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Quarter"
+                  },
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Revenue"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Q1"
+                  },
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "100"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 5486400,
+            "ext_cy": 1828800,
+            "off_x": 914400,
+            "off_y": 914400
+          },
+          "id": "2",
+          "kind": "table",
+          "name": "Table 1",
+          "paragraphs": [],
+          "picture": null,
+          "placeholder_type": null,
+          "table": {
+            "columns": 2,
+            "rows": [
+              {
+                "cells": [
+                  {
+                    "col_span": 2,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Annual Summary"
+                  },
+                  {
+                    "col_span": 1,
+                    "merged": true,
+                    "row_span": 1,
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Left"
+                  },
+                  {
+                    "col_span": 1,
+                    "merged": false,
+                    "row_span": 1,
+                    "text": "Right"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
