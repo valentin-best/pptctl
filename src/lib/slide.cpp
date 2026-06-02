@@ -126,6 +126,39 @@ ShapeKind graphic_frame_kind(pugi::xml_node gf) {
     return ShapeKind::Other;
 }
 
+Table parse_table(pugi::xml_node tbl) {
+    Table table;
+    std::size_t cols = 0;
+    for (auto gc : tbl.child("a:tblGrid").children("a:gridCol")) {
+        (void)gc;
+        ++cols;
+    }
+    table.columns = cols;
+    for (auto tr : tbl.children("a:tr")) {
+        TableRow row;
+        for (auto tc : tr.children("a:tc")) {
+            TableCell cell;
+            parse_paragraphs(tc.child("a:txBody"), cell.paragraphs);
+            row.cells.push_back(std::move(cell));
+        }
+        table.rows.push_back(std::move(row));
+    }
+    return table;
+}
+
+Shape parse_graphic_frame(pugi::xml_node gf_el) {
+    Shape shape;
+    shape.kind = graphic_frame_kind(gf_el);
+    set_identity(gf_el, shape);
+    if (shape.kind == ShapeKind::Table) {
+        auto tbl = gf_el.child("a:graphic").child("a:graphicData").child("a:tbl");
+        if (tbl) {
+            shape.table = parse_table(tbl);
+        }
+    }
+    return shape;
+}
+
 Shape parse_sp(pugi::xml_node sp_el) {
     Shape shape;
     set_identity(sp_el, shape);
@@ -178,10 +211,7 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
         } else if (name == "p:pic") {
             out.push_back(parse_pic(el));
         } else if (name == "p:graphicFrame") {
-            Shape shape;
-            shape.kind = graphic_frame_kind(el);
-            set_identity(el, shape);
-            out.push_back(std::move(shape));
+            out.push_back(parse_graphic_frame(el));
         } else if (name == "p:cxnSp") {
             Shape shape;
             shape.kind = ShapeKind::Connector;

@@ -212,6 +212,32 @@ constexpr const char* kGroupedPicture = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A 2x2 table inside a graphicFrame: a bold header row and a data row.
+constexpr const char* kBasicTable = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="2" name="Table 2"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblGrid><a:gridCol w="100"/><a:gridCol w="100"/></a:tblGrid>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:rPr b="1"/><a:t>Quarter</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Revenue</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Q1</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>100</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+        </a:tbl>
+      </a:graphicData></a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -321,6 +347,12 @@ TEST_CASE("Slide: detects shape kinds, placeholder type, and geometry") {
     CHECK(s[2].kind == pptctl::ShapeKind::Table);
     CHECK(s[3].kind == pptctl::ShapeKind::Chart);
     CHECK(s[4].kind == pptctl::ShapeKind::Connector);
+
+    // A chart graphicFrame (no a:tbl) carries no table model.
+    CHECK_FALSE(s[3].table.has_value());
+    // The table graphicFrame in this fixture has no a:tbl child either, so no
+    // table model is attached even though its kind is Table.
+    CHECK_FALSE(s[2].table.has_value());
 }
 
 TEST_CASE("Slide: recurses into group shapes preserving reading order") {
@@ -479,4 +511,31 @@ TEST_CASE("TableCell: text joins paragraph texts with newlines") {
 
     pptctl::TableCell empty;
     CHECK(empty.text().empty());
+}
+
+TEST_CASE("Slide: parses a table's rows, columns, and cell text") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kBasicTable));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& shape = slide.shapes()[0];
+    CHECK(shape.kind == pptctl::ShapeKind::Table);
+    CHECK(shape.name == "Table 2");
+    REQUIRE(shape.table.has_value());
+
+    const auto& table = *shape.table;
+    CHECK(table.columns == 2);
+    REQUIRE(table.rows.size() == 2);
+    REQUIRE(table.rows[0].cells.size() == 2);
+    REQUIRE(table.rows[1].cells.size() == 2);
+
+    CHECK(table.rows[0].cells[0].text() == "Quarter");
+    CHECK(table.rows[0].cells[1].text() == "Revenue");
+    CHECK(table.rows[1].cells[0].text() == "Q1");
+    CHECK(table.rows[1].cells[1].text() == "100");
+
+    // Cell text keeps run formatting (bold header).
+    const auto& header = table.rows[0].cells[0].paragraphs.at(0).runs.at(0);
+    REQUIRE(header.props.bold.has_value());
+    CHECK(*header.props.bold == true);
 }
