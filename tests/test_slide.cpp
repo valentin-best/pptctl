@@ -467,3 +467,16 @@ TEST_CASE("Slide: captures a picture nested inside a group") {
     REQUIRE(pic.picture->alt_text.has_value());
     CHECK(*pic.picture->alt_text == "nested");
 }
+
+TEST_CASE("TableCell: text joins paragraph texts with newlines") {
+    pptctl::TableCell cell;
+    pptctl::Paragraph p1;
+    p1.runs.push_back(pptctl::Run{.text = "Line A"});
+    pptctl::Paragraph p2;
+    p2.runs.push_back(pptctl::Run{.text = "Line B"});
+    cell.paragraphs = {p1, p2};
+    CHECK(cell.text() == "Line A\nLine B");
+
+    pptctl::TableCell empty;
+    CHECK(empty.text().empty());
+}

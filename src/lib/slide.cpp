@@ -6,6 +6,17 @@
 
 namespace pptctl {
 
+std::string TableCell::text() const {
+    std::string out;
+    for (const auto& p : paragraphs) {
+        if (!out.empty()) {
+            out += '\n';
+        }
+        out += p.text();
+    }
+    return out;
+}
+
 namespace {
 
 // The shape's identifying p:cNvPr lives inside the shape's first child (the
