@@ -83,6 +83,25 @@ std::string describe_picture(const Picture& pic) {
     return out;
 }
 
+// One-line-per-row grid summary for a table shape. Cosmetic — the stable
+// output formats are tracked in #12.
+void print_table(const Table& table, const std::string& pad, std::string_view name) {
+    pptctl::println("{}[table] \"{}\" {}x{}", pad, name, table.rows.size(), table.columns);
+    for (const auto& row : table.rows) {
+        std::string line = "|";
+        for (const auto& cell : row.cells) {
+            std::string text = cell.text();
+            for (auto& ch : text) {
+                if (ch == '\n') {
+                    ch = ' ';
+                }
+            }
+            line += std::format(" {} |", text);
+        }
+        pptctl::println("{}  {}", pad, line);
+    }
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
 void print_shape(const Shape& shape, int depth) {
     const std::string pad(static_cast<std::size_t>(depth) * 2 + 2, ' ');
@@ -101,6 +120,8 @@ void print_shape(const Shape& shape, int depth) {
         pptctl::println("{}[group] \"{}\"", pad, shape.name);
     } else if (shape.picture) {
         pptctl::println("{}[picture] \"{}\" {}", pad, shape.name, describe_picture(*shape.picture));
+    } else if (shape.table) {
+        print_table(*shape.table, pad, shape.name);
     } else {
         pptctl::println("{}[{}] \"{}\"", pad, kind_label(shape.kind), shape.name);
     }
