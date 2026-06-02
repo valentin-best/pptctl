@@ -13,7 +13,7 @@ namespace pptctl::cmd {
 // under src/cmd/. Add a forward declaration here and a CLI11 subcommand
 // registration in main() when you add a new one.
 int info(const std::string& path, bool json);
-int extract(const std::string& path);
+int extract(const std::string& path, const std::string& format);
 
 }  // namespace pptctl::cmd
 
@@ -43,12 +43,16 @@ int main(int argc, char** argv) {
 
     // --- extract -------------------------------------------------------------
     std::string extract_path;
+    std::string extract_format = "json";
     auto* extract_cmd =
         app.add_subcommand("extract", "Extract slide text content as a structured dump");
     extract_cmd->add_option("file", extract_path, "path to .pptx")
         ->required()
         ->check(CLI::ExistingFile);
-    extract_cmd->callback([&]() { std::exit(pptctl::cmd::extract(extract_path)); });
+    extract_cmd->add_option("--format", extract_format, "output format: json (default), md, txt")
+        ->capture_default_str()
+        ->check(CLI::IsMember({"json", "md", "txt"}));
+    extract_cmd->callback([&]() { std::exit(pptctl::cmd::extract(extract_path, extract_format)); });
 
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
