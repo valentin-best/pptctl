@@ -17,6 +17,17 @@ std::string TableCell::text() const {
     return out;
 }
 
+std::string Slide::notes_text() const {
+    std::string out;
+    for (const auto& p : notes_) {
+        if (!out.empty()) {
+            out += '\n';
+        }
+        out += p.text();
+    }
+    return out;
+}
+
 namespace {
 
 // The shape's identifying p:cNvPr lives inside the shape's first child (the
@@ -250,6 +261,23 @@ void resolve_pictures(const Package& pkg, std::string_view part_name, std::vecto
     }
 }
 
+// The notes text lives in the notesSlide's body placeholder
+// (p:sp with p:ph type="body"); the slide-image and slide-number placeholders
+// are skipped. Fills out with that placeholder's paragraphs, or leaves it empty
+// if there is no body placeholder.
+void parse_notes_body(pugi::xml_node tree, std::vector<Paragraph>& out) {
+    for (auto sp : tree.children("p:sp")) {
+        auto ph = sp.child("p:nvSpPr").child("p:nvPr").child("p:ph");
+        if (std::string_view(ph.attribute("type").as_string("")) != "body") {
+            continue;
+        }
+        if (auto tx = sp.child("p:txBody")) {
+            parse_paragraphs(tx, out);
+        }
+        return;  // a notes slide has a single body placeholder
+    }
+}
+
 }  // namespace
 
 bool Slide::parse(std::string_view xml) {
@@ -268,6 +296,22 @@ bool Slide::parse(std::string_view xml) {
     return true;
 }
 
+bool Slide::parse_notes(std::string_view xml) {
+    notes_.clear();
+    pugi::xml_document doc;
+    const auto result =
+        doc.load_buffer(xml.data(), xml.size(), pugi::parse_default, pugi::encoding_utf8);
+    if (!result) {
+        return false;
+    }
+    auto tree = doc.child("p:notes").child("p:cSld").child("p:spTree");
+    if (!tree) {
+        return false;
+    }
+    parse_notes_body(tree, notes_);
+    return true;
+}
+
 bool Slide::load(const Package& pkg, std::string_view part_name) {
     part_name_ = std::string(part_name);
     const auto bytes = pkg.read_part(part_name);
@@ -278,6 +322,22 @@ bool Slide::load(const Package& pkg, std::string_view part_name) {
         return false;
     }
     resolve_pictures(pkg, part_name_, shapes_);
+
+    // Resolve the slide -> notesSlide relationship and parse its notes body.
+    // Notes are optional: a slide with no notesSlide simply has empty notes().
+    constexpr std::string_view kNotesRel =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
+    for (const auto& rel : pkg.relationships(part_name_)) {
+        if (rel.type != kNotesRel || rel.external || rel.target.empty()) {
+            continue;
+        }
+        const auto notes_bytes = pkg.read_part(rel.target);
+        if (!notes_bytes.empty()) {
+            (void)parse_notes(std::string_view(reinterpret_cast<const char*>(notes_bytes.data()),
+                                               notes_bytes.size()));
+        }
+        break;
+    }
     return true;
 }
 
