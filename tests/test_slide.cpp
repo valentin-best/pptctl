@@ -593,3 +593,43 @@ TEST_CASE("Slide: captures merged cells as span on origin + covered flag") {
     CHECK(plain.row_span == 1);
     CHECK_FALSE(plain.merged);
 }
+
+TEST_CASE("Slide: loads tables from tables_deck.pptx") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("tables_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+    REQUIRE(pres.slide_parts().size() == 2);
+
+    auto first_table = [](const pptctl::Slide& slide) -> const pptctl::Table* {
+        for (const auto& s : slide.shapes()) {
+            if (s.kind == pptctl::ShapeKind::Table && s.table.has_value()) {
+                return &*s.table;
+            }
+        }
+        return nullptr;
+    };
+
+    // Slide 1: a plain 2x2 table.
+    pptctl::Slide s1;
+    REQUIRE(s1.load(pkg, pres.slide_parts().at(0)));
+    const pptctl::Table* t1 = first_table(s1);
+    REQUIRE(t1 != nullptr);
+    CHECK(t1->columns == 2);
+    REQUIRE(t1->rows.size() == 2);
+    REQUIRE(t1->rows[0].cells.size() == 2);
+    CHECK(t1->rows[0].cells[0].text() == "Quarter");
+    CHECK(t1->rows[0].cells[1].text() == "Revenue");
+    CHECK(t1->rows[1].cells[0].text() == "Q1");
+
+    // Slide 2: the top row is merged across both columns.
+    pptctl::Slide s2;
+    REQUIRE(s2.load(pkg, pres.slide_parts().at(1)));
+    const pptctl::Table* t2 = first_table(s2);
+    REQUIRE(t2 != nullptr);
+    REQUIRE(t2->rows.size() == 2);
+    REQUIRE(t2->rows[0].cells.size() == 2);
+    CHECK(t2->rows[0].cells[0].col_span == 2);
+    CHECK(t2->rows[0].cells[0].text() == "Annual Summary");
+    CHECK(t2->rows[0].cells[1].merged);
+}
