@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/print.hpp>
@@ -83,6 +84,50 @@ std::string describe_picture(const Picture& pic) {
     return out;
 }
 
+// Header line + per-series lines for a chart shape.
+void print_chart(const Chart& chart, const std::string& pad, std::string_view name) {
+    std::string header = std::format("{}[chart] \"{}\"", pad, name);
+    if (!chart.chart_type.empty()) {
+        header += std::format(" → {}, {} series", chart.chart_type, chart.series.size());
+    }
+    if (chart.title) {
+        header += std::format(" — \"{}\"", *chart.title);
+    }
+    pptctl::println("{}", header);
+
+    // Format a double as an integer when it has no fractional part. Guards
+    // against UB by clamping to long long's representable range first.
+    constexpr auto kLLMin = static_cast<double>(std::numeric_limits<long long>::min());
+    constexpr auto kLLMax = static_cast<double>(std::numeric_limits<long long>::max());
+    auto fmt_val = [&](double v) -> std::string {
+        if (v >= kLLMin && v <= kLLMax && v == static_cast<double>(static_cast<long long>(v))) {
+            return std::format("{}", static_cast<long long>(v));
+        }
+        return std::format("{:.6g}", v);
+    };
+
+    for (const auto& s : chart.series) {
+        std::string line = std::format("{}  \"{}\":", pad, s.name);
+        if (!s.categories.empty() && s.categories.size() == s.values.size()) {
+            for (std::size_t i = 0; i < s.values.size(); ++i) {
+                line += std::format(" {}={}", s.categories[i], fmt_val(s.values[i]));
+                if (i + 1 < s.values.size()) {
+                    line += ',';
+                }
+            }
+        } else {
+            for (std::size_t i = 0; i < s.values.size(); ++i) {
+                line += ' ';
+                line += fmt_val(s.values[i]);
+                if (i + 1 < s.values.size()) {
+                    line += ',';
+                }
+            }
+        }
+        pptctl::println("{}", line);
+    }
+}
+
 // One-line-per-row grid summary for a table shape. Cosmetic — the stable
 // output formats are tracked in #12.
 void print_table(const Table& table, const std::string& pad, std::string_view name) {
@@ -122,6 +167,8 @@ void print_shape(const Shape& shape, int depth) {
         pptctl::println("{}[picture] \"{}\" {}", pad, shape.name, describe_picture(*shape.picture));
     } else if (shape.table) {
         print_table(*shape.table, pad, shape.name);
+    } else if (shape.chart) {
+        print_chart(*shape.chart, pad, shape.name);
     } else {
         pptctl::println("{}[{}] \"{}\"", pad, kind_label(shape.kind), shape.name);
     }
