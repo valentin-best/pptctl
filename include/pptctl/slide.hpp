@@ -135,6 +135,12 @@ class Slide {
     // without a package. Returns false if the XML can't be parsed.
     [[nodiscard]] bool parse(std::string_view xml);
 
+    // Parse a notesSlide part's XML and capture its notes-body text into
+    // notes(). Exposed for testing without a package, mirroring parse().
+    // Returns false if the XML can't be parsed or carries no notes spTree;
+    // a well-formed notes slide with no body placeholder yields empty notes.
+    [[nodiscard]] bool parse_notes(std::string_view xml);
+
     [[nodiscard]] std::size_t index() const noexcept {
         return index_;
     }
@@ -145,6 +151,15 @@ class Slide {
         return shapes_;
     }
 
+    // Speaker-notes paragraphs from the slide's notesSlide, in document order.
+    // Empty when the slide has no notes (or none have been loaded yet).
+    [[nodiscard]] const std::vector<Paragraph>& notes() const noexcept {
+        return notes_;
+    }
+
+    // Notes paragraph texts joined with '\n'. Empty when there are no notes.
+    [[nodiscard]] std::string notes_text() const;
+
     void set_index(std::size_t i) noexcept {
         index_ = i;
     }
@@ -153,6 +168,7 @@ class Slide {
     std::size_t index_ = 0;
     std::string part_name_;
     std::vector<Shape> shapes_;
+    std::vector<Paragraph> notes_;
 };
 
 }  // namespace pptctl

@@ -158,6 +158,15 @@ int extract(const std::string& path) {
         for (const auto& shape : slide.shapes()) {
             print_shape(shape, 0);
         }
+        if (!slide.notes().empty()) {
+            pptctl::println("  [notes]");
+            for (const auto& para : slide.notes()) {
+                const std::string text = para.text();
+                if (!text.empty()) {
+                    pptctl::println("    {}", text);
+                }
+            }
+        }
     }
     return 0;
 }

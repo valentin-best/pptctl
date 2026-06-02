@@ -265,6 +265,53 @@ constexpr const char* kMergedTable = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A notesSlide with the standard placeholder set: a slide-image placeholder,
+// the notes-body placeholder (the only one with text), and a slide-number
+// placeholder. Only the body's text should surface as notes.
+constexpr const char* kNotesSlide = R"(<?xml version="1.0"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+         xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr/>
+        <p:nvPr><p:ph type="sldImg" idx="2"/></p:nvPr></p:nvSpPr>
+      <p:spPr/>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr/>
+        <p:nvPr><p:ph type="body" idx="3"/></p:nvPr></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/><a:lstStyle/>
+        <a:p><a:r><a:t>First note line.</a:t></a:r></a:p>
+        <a:p><a:r><a:t>Second note line.</a:t></a:r></a:p>
+      </p:txBody>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="4" name="Slide Number Placeholder 3"/><p:cNvSpPr/>
+        <p:nvPr><p:ph type="sldNum" idx="5"/></p:nvPr></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/><a:p><a:fld id="{X}" type="slidenum"><a:t>1</a:t></a:fld></a:p></p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:notes>)";
+
+// A notesSlide carrying only a slide-image placeholder — no notes body.
+constexpr const char* kNotesSlideNoBody = R"(<?xml version="1.0"?>
+<p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+         xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr/>
+        <p:nvPr><p:ph type="sldImg" idx="2"/></p:nvPr></p:nvSpPr>
+      <p:spPr/>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:notes>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -592,6 +639,57 @@ TEST_CASE("Slide: captures merged cells as span on origin + covered flag") {
     CHECK(plain.col_span == 1);
     CHECK(plain.row_span == 1);
     CHECK_FALSE(plain.merged);
+}
+
+TEST_CASE("Slide: default-constructed slide has no notes") {
+    pptctl::Slide slide;
+    CHECK(slide.notes().empty());
+    CHECK(slide.notes_text().empty());
+}
+
+TEST_CASE("Slide: parse_notes of malformed XML returns false") {
+    pptctl::Slide slide;
+    CHECK_FALSE(slide.parse_notes("<not-closed"));
+}
+
+TEST_CASE("Slide: parse_notes captures only the notes-body placeholder text") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse_notes(kNotesSlide));
+    REQUIRE(slide.notes().size() == 2);
+    CHECK(slide.notes()[0].text() == "First note line.");
+    CHECK(slide.notes()[1].text() == "Second note line.");
+    CHECK(slide.notes_text() == "First note line.\nSecond note line.");
+}
+
+TEST_CASE("Slide: parse_notes with no body placeholder yields empty notes") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse_notes(kNotesSlideNoBody));
+    CHECK(slide.notes().empty());
+    CHECK(slide.notes_text().empty());
+}
+
+TEST_CASE("Slide: load resolves speaker notes via the notesSlide relationship") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("notes_and_masters.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+    REQUIRE(pres.slide_parts().size() == 4);
+
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
+    // Notes text from the generated fixture (generate_fixtures.py).
+    CHECK(slide.notes_text() == "Speaker notes for slide 1: remember to elaborate here.");
+}
+
+TEST_CASE("Slide: a slide without notes loads with empty notes") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
+    CHECK(slide.notes().empty());
 }
 
 TEST_CASE("Slide: loads tables from tables_deck.pptx") {
