@@ -8,7 +8,11 @@ the C++ build has no Python dependency.
 
 Run it with `uv` (no install needed):
 
-    uv run --python 3.12 --with python-pptx tests/fixtures/generate_fixtures.py
+    uv run --python 3.12 --with python-pptx==1.0.2 tests/fixtures/generate_fixtures.py
+
+Pass --check to verify committed fixtures match regenerated output (useful in CI):
+
+    uv run --python 3.12 --with python-pptx==1.0.2 tests/fixtures/generate_fixtures.py --check
 
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
@@ -20,14 +24,24 @@ python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
 a second master with its own layout and theme. Counts asserted by the C++ tests:
 12 slides / 12 images, and >= 2 masters + a notesSlide part, respectively.
+
+Reproducibility contract
+------------------------
+- python-pptx is pinned above so XML serialization is identical across machines.
+- All ZIP entries are written with a fixed timestamp and in sorted order so the
+  committed bytes are stable regardless of python-pptx's internal entry ordering.
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import io
 import re
 import struct
+import sys
+import tempfile
+import zipfile
 import zlib
 from pathlib import Path
 
@@ -38,6 +52,7 @@ HERE = Path(__file__).resolve().parent
 
 # Fixed metadata so regenerated fixtures don't churn on author/timestamps.
 _FIXED_DT = datetime.datetime(2025, 1, 1, 0, 0, 0)
+_FIXED_ZIP_DT = (2025, 1, 1, 0, 0, 0)
 _REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _SLIDE_MASTER_REL = _REL_NS + "/slideMaster"
 
@@ -70,6 +85,57 @@ def _set_core_props(prs: Presentation, title: str) -> None:
     cp.modified = _FIXED_DT
 
 
+_XLSX_DATE_RE = re.compile(
+    r"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:(?:created|modified)>)"
+)
+_FIXED_XLSX_DATE = "2025-01-01T00:00:00Z"
+
+
+def _normalize_xlsx_blob(data: bytes) -> bytes:
+    """Normalize an embedded xlsx blob: fix docProps/core.xml timestamps and sort entries."""
+    buf = io.BytesIO(data)
+    with zipfile.ZipFile(buf) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    if "docProps/core.xml" in parts:
+        core = _XLSX_DATE_RE.sub(
+            lambda m: m.group(1) + _FIXED_XLSX_DATE + m.group(2),
+            parts["docProps/core.xml"].decode("utf-8"),
+        )
+        parts["docProps/core.xml"] = core.encode("utf-8")
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in sorted(parts):
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, parts[name])
+    return out.getvalue()
+
+
+def _write_zip(path: Path, parts: dict[str, bytes]) -> None:
+    """Write parts to a ZIP with fixed timestamps and alphabetically sorted entries.
+
+    Sorting and pinning timestamps are what make regeneration byte-identical
+    across machines and python-pptx patch releases that change entry ordering.
+    [Content_Types].xml sorts first (ASCII '[' < '_' < letters), matching the
+    OOXML convention that renderers expect it at the front of the archive.
+    Embedded .xlsx blobs (chart data) are also normalized to remove their
+    current-time docProps/core.xml timestamps.
+    """
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in sorted(parts):
+            data = _normalize_xlsx_blob(parts[name]) if name.endswith(".xlsx") else parts[name]
+            info = zipfile.ZipInfo(name, date_time=_FIXED_ZIP_DT)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, data)
+
+
+def _normalize_zip(path: Path) -> None:
+    """Rewrite a .pptx saved by python-pptx with fixed timestamps and sorted entries."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    _write_zip(path, parts)
+
+
 def build_images_deck(path: Path) -> None:
     """12 slides, each carrying one distinct embedded PNG."""
     prs = Presentation()
@@ -86,6 +152,7 @@ def build_images_deck(path: Path) -> None:
         )
     _set_core_props(prs, "pptctl images fixture")
     prs.save(str(path))
+    _normalize_zip(path)
 
 
 def build_notes_deck_base(path: Path) -> None:
@@ -101,6 +168,7 @@ def build_notes_deck_base(path: Path) -> None:
         notes.text = f"Speaker notes for slide {i + 1}: remember to elaborate here."
     _set_core_props(prs, "pptctl notes + masters fixture")
     prs.save(str(path))
+    _normalize_zip(path)
 
 
 def build_tables_deck(path: Path) -> None:
@@ -129,6 +197,7 @@ def build_tables_deck(path: Path) -> None:
 
     _set_core_props(prs, "pptctl tables fixture")
     prs.save(str(path))
+    _normalize_zip(path)
 
 
 def build_charts_deck(path: Path) -> None:
@@ -170,6 +239,7 @@ def build_charts_deck(path: Path) -> None:
 
     _set_core_props(prs, "pptctl charts fixture")
     prs.save(str(path))
+    _normalize_zip(path)
 
 
 def _next_index(names: list[str], pattern: str) -> int:
@@ -182,8 +252,6 @@ def _next_index(names: list[str], pattern: str) -> int:
 def inject_second_master(path: Path) -> None:
     """Add a second slide master (its own layout + theme) by duplicating the
     first at the package level. python-pptx exposes no API for this."""
-    import zipfile
-
     with zipfile.ZipFile(path) as zf:
         parts = {n: zf.read(n) for n in zf.namelist()}
 
@@ -259,25 +327,53 @@ def inject_second_master(path: Path) -> None:
     ct = ct.replace("</Types>", overrides + "</Types>")
     parts["[Content_Types].xml"] = ct.encode("utf-8")
 
-    # Rewrite the archive with a fixed timestamp for reproducible output.
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in parts.items():
-            info = zipfile.ZipInfo(name, date_time=(2025, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(info, data)
+    _write_zip(path, parts)
+
+
+_FIXTURES: list[tuple[str, list[object]]] = [
+    ("images_deck.pptx", [build_images_deck]),
+    ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),
+    ("tables_deck.pptx", [build_tables_deck]),
+    ("charts_deck.pptx", [build_charts_deck]),
+]
+
+
+def _build_all(dest: Path) -> None:
+    for name, builders in _FIXTURES:
+        p = dest / name
+        for builder in builders:
+            builder(p)  # type: ignore[operator]
 
 
 def main() -> None:
-    images = HERE / "images_deck.pptx"
-    notes = HERE / "notes_and_masters.pptx"
-    tables = HERE / "tables_deck.pptx"
-    charts = HERE / "charts_deck.pptx"
-    build_images_deck(images)
-    build_notes_deck_base(notes)
-    inject_second_master(notes)
-    build_tables_deck(tables)
-    build_charts_deck(charts)
-    print(f"wrote {images.name}, {notes.name}, {tables.name}, and {charts.name} to {HERE}")
+    parser = argparse.ArgumentParser(
+        description="Regenerate pptctl synthetic test fixtures."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Regenerate to a temp dir and exit 1 if any committed fixture differs.",
+    )
+    args = parser.parse_args()
+
+    if args.check:
+        dirty: list[str] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            _build_all(Path(tmp))
+            for name, _ in _FIXTURES:
+                committed = (HERE / name).read_bytes()
+                generated = (Path(tmp) / name).read_bytes()
+                if committed != generated:
+                    dirty.append(name)
+        if dirty:
+            for name in dirty:
+                print(f"STALE: {name}", file=sys.stderr)
+            sys.exit(1)
+        print("All fixtures are up-to-date.")
+    else:
+        _build_all(HERE)
+        names = ", ".join(n for n, _ in _FIXTURES)
+        print(f"wrote {names} to {HERE}")
 
 
 if __name__ == "__main__":
