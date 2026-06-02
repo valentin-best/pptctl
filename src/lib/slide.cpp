@@ -282,9 +282,14 @@ std::string chart_tx_text(pugi::xml_node tx) {
         .as_string("");
 }
 
+// Hard ceiling for chart point counts — prevents memory exhaustion from a
+// maliciously large c:ptCount in an untrusted .pptx.
+constexpr std::size_t kMaxChartPoints = 1U << 16;  // 65536 points per series
+
 // Collects string values from c:strLit/c:pt or c:strRef/c:strCache/c:pt.
 // Points are placed at their idx positions so sparse sequences stay aligned
-// with the matching numeric series (c:ptCount gives the dense size).
+// with the matching numeric series. The vector grows lazily as each c:pt is
+// encountered (not from c:ptCount) so a malicious ptCount can't exhaust memory.
 std::vector<std::string> collect_str_pts(pugi::xml_node parent) {
     pugi::xml_node container;
     if (auto lit = parent.child("c:strLit")) {
@@ -295,13 +300,16 @@ std::vector<std::string> collect_str_pts(pugi::xml_node parent) {
     if (!container) {
         return {};
     }
-    const std::size_t count = container.child("c:ptCount").attribute("val").as_uint(0);
-    std::vector<std::string> out(count);
+    std::vector<std::string> out;
     for (auto pt : container.children("c:pt")) {
         const std::size_t idx = pt.attribute("idx").as_uint(0);
-        if (idx < out.size()) {
-            out[idx] = pt.child("c:v").text().as_string("");
+        if (idx >= kMaxChartPoints) {
+            continue;
         }
+        if (idx >= out.size()) {
+            out.resize(idx + 1);
+        }
+        out[idx] = pt.child("c:v").text().as_string("");
     }
     return out;
 }
@@ -309,6 +317,7 @@ std::vector<std::string> collect_str_pts(pugi::xml_node parent) {
 // Collects numeric values from c:numLit/c:pt or c:numRef/c:numCache/c:pt.
 // Points are placed at their idx positions so sparse sequences (gaps in chart
 // data) stay aligned with category labels from the matching series.
+// The vector grows lazily — not from c:ptCount — to cap untrusted allocations.
 std::vector<double> collect_num_pts(pugi::xml_node parent) {
     pugi::xml_node container;
     if (auto lit = parent.child("c:numLit")) {
@@ -319,13 +328,16 @@ std::vector<double> collect_num_pts(pugi::xml_node parent) {
     if (!container) {
         return {};
     }
-    const std::size_t count = container.child("c:ptCount").attribute("val").as_uint(0);
-    std::vector<double> out(count, 0.0);
+    std::vector<double> out;
     for (auto pt : container.children("c:pt")) {
         const std::size_t idx = pt.attribute("idx").as_uint(0);
-        if (idx < out.size()) {
-            out[idx] = pt.child("c:v").text().as_double(0.0);
+        if (idx >= kMaxChartPoints) {
+            continue;
         }
+        if (idx >= out.size()) {
+            out.resize(idx + 1, 0.0);
+        }
+        out[idx] = pt.child("c:v").text().as_double(0.0);
     }
     return out;
 }
