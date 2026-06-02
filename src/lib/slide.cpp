@@ -138,6 +138,9 @@ Table parse_table(pugi::xml_node tbl) {
         TableRow row;
         for (auto tc : tr.children("a:tc")) {
             TableCell cell;
+            cell.col_span = tc.attribute("gridSpan").as_int(1);
+            cell.row_span = tc.attribute("rowSpan").as_int(1);
+            cell.merged = tc.attribute("hMerge").as_bool() || tc.attribute("vMerge").as_bool();
             parse_paragraphs(tc.child("a:txBody"), cell.paragraphs);
             row.cells.push_back(std::move(cell));
         }

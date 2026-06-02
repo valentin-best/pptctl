@@ -238,6 +238,33 @@ constexpr const char* kBasicTable = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A 2x2 table whose top row is merged across both columns: the origin cell has
+// gridSpan="2" and the covered cell carries hMerge="1".
+constexpr const char* kMergedTable = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="2" name="Merged 2"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblGrid><a:gridCol w="100"/><a:gridCol w="100"/></a:tblGrid>
+          <a:tr h="100">
+            <a:tc gridSpan="2"><a:txBody><a:bodyPr/><a:p><a:r><a:t>Annual Summary</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc hMerge="1"><a:txBody><a:bodyPr/><a:p/></a:txBody></a:tc>
+          </a:tr>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Left</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Right</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+        </a:tbl>
+      </a:graphicData></a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -538,4 +565,31 @@ TEST_CASE("Slide: parses a table's rows, columns, and cell text") {
     const auto& header = table.rows[0].cells[0].paragraphs.at(0).runs.at(0);
     REQUIRE(header.props.bold.has_value());
     CHECK(*header.props.bold == true);
+}
+
+TEST_CASE("Slide: captures merged cells as span on origin + covered flag") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kMergedTable));
+    REQUIRE(slide.shapes().size() == 1);
+    REQUIRE(slide.shapes()[0].table.has_value());
+
+    const auto& table = *slide.shapes()[0].table;
+    REQUIRE(table.rows.size() == 2);
+    // The grid stays rectangular: the covered cell is kept, not dropped.
+    REQUIRE(table.rows[0].cells.size() == 2);
+
+    const auto& origin = table.rows[0].cells[0];
+    CHECK(origin.col_span == 2);
+    CHECK(origin.row_span == 1);
+    CHECK_FALSE(origin.merged);
+    CHECK(origin.text() == "Annual Summary");
+
+    const auto& covered = table.rows[0].cells[1];
+    CHECK(covered.merged);
+
+    // A plain cell keeps the defaults.
+    const auto& plain = table.rows[1].cells[0];
+    CHECK(plain.col_span == 1);
+    CHECK(plain.row_span == 1);
+    CHECK_FALSE(plain.merged);
 }
