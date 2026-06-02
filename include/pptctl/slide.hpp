@@ -111,6 +111,25 @@ struct Picture {
     std::optional<std::string> alt_text;      // p:cNvPr@descr
 };
 
+// One data series from a chart part. parse() captures rel_id; Slide::load()
+// fills the rest from the chart part XML.
+struct ChartSeries {
+    std::string name;                     // c:ser/c:tx — series label
+    std::vector<std::string> categories;  // c:ser/c:cat — category labels (may be empty)
+    std::vector<double> values;           // c:ser/c:val — numeric values
+};
+
+// Chart metadata from a graphic-frame shape. Present only when kind == Chart.
+// parse() fills rel_id from the slide XML c:chart@r:id; Slide::load() resolves
+// the chart part and fills chart_type/title/series.
+struct Chart {
+    std::string rel_id;                // c:chart@r:id in slide XML
+    std::string target;                // resolved chart part (ppt/charts/chartN.xml)
+    std::string chart_type;            // e.g. "bar", "line", "bar+line" for combo
+    std::optional<std::string> title;  // c:chart/c:title text; nullopt if absent
+    std::vector<ChartSeries> series;
+};
+
 struct Shape {
     ShapeKind kind = ShapeKind::Other;
     std::string id;                               // p:cNvPr@id
@@ -121,6 +140,7 @@ struct Shape {
     std::vector<Shape> children;        // populated only for Group, recursive
     std::optional<Picture> picture;     // populated only when kind == Picture
     std::optional<Table> table;         // populated only when kind == Table
+    std::optional<Chart> chart;         // populated only when kind == Chart
 };
 
 class Slide {

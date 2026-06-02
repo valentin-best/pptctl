@@ -13,6 +13,8 @@ Run it with `uv` (no install needed):
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
   - notes_and_masters.pptx  4 slides with speaker notes, plus a 2nd slide master.
+  - tables_deck.pptx        2 slides: a plain 2×2 table and a merged-cell table.
+  - charts_deck.pptx        2 slides: a clustered-bar chart and a pie chart.
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -129,6 +131,47 @@ def build_tables_deck(path: Path) -> None:
     prs.save(str(path))
 
 
+def build_charts_deck(path: Path) -> None:
+    """2 slides: a clustered-bar chart (2 series, 3 categories) and a pie chart
+    (1 series, 3 categories). Both have titles so the C++ tests can verify title
+    extraction. Data is written inline by python-pptx as numCache/strCache."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+
+    # Slide 1: clustered bar, 2 series x 3 categories.
+    s1 = prs.slides.add_slide(blank)
+    cd1 = ChartData()
+    cd1.categories = ["Q1", "Q2", "Q3"]
+    cd1.add_series("Revenue", (100, 200, 150))
+    cd1.add_series("Cost", (80, 120, 90))
+    chart1 = s1.shapes.add_chart(
+        XL_CHART_TYPE.BAR_CLUSTERED,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd1,
+    ).chart
+    chart1.has_title = True
+    chart1.chart_title.text_frame.text = "Revenue vs Cost"
+
+    # Slide 2: pie, 1 series x 3 categories.
+    s2 = prs.slides.add_slide(blank)
+    cd2 = ChartData()
+    cd2.categories = ["Alpha", "Beta", "Gamma"]
+    cd2.add_series("Share", (30, 50, 20))
+    chart2 = s2.shapes.add_chart(
+        XL_CHART_TYPE.PIE,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd2,
+    ).chart
+    chart2.has_title = True
+    chart2.chart_title.text_frame.text = "Market Share"
+
+    _set_core_props(prs, "pptctl charts fixture")
+    prs.save(str(path))
+
+
 def _next_index(names: list[str], pattern: str) -> int:
     """Highest numeric suffix matching `pattern` (one capture group), plus 1."""
     rx = re.compile(pattern)
@@ -228,11 +271,13 @@ def main() -> None:
     images = HERE / "images_deck.pptx"
     notes = HERE / "notes_and_masters.pptx"
     tables = HERE / "tables_deck.pptx"
+    charts = HERE / "charts_deck.pptx"
     build_images_deck(images)
     build_notes_deck_base(notes)
     inject_second_master(notes)
     build_tables_deck(tables)
-    print(f"wrote {images.name}, {notes.name}, and {tables.name} to {HERE}")
+    build_charts_deck(charts)
+    print(f"wrote {images.name}, {notes.name}, {tables.name}, and {charts.name} to {HERE}")
 
 
 if __name__ == "__main__":

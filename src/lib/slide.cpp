@@ -1,5 +1,6 @@
 // pptctl/slide.cpp — parses a slide's shape tree into a content model.
 
+#include <format>
 #include <pptctl/slide.hpp>
 #include <pugixml.hpp>
 #include <string_view>
@@ -164,10 +165,16 @@ Shape parse_graphic_frame(pugi::xml_node gf_el) {
     Shape shape;
     shape.kind = graphic_frame_kind(gf_el);
     set_identity(gf_el, shape);
+    auto gd = gf_el.child("a:graphic").child("a:graphicData");
     if (shape.kind == ShapeKind::Table) {
-        auto tbl = gf_el.child("a:graphic").child("a:graphicData").child("a:tbl");
-        if (tbl) {
+        if (auto tbl = gd.child("a:tbl")) {
             shape.table = parse_table(tbl);
+        }
+    } else if (shape.kind == ShapeKind::Chart) {
+        if (auto cc = gd.child("c:chart")) {
+            Chart chart;
+            chart.rel_id = cc.attribute("r:id").as_string("");
+            shape.chart = std::move(chart);
         }
     }
     return shape;
@@ -261,6 +268,169 @@ void resolve_pictures(const Package& pkg, std::string_view part_name, std::vecto
     }
 }
 
+// Extracts text from c:tx — checks both the inline c:v path and the
+// c:strRef/c:strCache/c:pt[0]/c:v path that python-pptx writes.
+std::string chart_tx_text(pugi::xml_node tx) {
+    if (auto v = tx.child("c:v")) {
+        return v.text().as_string("");
+    }
+    return tx.child("c:strRef")
+        .child("c:strCache")
+        .find_child_by_attribute("c:pt", "idx", "0")
+        .child("c:v")
+        .text()
+        .as_string("");
+}
+
+// Collects string values from c:strLit/c:pt or c:strRef/c:strCache/c:pt.
+// Points are placed at their idx positions so sparse sequences stay aligned
+// with the matching numeric series (c:ptCount gives the dense size).
+std::vector<std::string> collect_str_pts(pugi::xml_node parent) {
+    pugi::xml_node container;
+    if (auto lit = parent.child("c:strLit")) {
+        container = lit;
+    } else if (auto cache = parent.child("c:strRef").child("c:strCache")) {
+        container = cache;
+    }
+    if (!container) {
+        return {};
+    }
+    const std::size_t count = container.child("c:ptCount").attribute("val").as_uint(0);
+    std::vector<std::string> out(count);
+    for (auto pt : container.children("c:pt")) {
+        const std::size_t idx = pt.attribute("idx").as_uint(0);
+        if (idx < out.size()) {
+            out[idx] = pt.child("c:v").text().as_string("");
+        }
+    }
+    return out;
+}
+
+// Collects numeric values from c:numLit/c:pt or c:numRef/c:numCache/c:pt.
+// Points are placed at their idx positions so sparse sequences (gaps in chart
+// data) stay aligned with category labels from the matching series.
+std::vector<double> collect_num_pts(pugi::xml_node parent) {
+    pugi::xml_node container;
+    if (auto lit = parent.child("c:numLit")) {
+        container = lit;
+    } else if (auto cache = parent.child("c:numRef").child("c:numCache")) {
+        container = cache;
+    }
+    if (!container) {
+        return {};
+    }
+    const std::size_t count = container.child("c:ptCount").attribute("val").as_uint(0);
+    std::vector<double> out(count, 0.0);
+    for (auto pt : container.children("c:pt")) {
+        const std::size_t idx = pt.attribute("idx").as_uint(0);
+        if (idx < out.size()) {
+            out[idx] = pt.child("c:v").text().as_double(0.0);
+        }
+    }
+    return out;
+}
+
+// Strips the "c:" namespace prefix and "Chart" suffix from an OOXML chart type
+// element name, e.g. "c:barChart" → "bar", "c:bar3DChart" → "bar3D".
+std::string chart_type_label(std::string_view element_name) {
+    // Strip leading "c:"
+    if (element_name.starts_with("c:")) {
+        element_name.remove_prefix(2);
+    }
+    // Strip trailing "Chart"
+    constexpr std::string_view kSuffix = "Chart";
+    if (element_name.ends_with(kSuffix)) {
+        element_name.remove_suffix(kSuffix.size());
+    }
+    return std::string(element_name);
+}
+
+void load_chart_data(Chart& chart, std::string_view xml) {
+    pugi::xml_document doc;
+    if (!doc.load_buffer(xml.data(), xml.size(), pugi::parse_default, pugi::encoding_auto)) {
+        return;
+    }
+    auto cs = doc.child("c:chartSpace");
+    auto ch = cs.child("c:chart");
+
+    // Title: c:chart/c:title/c:tx or c:chart/c:title/c:tx/c:rich/a:p/a:r/a:t
+    auto title_tx = ch.child("c:title").child("c:tx");
+    if (title_tx) {
+        // Rich text path (most common)
+        std::string rich;
+        for (auto p : title_tx.child("c:rich").children("a:p")) {
+            for (auto r : p.children("a:r")) {
+                rich += r.child("a:t").text().as_string("");
+            }
+        }
+        if (!rich.empty()) {
+            chart.title = std::move(rich);
+        } else {
+            // Plain text path
+            auto plain = chart_tx_text(title_tx);
+            if (!plain.empty()) {
+                chart.title = std::move(plain);
+            }
+        }
+    }
+
+    // Chart types and series from c:plotArea
+    auto plot = ch.child("c:plotArea");
+    std::string type_str;
+    for (auto el : plot.children()) {
+        const std::string_view el_name = el.name();
+        if (!el_name.starts_with("c:") || !el_name.ends_with("Chart")) {
+            continue;
+        }
+        if (!type_str.empty()) {
+            type_str += '+';
+        }
+        type_str += chart_type_label(el_name);
+
+        for (auto ser : el.children("c:ser")) {
+            ChartSeries s;
+            s.name = chart_tx_text(ser.child("c:tx"));
+            s.categories = collect_str_pts(ser.child("c:cat"));
+            // Scatter charts use c:xVal/c:yVal instead of c:cat/c:val.
+            // X values are numeric, so convert them to strings for display.
+            if (s.categories.empty()) {
+                for (const double x : collect_num_pts(ser.child("c:xVal"))) {
+                    s.categories.emplace_back(x == static_cast<double>(static_cast<long long>(x))
+                                                  ? std::format("{}", static_cast<long long>(x))
+                                                  : std::format("{:.6g}", x));
+                }
+            }
+            s.values = collect_num_pts(ser.child("c:val"));
+            if (s.values.empty()) {
+                s.values = collect_num_pts(ser.child("c:yVal"));
+            }
+            chart.series.emplace_back(std::move(s));
+        }
+    }
+    chart.chart_type = std::move(type_str);
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void resolve_charts(const Package& pkg, std::string_view part_name, std::vector<Shape>& shapes) {
+    for (auto& shape : shapes) {
+        if (shape.chart && !shape.chart->rel_id.empty()) {
+            Chart& c = *shape.chart;
+            c.target = pkg.resolve(part_name, c.rel_id);
+            if (!c.target.empty()) {
+                const auto bytes = pkg.read_part(c.target);
+                if (!bytes.empty()) {
+                    load_chart_data(c,
+                                    std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                                                     bytes.size()));
+                }
+            }
+        }
+        if (!shape.children.empty()) {
+            resolve_charts(pkg, part_name, shape.children);
+        }
+    }
+}
+
 // The notes text lives in the notesSlide's body placeholder
 // (p:sp with p:ph type="body"); the slide-image and slide-number placeholders
 // are skipped. Fills out with that placeholder's paragraphs, or leaves it empty
@@ -322,6 +492,7 @@ bool Slide::load(const Package& pkg, std::string_view part_name) {
         return false;
     }
     resolve_pictures(pkg, part_name_, shapes_);
+    resolve_charts(pkg, part_name_, shapes_);
 
     // Resolve the slide -> notesSlide relationship and parse its notes body.
     // Notes are optional: a slide with no notesSlide simply has empty notes().

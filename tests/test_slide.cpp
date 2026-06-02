@@ -312,6 +312,26 @@ constexpr const char* kNotesSlideNoBody = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:notes>)";
 
+// A slide with a single chart graphicFrame that carries a c:chart rel reference.
+constexpr const char* kChartSlide = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="2" name="Chart 2"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+      <p:xfrm><a:off x="914400" y="914400"/><a:ext cx="5486400" cy="3657600"/></p:xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+          <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/>
+        </a:graphicData>
+      </a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -422,10 +442,10 @@ TEST_CASE("Slide: detects shape kinds, placeholder type, and geometry") {
     CHECK(s[3].kind == pptctl::ShapeKind::Chart);
     CHECK(s[4].kind == pptctl::ShapeKind::Connector);
 
-    // A chart graphicFrame (no a:tbl) carries no table model.
+    // A chart graphicFrame with no c:chart child yields no chart model.
     CHECK_FALSE(s[3].table.has_value());
-    // The table graphicFrame in this fixture has no a:tbl child either, so no
-    // table model is attached even though its kind is Table.
+    CHECK_FALSE(s[3].chart.has_value());
+    // The table graphicFrame in this fixture has no a:tbl child either.
     CHECK_FALSE(s[2].table.has_value());
 }
 
@@ -690,6 +710,86 @@ TEST_CASE("Slide: a slide without notes loads with empty notes") {
     pptctl::Slide slide;
     REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
     CHECK(slide.notes().empty());
+}
+
+TEST_CASE("Slide: parse captures chart rel_id from c:chart element") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kChartSlide));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& shape = slide.shapes()[0];
+    CHECK(shape.kind == pptctl::ShapeKind::Chart);
+    CHECK(shape.name == "Chart 2");
+    REQUIRE(shape.chart.has_value());
+    CHECK(shape.chart->rel_id == "rId2");
+    // parse() does not resolve — target and chart_type are empty until load().
+    CHECK(shape.chart->target.empty());
+    CHECK(shape.chart->chart_type.empty());
+    CHECK(shape.chart->series.empty());
+}
+
+TEST_CASE("Slide: loads charts from charts_deck.pptx") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("charts_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+    REQUIRE(pres.slide_parts().size() == 2);
+
+    auto first_chart = [](const pptctl::Slide& slide) -> const pptctl::Chart* {
+        for (const auto& s : slide.shapes()) {
+            if (s.kind == pptctl::ShapeKind::Chart && s.chart.has_value()) {
+                return &*s.chart;
+            }
+        }
+        return nullptr;
+    };
+
+    // Slide 1: clustered-bar chart, 2 series x 3 categories.
+    pptctl::Slide s1;
+    REQUIRE(s1.load(pkg, pres.slide_parts().at(0)));
+    const pptctl::Chart* c1 = first_chart(s1);
+    REQUIRE(c1 != nullptr);
+    CHECK(c1->chart_type == "bar");
+    REQUIRE(c1->title.has_value());
+    CHECK(*c1->title == "Revenue vs Cost");
+    REQUIRE(c1->series.size() == 2);
+
+    const auto& rev = c1->series[0];
+    CHECK(rev.name == "Revenue");
+    REQUIRE(rev.categories.size() == 3);
+    CHECK(rev.categories[0] == "Q1");
+    CHECK(rev.categories[1] == "Q2");
+    CHECK(rev.categories[2] == "Q3");
+    REQUIRE(rev.values.size() == 3);
+    CHECK(rev.values[0] == 100.0);
+    CHECK(rev.values[1] == 200.0);
+    CHECK(rev.values[2] == 150.0);
+
+    const auto& cost = c1->series[1];
+    CHECK(cost.name == "Cost");
+    REQUIRE(cost.values.size() == 3);
+    CHECK(cost.values[0] == 80.0);
+    CHECK(cost.values[1] == 120.0);
+    CHECK(cost.values[2] == 90.0);
+
+    // Slide 2: pie chart, 1 series x 3 categories.
+    pptctl::Slide s2;
+    REQUIRE(s2.load(pkg, pres.slide_parts().at(1)));
+    const pptctl::Chart* c2 = first_chart(s2);
+    REQUIRE(c2 != nullptr);
+    CHECK(c2->chart_type == "pie");
+    REQUIRE(c2->title.has_value());
+    CHECK(*c2->title == "Market Share");
+    REQUIRE(c2->series.size() == 1);
+
+    const auto& share = c2->series[0];
+    CHECK(share.name == "Share");
+    REQUIRE(share.categories.size() == 3);
+    CHECK(share.categories[0] == "Alpha");
+    REQUIRE(share.values.size() == 3);
+    CHECK(share.values[0] == 30.0);
+    CHECK(share.values[1] == 50.0);
+    CHECK(share.values[2] == 20.0);
 }
 
 TEST_CASE("Slide: loads tables from tables_deck.pptx") {
