@@ -212,6 +212,59 @@ constexpr const char* kGroupedPicture = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A 2x2 table inside a graphicFrame: a bold header row and a data row.
+constexpr const char* kBasicTable = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="2" name="Table 2"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblGrid><a:gridCol w="100"/><a:gridCol w="100"/></a:tblGrid>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:rPr b="1"/><a:t>Quarter</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Revenue</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Q1</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>100</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+        </a:tbl>
+      </a:graphicData></a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
+// A 2x2 table whose top row is merged across both columns: the origin cell has
+// gridSpan="2" and the covered cell carries hMerge="1".
+constexpr const char* kMergedTable = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:graphicFrame>
+      <p:nvGraphicFramePr><p:cNvPr id="2" name="Merged 2"/></p:nvGraphicFramePr>
+      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+        <a:tbl>
+          <a:tblGrid><a:gridCol w="100"/><a:gridCol w="100"/></a:tblGrid>
+          <a:tr h="100">
+            <a:tc gridSpan="2"><a:txBody><a:bodyPr/><a:p><a:r><a:t>Annual Summary</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc hMerge="1"><a:txBody><a:bodyPr/><a:p/></a:txBody></a:tc>
+          </a:tr>
+          <a:tr h="100">
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Left</a:t></a:r></a:p></a:txBody></a:tc>
+            <a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Right</a:t></a:r></a:p></a:txBody></a:tc>
+          </a:tr>
+        </a:tbl>
+      </a:graphicData></a:graphic>
+    </p:graphicFrame>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 }  // namespace
 
 TEST_CASE("Slide: default-constructed slide has no shapes") {
@@ -321,6 +374,12 @@ TEST_CASE("Slide: detects shape kinds, placeholder type, and geometry") {
     CHECK(s[2].kind == pptctl::ShapeKind::Table);
     CHECK(s[3].kind == pptctl::ShapeKind::Chart);
     CHECK(s[4].kind == pptctl::ShapeKind::Connector);
+
+    // A chart graphicFrame (no a:tbl) carries no table model.
+    CHECK_FALSE(s[3].table.has_value());
+    // The table graphicFrame in this fixture has no a:tbl child either, so no
+    // table model is attached even though its kind is Table.
+    CHECK_FALSE(s[2].table.has_value());
 }
 
 TEST_CASE("Slide: recurses into group shapes preserving reading order") {
@@ -466,4 +525,111 @@ TEST_CASE("Slide: captures a picture nested inside a group") {
     CHECK_FALSE(pic.picture->linked);
     REQUIRE(pic.picture->alt_text.has_value());
     CHECK(*pic.picture->alt_text == "nested");
+}
+
+TEST_CASE("TableCell: text joins paragraph texts with newlines") {
+    pptctl::TableCell cell;
+    pptctl::Paragraph p1;
+    p1.runs.push_back(pptctl::Run{.text = "Line A"});
+    pptctl::Paragraph p2;
+    p2.runs.push_back(pptctl::Run{.text = "Line B"});
+    cell.paragraphs = {p1, p2};
+    CHECK(cell.text() == "Line A\nLine B");
+
+    pptctl::TableCell empty;
+    CHECK(empty.text().empty());
+}
+
+TEST_CASE("Slide: parses a table's rows, columns, and cell text") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kBasicTable));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& shape = slide.shapes()[0];
+    CHECK(shape.kind == pptctl::ShapeKind::Table);
+    CHECK(shape.name == "Table 2");
+    REQUIRE(shape.table.has_value());
+
+    const auto& table = *shape.table;
+    CHECK(table.columns == 2);
+    REQUIRE(table.rows.size() == 2);
+    REQUIRE(table.rows[0].cells.size() == 2);
+    REQUIRE(table.rows[1].cells.size() == 2);
+
+    CHECK(table.rows[0].cells[0].text() == "Quarter");
+    CHECK(table.rows[0].cells[1].text() == "Revenue");
+    CHECK(table.rows[1].cells[0].text() == "Q1");
+    CHECK(table.rows[1].cells[1].text() == "100");
+
+    // Cell text keeps run formatting (bold header).
+    const auto& header = table.rows[0].cells[0].paragraphs.at(0).runs.at(0);
+    REQUIRE(header.props.bold.has_value());
+    CHECK(*header.props.bold == true);
+}
+
+TEST_CASE("Slide: captures merged cells as span on origin + covered flag") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kMergedTable));
+    REQUIRE(slide.shapes().size() == 1);
+    REQUIRE(slide.shapes()[0].table.has_value());
+
+    const auto& table = *slide.shapes()[0].table;
+    REQUIRE(table.rows.size() == 2);
+    // The grid stays rectangular: the covered cell is kept, not dropped.
+    REQUIRE(table.rows[0].cells.size() == 2);
+
+    const auto& origin = table.rows[0].cells[0];
+    CHECK(origin.col_span == 2);
+    CHECK(origin.row_span == 1);
+    CHECK_FALSE(origin.merged);
+    CHECK(origin.text() == "Annual Summary");
+
+    const auto& covered = table.rows[0].cells[1];
+    CHECK(covered.merged);
+
+    // A plain cell keeps the defaults.
+    const auto& plain = table.rows[1].cells[0];
+    CHECK(plain.col_span == 1);
+    CHECK(plain.row_span == 1);
+    CHECK_FALSE(plain.merged);
+}
+
+TEST_CASE("Slide: loads tables from tables_deck.pptx") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("tables_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+    REQUIRE(pres.slide_parts().size() == 2);
+
+    auto first_table = [](const pptctl::Slide& slide) -> const pptctl::Table* {
+        for (const auto& s : slide.shapes()) {
+            if (s.kind == pptctl::ShapeKind::Table && s.table.has_value()) {
+                return &*s.table;
+            }
+        }
+        return nullptr;
+    };
+
+    // Slide 1: a plain 2x2 table.
+    pptctl::Slide s1;
+    REQUIRE(s1.load(pkg, pres.slide_parts().at(0)));
+    const pptctl::Table* t1 = first_table(s1);
+    REQUIRE(t1 != nullptr);
+    CHECK(t1->columns == 2);
+    REQUIRE(t1->rows.size() == 2);
+    REQUIRE(t1->rows[0].cells.size() == 2);
+    CHECK(t1->rows[0].cells[0].text() == "Quarter");
+    CHECK(t1->rows[0].cells[1].text() == "Revenue");
+    CHECK(t1->rows[1].cells[0].text() == "Q1");
+
+    // Slide 2: the top row is merged across both columns.
+    pptctl::Slide s2;
+    REQUIRE(s2.load(pkg, pres.slide_parts().at(1)));
+    const pptctl::Table* t2 = first_table(s2);
+    REQUIRE(t2 != nullptr);
+    REQUIRE(t2->rows.size() == 2);
+    REQUIRE(t2->rows[0].cells.size() == 2);
+    CHECK(t2->rows[0].cells[0].col_span == 2);
+    CHECK(t2->rows[0].cells[0].text() == "Annual Summary");
+    CHECK(t2->rows[0].cells[1].merged);
 }

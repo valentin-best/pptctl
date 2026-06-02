@@ -65,6 +65,30 @@ struct Paragraph {
     }
 };
 
+// One cell of a table (a:tc). Reuses the text model for content. A cell that
+// originates a merge carries col_span/row_span > 1; a cell covered by a
+// neighbor's span is flagged merged and kept in the grid so row/column indices
+// stay true.
+struct TableCell {
+    std::vector<Paragraph> paragraphs;  // a:tc/a:txBody
+    int col_span = 1;                   // a:tc@gridSpan
+    int row_span = 1;                   // a:tc@rowSpan
+    bool merged = false;                // a:tc@hMerge or @vMerge (covered cell)
+
+    [[nodiscard]] std::string text() const;  // paragraph texts joined with '\n'
+};
+
+// One row of a table (a:tr).
+struct TableRow {
+    std::vector<TableCell> cells;  // a:tc, in document order
+};
+
+// A graphic-frame table (a:tbl). Populated only on shapes with kind == Table.
+struct Table {
+    std::size_t columns = 0;     // a:tblGrid/a:gridCol count
+    std::vector<TableRow> rows;  // a:tr, in document order
+};
+
 // Present only when the shape carries an a:xfrm. EMU, the native OOXML unit.
 struct Geometry {
     Emu off_x = 0;
@@ -96,6 +120,7 @@ struct Shape {
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
     std::optional<Picture> picture;     // populated only when kind == Picture
+    std::optional<Table> table;         // populated only when kind == Table
 };
 
 class Slide {

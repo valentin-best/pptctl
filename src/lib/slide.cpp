@@ -6,6 +6,17 @@
 
 namespace pptctl {
 
+std::string TableCell::text() const {
+    std::string out;
+    for (const auto& p : paragraphs) {
+        if (!out.empty()) {
+            out += '\n';
+        }
+        out += p.text();
+    }
+    return out;
+}
+
 namespace {
 
 // The shape's identifying p:cNvPr lives inside the shape's first child (the
@@ -40,7 +51,7 @@ RunProperties parse_run_props(pugi::xml_node rpr) {
     return props;
 }
 
-void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
+void parse_paragraphs(pugi::xml_node tx_body, std::vector<Paragraph>& out) {
     for (auto p : tx_body.children("a:p")) {
         Paragraph para;
         para.level = p.child("a:pPr").attribute("lvl").as_int(0);
@@ -63,7 +74,7 @@ void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
                 para.runs.push_back(std::move(run));
             }
         }
-        shape.paragraphs.push_back(std::move(para));
+        out.push_back(std::move(para));
     }
 }
 
@@ -115,6 +126,42 @@ ShapeKind graphic_frame_kind(pugi::xml_node gf) {
     return ShapeKind::Other;
 }
 
+Table parse_table(pugi::xml_node tbl) {
+    Table table;
+    std::size_t cols = 0;
+    for (auto gc : tbl.child("a:tblGrid").children("a:gridCol")) {
+        (void)gc;
+        ++cols;
+    }
+    table.columns = cols;
+    for (auto tr : tbl.children("a:tr")) {
+        TableRow row;
+        for (auto tc : tr.children("a:tc")) {
+            TableCell cell;
+            cell.col_span = tc.attribute("gridSpan").as_int(1);
+            cell.row_span = tc.attribute("rowSpan").as_int(1);
+            cell.merged = tc.attribute("hMerge").as_bool() || tc.attribute("vMerge").as_bool();
+            parse_paragraphs(tc.child("a:txBody"), cell.paragraphs);
+            row.cells.push_back(std::move(cell));
+        }
+        table.rows.push_back(std::move(row));
+    }
+    return table;
+}
+
+Shape parse_graphic_frame(pugi::xml_node gf_el) {
+    Shape shape;
+    shape.kind = graphic_frame_kind(gf_el);
+    set_identity(gf_el, shape);
+    if (shape.kind == ShapeKind::Table) {
+        auto tbl = gf_el.child("a:graphic").child("a:graphicData").child("a:tbl");
+        if (tbl) {
+            shape.table = parse_table(tbl);
+        }
+    }
+    return shape;
+}
+
 Shape parse_sp(pugi::xml_node sp_el) {
     Shape shape;
     set_identity(sp_el, shape);
@@ -128,7 +175,7 @@ Shape parse_sp(pugi::xml_node sp_el) {
         shape.kind = ShapeKind::TextBox;
     }
     if (auto tx = sp_el.child("p:txBody")) {
-        parse_text_body(tx, shape);
+        parse_paragraphs(tx, shape.paragraphs);
     }
     return shape;
 }
@@ -167,10 +214,7 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
         } else if (name == "p:pic") {
             out.push_back(parse_pic(el));
         } else if (name == "p:graphicFrame") {
-            Shape shape;
-            shape.kind = graphic_frame_kind(el);
-            set_identity(el, shape);
-            out.push_back(std::move(shape));
+            out.push_back(parse_graphic_frame(el));
         } else if (name == "p:cxnSp") {
             Shape shape;
             shape.kind = ShapeKind::Connector;

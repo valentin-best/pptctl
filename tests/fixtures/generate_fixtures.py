@@ -101,6 +101,34 @@ def build_notes_deck_base(path: Path) -> None:
     prs.save(str(path))
 
 
+def build_tables_deck(path: Path) -> None:
+    """2 slides: a plain 2x2 table (bold header), and a table whose top row is
+    merged across both columns."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+
+    # Slide 1: a 2x2 table with a bold header row.
+    s1 = prs.slides.add_slide(blank)
+    t1 = s1.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2)).table
+    for col, header in enumerate(("Quarter", "Revenue")):
+        cell = t1.cell(0, col)
+        cell.text = header
+        cell.text_frame.paragraphs[0].runs[0].font.bold = True
+    t1.cell(1, 0).text = "Q1"
+    t1.cell(1, 1).text = "100"
+
+    # Slide 2: a 2x2 table with the top row merged across both columns.
+    s2 = prs.slides.add_slide(blank)
+    t2 = s2.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(6), Inches(2)).table
+    t2.cell(0, 0).merge(t2.cell(0, 1))
+    t2.cell(0, 0).text = "Annual Summary"
+    t2.cell(1, 0).text = "Left"
+    t2.cell(1, 1).text = "Right"
+
+    _set_core_props(prs, "pptctl tables fixture")
+    prs.save(str(path))
+
+
 def _next_index(names: list[str], pattern: str) -> int:
     """Highest numeric suffix matching `pattern` (one capture group), plus 1."""
     rx = re.compile(pattern)
@@ -199,10 +227,12 @@ def inject_second_master(path: Path) -> None:
 def main() -> None:
     images = HERE / "images_deck.pptx"
     notes = HERE / "notes_and_masters.pptx"
+    tables = HERE / "tables_deck.pptx"
     build_images_deck(images)
     build_notes_deck_base(notes)
     inject_second_master(notes)
-    print(f"wrote {images.name} and {notes.name} to {HERE}")
+    build_tables_deck(tables)
+    print(f"wrote {images.name}, {notes.name}, and {tables.name} to {HERE}")
 
 
 if __name__ == "__main__":
