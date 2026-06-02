@@ -243,3 +243,23 @@ TEST_CASE("Presentation: parses the theme color scheme") {
     CHECK(color_of("hlink") == "0000FF");
     CHECK(color_of("folHlink") == "800080");
 }
+
+TEST_CASE("Package: part_size returns the uncompressed size of a part") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+
+    const auto size = pkg.part_size("ppt/media/image1.png");
+    REQUIRE(size.has_value());
+    CHECK(*size == 120);
+}
+
+TEST_CASE("Package: part_size is nullopt for a missing part") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    CHECK_FALSE(pkg.part_size("does/not/exist.png").has_value());
+}
+
+TEST_CASE("Package: part_size is nullopt when no package is open") {
+    pptctl::Package pkg;
+    CHECK_FALSE(pkg.part_size("ppt/media/image1.png").has_value());
+}

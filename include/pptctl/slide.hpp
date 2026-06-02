@@ -73,6 +73,20 @@ struct Geometry {
     Emu ext_cy = 0;
 };
 
+// A picture's blip reference and the media part it resolves to. Present only on
+// shapes with kind == Picture. parse() fills rel_id/linked/alt_text from the
+// slide XML; Slide::load() fills target/content_type/size_bytes via the
+// package's relationship graph (left empty/nullopt for linked or unresolved
+// images).
+struct Picture {
+    std::string rel_id;                       // a:blip@r:embed, or @r:link when linked
+    bool linked = false;                      // from r:link (external) rather than r:embed
+    std::string target;                       // resolved media part; empty if linked/unresolved
+    std::string content_type;                 // e.g. "image/png"; empty if unknown
+    std::optional<std::uint64_t> size_bytes;  // uncompressed media size; nullopt if unknown
+    std::optional<std::string> alt_text;      // p:cNvPr@descr
+};
+
 struct Shape {
     ShapeKind kind = ShapeKind::Other;
     std::string id;                               // p:cNvPr@id
@@ -81,6 +95,7 @@ struct Shape {
     std::optional<Geometry> geometry;
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
+    std::optional<Picture> picture;     // populated only when kind == Picture
 };
 
 class Slide {

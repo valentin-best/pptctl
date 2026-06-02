@@ -129,6 +129,38 @@ constexpr const char* kMixedShapes = R"(<?xml version="1.0"?>
   </p:spTree></p:cSld>
 </p:sld>)";
 
+// A picture whose blip is embedded (internal), with alt text on cNvPr@descr.
+constexpr const char* kEmbeddedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="2" name="Picture 2" descr="A red square"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rId2"/></p:blipFill>
+      <p:spPr/>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
+// A picture whose blip is a link to an external image.
+constexpr const char* kLinkedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="2" name="Linked"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:link="rId5"/></p:blipFill>
+      <p:spPr/>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
 // A top-level shape, then a group containing two shapes — to check recursion
 // and that document order is preserved at both levels.
 constexpr const char* kGroupedShapes = R"(<?xml version="1.0"?>
@@ -155,6 +187,27 @@ constexpr const char* kGroupedShapes = R"(<?xml version="1.0"?>
         <p:spPr/>
         <p:txBody><a:bodyPr/><a:p><a:r><a:t>B</a:t></a:r></a:p></p:txBody>
       </p:sp>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+
+// A picture nested inside a group shape — exercises picture capture through the
+// group recursion (the same recursion resolve_pictures walks in load()).
+constexpr const char* kGroupedPicture = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 2"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:pic>
+        <p:nvPicPr><p:cNvPr id="3" name="Inner Pic" descr="nested"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+        <p:blipFill><a:blip r:embed="rId7"/></p:blipFill>
+        <p:spPr/>
+      </p:pic>
     </p:grpSp>
   </p:spTree></p:cSld>
 </p:sld>)";
@@ -341,4 +394,76 @@ TEST_CASE("Slide: images_deck slides carry picture shapes") {
         }
     }
     CHECK(any_picture);
+}
+
+TEST_CASE("Slide: captures an embedded picture's blip reference and alt text") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kEmbeddedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& pic = slide.shapes()[0];
+    CHECK(pic.kind == pptctl::ShapeKind::Picture);
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->rel_id == "rId2");
+    CHECK_FALSE(pic.picture->linked);
+    REQUIRE(pic.picture->alt_text.has_value());
+    CHECK(*pic.picture->alt_text == "A red square");
+    // parse() does not resolve — that is load()'s job.
+    CHECK(pic.picture->target.empty());
+    CHECK_FALSE(pic.picture->size_bytes.has_value());
+}
+
+TEST_CASE("Slide: flags a linked (external) picture") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kLinkedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& pic = slide.shapes()[0];
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->linked);
+    CHECK(pic.picture->rel_id == "rId5");
+    CHECK_FALSE(pic.picture->alt_text.has_value());
+}
+
+TEST_CASE("Slide: resolves an embedded picture to its media part on load") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, pres.slide_parts().at(0)));
+
+    const pptctl::Picture* pic = nullptr;
+    for (const auto& s : slide.shapes()) {
+        if (s.kind == pptctl::ShapeKind::Picture && s.picture.has_value()) {
+            pic = &*s.picture;
+            break;  // slide 1 has a single picture; take the first
+        }
+    }
+    REQUIRE(pic != nullptr);
+    // Expected values come from the generated fixture (tests/fixtures/
+    // generate_fixtures.py): rId2 -> ppt/media/image1.png, a 120-byte PNG.
+    CHECK(pic->target == "ppt/media/image1.png");
+    CHECK(pic->content_type == "image/png");
+    REQUIRE(pic->size_bytes.has_value());
+    CHECK(*pic->size_bytes == 120);
+}
+
+TEST_CASE("Slide: captures a picture nested inside a group") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kGroupedPicture));
+    REQUIRE(slide.shapes().size() == 1);
+
+    const auto& group = slide.shapes()[0];
+    CHECK(group.kind == pptctl::ShapeKind::Group);
+    REQUIRE(group.children.size() == 1);
+
+    const auto& pic = group.children[0];
+    CHECK(pic.kind == pptctl::ShapeKind::Picture);
+    REQUIRE(pic.picture.has_value());
+    CHECK(pic.picture->rel_id == "rId7");
+    CHECK_FALSE(pic.picture->linked);
+    REQUIRE(pic.picture->alt_text.has_value());
+    CHECK(*pic.picture->alt_text == "nested");
 }

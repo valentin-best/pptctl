@@ -133,6 +133,29 @@ Shape parse_sp(pugi::xml_node sp_el) {
     return shape;
 }
 
+Shape parse_pic(pugi::xml_node pic_el) {
+    Shape shape;
+    shape.kind = ShapeKind::Picture;
+    set_identity(pic_el, shape);
+
+    Picture pic;
+    auto blip = pic_el.child("p:blipFill").child("a:blip");
+    if (auto embed = blip.attribute("r:embed")) {
+        pic.rel_id = embed.as_string("");
+    } else if (auto link = blip.attribute("r:link")) {
+        pic.rel_id = link.as_string("");
+        pic.linked = true;
+    }
+    if (auto descr = nv_cnvpr(pic_el).attribute("descr")) {
+        const std::string_view text = descr.as_string("");
+        if (!text.empty()) {
+            pic.alt_text = std::string(text);
+        }
+    }
+    shape.picture = std::move(pic);
+    return shape;
+}
+
 // Recurses into p:grpSp to walk nested shape trees; the depth mirrors the
 // deck's group nesting, which is shallow in practice.
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -142,10 +165,7 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
         if (name == "p:sp") {
             out.push_back(parse_sp(el));
         } else if (name == "p:pic") {
-            Shape shape;
-            shape.kind = ShapeKind::Picture;
-            set_identity(el, shape);
-            out.push_back(std::move(shape));
+            out.push_back(parse_pic(el));
         } else if (name == "p:graphicFrame") {
             Shape shape;
             shape.kind = graphic_frame_kind(el);
@@ -162,6 +182,26 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
             set_identity(el, shape);
             parse_sp_tree(el, shape.children);  // a grpSp nests shapes like a spTree
             out.push_back(std::move(shape));
+        }
+    }
+}
+
+// Resolves each embedded picture's blip rId to its media part via the package's
+// relationship graph, recursing into group children. Linked (external) and
+// unresolved pictures are left as parsed.
+// NOLINTNEXTLINE(misc-no-recursion)
+void resolve_pictures(const Package& pkg, std::string_view part_name, std::vector<Shape>& shapes) {
+    for (auto& shape : shapes) {
+        if (shape.picture && !shape.picture->linked && !shape.picture->rel_id.empty()) {
+            Picture& pic = *shape.picture;
+            pic.target = pkg.resolve(part_name, pic.rel_id);
+            if (!pic.target.empty()) {
+                pic.content_type = pkg.content_type(pic.target);
+                pic.size_bytes = pkg.part_size(pic.target);
+            }
+        }
+        if (!shape.children.empty()) {
+            resolve_pictures(pkg, part_name, shape.children);
         }
     }
 }
@@ -190,7 +230,11 @@ bool Slide::load(const Package& pkg, std::string_view part_name) {
     if (bytes.empty()) {
         return false;
     }
-    return parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    if (!parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) {
+        return false;
+    }
+    resolve_pictures(pkg, part_name_, shapes_);
+    return true;
 }
 
 }  // namespace pptctl
