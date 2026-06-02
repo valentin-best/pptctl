@@ -424,6 +424,7 @@ int extract(const std::string& path, const std::string& format_str) {
 
     if (fmt == Format::Json) {
         nlohmann::json out;
+        out["schema_version"] = 1;
         out["file"] = path;
         out["slide_count"] = pres.slide_count();
         auto slides = nlohmann::json::array();
