@@ -40,7 +40,7 @@ RunProperties parse_run_props(pugi::xml_node rpr) {
     return props;
 }
 
-void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
+void parse_paragraphs(pugi::xml_node tx_body, std::vector<Paragraph>& out) {
     for (auto p : tx_body.children("a:p")) {
         Paragraph para;
         para.level = p.child("a:pPr").attribute("lvl").as_int(0);
@@ -63,7 +63,7 @@ void parse_text_body(pugi::xml_node tx_body, Shape& shape) {
                 para.runs.push_back(std::move(run));
             }
         }
-        shape.paragraphs.push_back(std::move(para));
+        out.push_back(std::move(para));
     }
 }
 
@@ -128,7 +128,7 @@ Shape parse_sp(pugi::xml_node sp_el) {
         shape.kind = ShapeKind::TextBox;
     }
     if (auto tx = sp_el.child("p:txBody")) {
-        parse_text_body(tx, shape);
+        parse_paragraphs(tx, shape.paragraphs);
     }
     return shape;
 }
