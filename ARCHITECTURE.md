@@ -145,16 +145,16 @@ This relationship-graph nature is *why* naive deck merging corrupts pictures: co
 - **Golden tests** for `extract` and `info`: input fixture → expected JSON output, byte-compared after canonicalization.
 - **Renderer compatibility tests** (manual at first, automated eventually): for any subcommand that produces a `.pptx`, the output must open without warnings in PowerPoint, Keynote, LibreOffice, and Google Slides. This is the gotcha most libraries fail. See anthropics/skills#1167 for an example of what a passing test should catch.
 
-## CI matrix (target)
+## CI matrix
 
-GitHub Actions, three jobs:
+GitHub Actions, three jobs (all green):
 - `ubuntu-latest` (gcc-13 and clang-18)
 - `macos-latest` (Apple Silicon)
 - `windows-latest` (MSVC 2022)
 
 Each runs: build → unit tests → fixture tests → CLI smoke tests.
 
-Static analysis: `clang-tidy` and `cppcheck` on PRs. Memory: `valgrind` on Linux, `-fsanitize=address,undefined` everywhere.
+Static analysis: `clang-tidy` runs as a pre-commit hook and in CI on every PR. Memory: `-fsanitize=address,undefined` via `./scripts/build.sh asan`.
 
 ## Distribution
 
@@ -175,5 +175,5 @@ Static analysis: `clang-tidy` and `cppcheck` on PRs. Memory: `valgrind` on Linux
 
 1. **How do we represent shape position/size in our document model?** Native units are EMU (914400 per inch). Inches are user-friendly. Probably: store EMU internally, render as inches in JSON output.
 2. **Do we ever load an entire deck into memory?** Goal is to support 10k-slide decks. Probably needs a streaming mode for `info` and `extract`.
-3. **Schema for `extract` JSON output.** Needs a spec doc before implementation. Should be stable enough that downstream tools can rely on it. Bump major version on breaking changes.
+3. ~~**Schema for `extract` JSON output.**~~ Resolved: versioned JSON schema spec lives at `docs/extract-schema.md`. Breaking changes increment `schema_version`.
 4. **`diff` output format.** Unified diff style? JSON patch? Structured tree diff? Decide before implementation — affects the entire shape of the subcommand.
