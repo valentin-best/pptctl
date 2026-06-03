@@ -16,6 +16,8 @@ namespace pptctl::cmd {
 int info(const std::string& path, bool json);
 int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
+int lint(const std::string& path);
+int lint_to(const std::string& path, std::ostream& os);
 
 }  // namespace pptctl::cmd
 
@@ -56,11 +58,15 @@ int main(int argc, char** argv) {
         ->check(CLI::IsMember({"json", "md", "txt"}));
     extract_cmd->callback([&]() { std::exit(pptctl::cmd::extract(extract_path, extract_format)); });
 
+    // --- lint ----------------------------------------------------------------
+    std::string lint_path;
+    auto* lint_cmd = app.add_subcommand("lint", "Static analysis for .pptx files");
+    lint_cmd->add_option("file", lint_path, "path to .pptx")->required()->check(CLI::ExistingFile);
+    lint_cmd->callback([&]() { std::exit(pptctl::cmd::lint(lint_path)); });
+
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
     // shows the full planned surface area to users.
-    app.add_subcommand("lint", "Static analysis for .pptx files (not yet implemented)")
-        ->callback([] { std::exit(not_implemented("lint")); });
     app.add_subcommand("optimize", "Reduce file size (not yet implemented)")->callback([] {
         std::exit(not_implemented("optimize"));
     });
