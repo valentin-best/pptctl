@@ -1,0 +1,7 @@
+slide 1
+  [chart] "Chart 1" → bar, 2 series — "Revenue vs Cost"
+    "Revenue": Q1=100, Q2=200, Q3=150
+    "Cost": Q1=80, Q2=120, Q3=90
+slide 2
+  [chart] "Chart 1" → pie, 1 series — "Market Share"
+    "Share": Alpha=30, Beta=50, Gamma=20

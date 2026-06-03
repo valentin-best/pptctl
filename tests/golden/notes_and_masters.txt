@@ -1,0 +1,20 @@
+slide 1
+  [title] Topic 1
+  Body text for topic 1.
+  [notes]
+    Speaker notes for slide 1: remember to elaborate here.
+slide 2
+  [title] Topic 2
+  Body text for topic 2.
+  [notes]
+    Speaker notes for slide 2: remember to elaborate here.
+slide 3
+  [title] Topic 3
+  Body text for topic 3.
+  [notes]
+    Speaker notes for slide 3: remember to elaborate here.
+slide 4
+  [title] Topic 4
+  Body text for topic 4.
+  [notes]
+    Speaker notes for slide 4: remember to elaborate here.

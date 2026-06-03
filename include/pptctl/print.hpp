@@ -46,4 +46,9 @@ void print_to(std::ostream& os, std::format_string<Args...> fmt, Args&&... args)
     os << std::format(fmt, std::forward<Args>(args)...);
 }
 
+template <typename... Args>
+void println_to(std::ostream& os, std::format_string<Args...> fmt, Args&&... args) {
+    os << std::format(fmt, std::forward<Args>(args)...) << '\n';
+}
+
 }  // namespace pptctl

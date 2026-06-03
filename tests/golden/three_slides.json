@@ -1,0 +1,127 @@
+{
+  "file": "<path>",
+  "schema_version": 1,
+  "slide_count": 3,
+  "slides": [
+    {
+      "index": 1,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 1"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "ctrTitle",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Subtitle 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": ""
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "subTitle",
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 2"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "ctrTitle",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Subtitle 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": ""
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "subTitle",
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "2",
+          "kind": "placeholder",
+          "name": "Title 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 3"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "ctrTitle",
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": null,
+          "id": "3",
+          "kind": "placeholder",
+          "name": "Subtitle 2",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": ""
+            }
+          ],
+          "picture": null,
+          "placeholder_type": "subTitle",
+          "table": null
+        }
+      ]
+    }
+  ]
+}

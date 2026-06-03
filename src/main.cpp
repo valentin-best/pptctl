@@ -4,6 +4,7 @@
 // src/cmd/*.cpp and the internal library in src/lib/.
 
 #include <CLI/CLI.hpp>
+#include <ostream>
 #include <pptctl/print.hpp>
 #include <string>
 
@@ -14,6 +15,7 @@ namespace pptctl::cmd {
 // registration in main() when you add a new one.
 int info(const std::string& path, bool json);
 int extract(const std::string& path, const std::string& format);
+int extract_to(const std::string& path, const std::string& format, std::ostream& os);
 
 }  // namespace pptctl::cmd
 

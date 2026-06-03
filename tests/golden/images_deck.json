@@ -1,0 +1,619 @@
+{
+  "file": "<path>",
+  "schema_version": 1,
+  "slide_count": 12,
+  "slides": [
+    {
+      "index": 1,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 1"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3657600,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 120,
+            "target": "ppt/media/image1.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 2"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3638939,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 126,
+            "target": "ppt/media/image2.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 3"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3621024,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 127,
+            "target": "ppt/media/image3.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 4"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3603812,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 128,
+            "target": "ppt/media/image4.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 5"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3587262,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 128,
+            "target": "ppt/media/image5.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 6"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3571336,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 129,
+            "target": "ppt/media/image6.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 7"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3556000,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 132,
+            "target": "ppt/media/image7.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 8"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3541222,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 131,
+            "target": "ppt/media/image8.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 9"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3526971,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 135,
+            "target": "ppt/media/image9.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 10"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3513221,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 135,
+            "target": "ppt/media/image10.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 11"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3499945,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 138,
+            "target": "ppt/media/image11.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "notes": "",
+      "shapes": [
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 8229600,
+            "ext_cy": 731520,
+            "off_x": 457200,
+            "off_y": 274320
+          },
+          "id": "2",
+          "kind": "textbox",
+          "name": "TextBox 1",
+          "paragraphs": [
+            {
+              "level": 0,
+              "text": "Slide 12"
+            }
+          ],
+          "picture": null,
+          "placeholder_type": null,
+          "table": null
+        },
+        {
+          "chart": null,
+          "children": [],
+          "geometry": {
+            "ext_cx": 3487119,
+            "ext_cy": 2743200,
+            "off_x": 914400,
+            "off_y": 1371600
+          },
+          "id": "3",
+          "kind": "picture",
+          "name": "Picture 2",
+          "paragraphs": [],
+          "picture": {
+            "alt_text": "image.png",
+            "content_type": "image/png",
+            "linked": false,
+            "size_bytes": 138,
+            "target": "ppt/media/image12.png"
+          },
+          "placeholder_type": null,
+          "table": null
+        }
+      ]
+    }
+  ]
+}
