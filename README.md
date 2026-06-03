@@ -2,7 +2,7 @@
 
 > A fast CLI for `.pptx` files. Inspect, lint, diff, optimize, merge, extract.
 
-**Status:** early development. `info` works; the others are stubs.
+**Status:** early development. `info` and `extract` work; the others are stubs.
 
 ```
 $ pptctl info deck.pptx
@@ -17,6 +17,20 @@ parts in package    58
 ```
 
 `--json` mode emits the same data machine-readable.
+
+```
+$ pptctl extract deck.pptx --format txt
+slide 1
+  [ctrTitle] Q3 Business Review
+  [body] Revenue up 23% YoY
+  [pic] chart_bg.png  (1024×768, 184 KiB)
+slide 2
+  [title] Agenda
+  [body] Intro\nDemo\nQ&A
+...
+```
+
+`--format json` (default) emits a versioned schema suitable for LLM pipelines and tooling. `--format md` emits Markdown.
 
 ## Why this exists
 
@@ -35,7 +49,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | Command | What it does | Status |
 |---|---|---|
 | `info` | Quick metadata: slide count, dimensions, fonts, media | ✅ Implemented |
-| `extract` | Structured JSON/markdown export of slide content | Planned |
+| `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
 | `lint` | Detect canvas overflow, missing alt-text, font fallback risks | Planned |
 | `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
 | `diff` | Semantic diff: slides added/removed, text changed, charts modified | Planned |

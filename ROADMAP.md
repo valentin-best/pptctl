@@ -2,52 +2,52 @@
 
 A phased plan. Each phase is roughly one month of evenings/weekends for one person. Adjust to your actual pace; don't commit to dates publicly until something has shipped.
 
-## Phase 0 — Foundation (weeks 1–2)
+## Phase 0 — Foundation (weeks 1–2) ✅
 
 Goal: skeleton you can build on. No features yet.
 
-- [ ] Pick final project name. Update everywhere.
-- [ ] Pick license. Add `LICENSE`.
-- [ ] CMake project: builds an empty `pptctl` binary with `--version` and `--help`.
-- [ ] `FetchContent` for CLI11, pugixml, minizip-ng, fmt, nlohmann/json, doctest.
-- [ ] First subcommand wired up: `pptctl hello` that prints "hello, world". Proves the dispatch.
-- [ ] GitHub Actions CI: build on Linux, macOS, Windows. Run any tests that exist.
-- [ ] `.editorconfig`, `.clang-format`, `.clang-tidy` configs.
-- [ ] First fixture: hand-craft `tests/fixtures/minimal.pptx` (one blank slide).
-- [ ] First test: open the fixture, verify ZIP listing matches expectations.
+- [x] Pick final project name. Update everywhere.
+- [x] Pick license. Add `LICENSE`.
+- [x] CMake project: builds an empty `pptctl` binary with `--version` and `--help`.
+- [x] `FetchContent` for CLI11, pugixml, minizip-ng, fmt, nlohmann/json, doctest.
+- [x] First subcommand wired up: `pptctl hello` that prints "hello, world". Proves the dispatch.
+- [x] GitHub Actions CI: build on Linux, macOS, Windows. Run any tests that exist.
+- [x] `.editorconfig`, `.clang-format`, `.clang-tidy` configs.
+- [x] First fixture: hand-craft `tests/fixtures/minimal.pptx` (one blank slide).
+- [x] First test: open the fixture, verify ZIP listing matches expectations.
 
-Exit criteria: clean CI on all three OSes, one fixture round-trips losslessly.
+Exit criteria: clean CI on all three OSes, one fixture round-trips losslessly. ✅
 
-## Phase 1 — `pptctl info` (weeks 3–4)
+## Phase 1 — `pptctl info` (weeks 3–4) ✅
 
 Goal: ship the smallest useful subcommand. This is the moment you have something to post.
 
-- [ ] OOXML package layer: open a `.pptx`, list parts, resolve `[Content_Types].xml`.
-- [ ] Read `ppt/presentation.xml`: slide dimensions, slide list.
-- [ ] Read theme: font references, color scheme.
-- [ ] Walk `ppt/media/`: count and sum sizes of images, video, audio.
-- [ ] `pptctl info <file>` output formatted nicely (see README for shape).
-- [ ] `--json` flag for machine-readable output.
-- [ ] Fixtures: minimal deck, a 12-slide deck with images, a deck with notes and masters.
+- [x] OOXML package layer: open a `.pptx`, list parts, resolve `[Content_Types].xml`.
+- [x] Read `ppt/presentation.xml`: slide dimensions, slide list.
+- [x] Read theme: font references, color scheme.
+- [x] Walk `ppt/media/`: count and sum sizes of images, video, audio.
+- [x] `pptctl info <file>` output formatted nicely (see README for shape).
+- [x] `--json` flag for machine-readable output.
+- [x] Fixtures: minimal deck, a 12-slide deck with images, a deck with notes and masters.
 
-Exit criteria: `pptctl info` works on ten real-world `.pptx` files from the wild without crashing.
+Exit criteria: `pptctl info` works on ten real-world `.pptx` files from the wild without crashing. ✅
 
 **Ship moment:** tag v0.1.0, write a short blog post or README update, post to r/programming and HN with title like "pptctl: a CLI for inspecting .pptx files". Don't oversell — say it's early.
 
-## Phase 2 — `pptctl extract` (weeks 5–7)
+## Phase 2 — `pptctl extract` (weeks 5–7) ✅
 
 Goal: structured content extraction. The "Docling for presentations" piece.
 
-- [ ] Slide content parsing: shape tree, text frames, paragraphs, runs.
-- [ ] Picture extraction (with relationship resolution).
-- [ ] Table extraction.
-- [ ] Chart metadata (type, series count, data) — values only, not rendering.
-- [ ] Speaker notes.
-- [ ] `--format json` (default), `--format md`, `--format txt`.
-- [ ] Schema spec for JSON output, versioned.
-- [ ] Golden tests: every fixture has an expected-output file checked in.
+- [x] Slide content parsing: shape tree, text frames, paragraphs, runs.
+- [x] Picture extraction (with relationship resolution).
+- [x] Table extraction.
+- [x] Chart metadata (type, series count, data) — values only, not rendering.
+- [x] Speaker notes.
+- [x] `--format json` (default), `--format md`, `--format txt`.
+- [x] Schema spec for JSON output, versioned. (See `docs/extract-schema.md`.)
+- [x] Golden tests: every fixture has an expected-output file checked in.
 
-Exit criteria: `pptctl extract` produces consistent output across ten real-world decks. Output is good enough that an LLM could read it and reason about the deck.
+Exit criteria: `pptctl extract` produces consistent output across ten real-world decks. Output is good enough that an LLM could read it and reason about the deck. ✅
 
 **Ship moment:** v0.2.0. Now there's a story: pptctl is the OSS tool for getting structured data out of presentations. Pitch on r/MachineLearning, r/LocalLLaMA — people want this for RAG pipelines.
 
