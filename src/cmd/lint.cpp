@@ -114,4 +114,13 @@ int lint(const std::string& path) {
     return lint_to(path, std::cout);
 }
 
+std::vector<Diagnostic> lint_slide(const Slide& slide, const CanvasSize& canvas) {
+    const auto rules = make_rules();
+    std::vector<Diagnostic> diagnostics;
+    for (const auto& rule : rules) {
+        rule.fn(slide, canvas, diagnostics);
+    }
+    return diagnostics;
+}
+
 }  // namespace pptctl::cmd
