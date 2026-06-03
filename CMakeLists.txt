@@ -129,6 +129,7 @@ add_executable(pptctl
     src/main.cpp
     src/cmd/info.cpp
     src/cmd/extract.cpp
+    src/cmd/lint.cpp
 )
 target_link_libraries(pptctl
     PRIVATE
@@ -144,7 +145,9 @@ add_executable(pptctl_tests
     tests/test_package.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
+    tests/test_lint.cpp
     src/cmd/extract.cpp
+    src/cmd/lint.cpp
 )
 target_link_libraries(pptctl_tests
     PRIVATE
