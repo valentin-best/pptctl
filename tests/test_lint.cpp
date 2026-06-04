@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <format>
 #include <pptctl/lint.hpp>
 #include <pptctl/presentation.hpp>
