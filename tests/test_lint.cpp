@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <format>
 #include <pptctl/lint.hpp>
 #include <pptctl/presentation.hpp>
@@ -221,4 +222,91 @@ TEST_CASE("overflow: child shape in group overflows — diagnostic fires recursi
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].rule_id == "overflow");
     CHECK(diags[0].shape_name == "Child 1");
+}
+
+// ── tiny-text rule helpers ────────────────────────────────────────────────────
+
+// Build a slide with one text shape. sz_centipt == 0 means no sz attribute.
+std::string slide_xml_with_text(int sz_centipt, const char* name = "Label 1") {
+    const std::string sz_attr = sz_centipt > 0 ? std::format(R"( sz="{}")", sz_centipt) : "";
+    return std::format(
+        R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="{}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="1000000" cy="500000"/></a:xfrm>
+      </p:spPr>
+      <p:txBody>
+        <a:bodyPr/>
+        <a:p><a:r><a:rPr{}/>
+          <a:t>Hello</a:t>
+        </a:r></a:p>
+      </p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)",
+        name,
+        sz_attr);
+}
+
+// ── tiny-text rule: no-fire cases ─────────────────────────────────────────────
+
+TEST_CASE("tiny-text: run at exactly 12pt (1200 centipt) — no diagnostic") {
+    auto diags = lint_xml(slide_xml_with_text(1200));
+    auto tiny = std::count_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    CHECK(tiny == 0);
+}
+
+TEST_CASE("tiny-text: run at 24pt — no diagnostic") {
+    auto diags = lint_xml(slide_xml_with_text(2400));
+    auto tiny = std::count_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    CHECK(tiny == 0);
+}
+
+TEST_CASE("tiny-text: run with no explicit size (inherited) — no diagnostic") {
+    auto diags = lint_xml(slide_xml_with_text(0));  // 0 = no sz attribute
+    auto tiny = std::count_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    CHECK(tiny == 0);
+}
+
+// ── tiny-text rule: fire cases ────────────────────────────────────────────────
+
+TEST_CASE("tiny-text: run at 11.99pt (1199 centipt) — diagnostic") {
+    auto diags = lint_xml(slide_xml_with_text(1199));
+    auto it = std::find_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    REQUIRE(it != diags.end());
+    CHECK(it->severity == pptctl::Severity::Warning);
+    CHECK(it->slide_index == 1);
+    CHECK(it->shape_name == "Label 1");
+}
+
+TEST_CASE("tiny-text: run at 8pt (800 centipt) — diagnostic") {
+    auto diags = lint_xml(slide_xml_with_text(800));
+    auto it = std::find_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    REQUIRE(it != diags.end());
+    CHECK(it->rule_id == "tiny-text");
+}
+
+TEST_CASE("tiny-text: diagnostic message contains shape name") {
+    auto diags = lint_xml(slide_xml_with_text(800, "SmallCaption"));
+    auto it = std::find_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    REQUIRE(it != diags.end());
+    CHECK(it->message.find("SmallCaption") != std::string::npos);
+}
+
+TEST_CASE("tiny-text: integration — minimal.pptx produces no tiny-text findings") {
+    std::string out;
+    run("minimal.pptx", out);
+    CHECK(out.find("tiny-text") == std::string::npos);
 }

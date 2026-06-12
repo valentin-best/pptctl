@@ -48,10 +48,46 @@ void rule_overflow(const Slide& slide, const CanvasSize& canvas, std::vector<Dia
     }
 }
 
+// ── tiny-text rule ────────────────────────────────────────────────────────────
+
+constexpr int kMinFontSizeCentipt = 1200;  // 12 pt
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void check_tiny_text_shape(const Shape& shape,
+                           std::size_t slide_idx,
+                           std::vector<Diagnostic>& out) {
+    for (const auto& para : shape.paragraphs) {
+        for (const auto& run : para.runs) {
+            if (run.props.size_centipt && *run.props.size_centipt < kMinFontSizeCentipt) {
+                out.push_back({"tiny-text",
+                               Severity::Warning,
+                               slide_idx,
+                               shape.name,
+                               std::format("shape \"{}\" has text at {:.1f}pt (below {}pt minimum)",
+                                           shape.name,
+                                           run.props.size_pt(),
+                                           kMinFontSizeCentipt / 100)});
+                return;  // one diagnostic per shape is enough
+            }
+        }
+    }
+    for (const auto& child : shape.children) {
+        check_tiny_text_shape(child, slide_idx, out);
+    }
+}
+
+void rule_tiny_text(const Slide& slide,
+                    const CanvasSize& /*canvas*/,
+                    std::vector<Diagnostic>& out) {
+    for (const auto& shape : slide.shapes()) {
+        check_tiny_text_shape(shape, slide.index(), out);
+    }
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
-    return {{"overflow", rule_overflow}};
+    return {{"overflow", rule_overflow}, {"tiny-text", rule_tiny_text}};
 }
 
 // ── output ────────────────────────────────────────────────────────────────────
