@@ -211,10 +211,31 @@ Shape parse_pic(pugi::xml_node pic_el) {
         pic.rel_id = link.as_string("");
         pic.linked = true;
     }
-    if (auto descr = nv_cnvpr(pic_el).attribute("descr")) {
+    auto cnvpr = nv_cnvpr(pic_el);
+    if (auto descr = cnvpr.attribute("descr")) {
         const std::string_view text = descr.as_string("");
         if (!text.empty()) {
             pic.alt_text = std::string(text);
+        }
+    }
+    if (auto title = cnvpr.attribute("title")) {
+        const std::string_view text = title.as_string("");
+        if (!text.empty()) {
+            pic.title = std::string(text);
+        }
+    }
+    // PowerPoint marks decorative images with an adec:decorative extension
+    // inside the cNvPr extLst; element-name match keeps us namespace-prefix
+    // agnostic (the prefix is producer-chosen).
+    for (auto ext : cnvpr.child("a:extLst").children("a:ext")) {
+        for (auto child : ext.children()) {
+            const std::string_view name = child.name();
+            const auto colon = name.rfind(':');
+            const std::string_view local =
+                colon == std::string_view::npos ? name : name.substr(colon + 1);
+            if (local == "decorative" && child.attribute("val").as_int(0) != 0) {
+                pic.decorative = true;
+            }
         }
     }
     shape.picture = std::move(pic);

@@ -310,3 +310,98 @@ TEST_CASE("tiny-text: integration — minimal.pptx produces no tiny-text finding
     run("minimal.pptx", out);
     CHECK(out.find("tiny-text") == std::string::npos);
 }
+
+// ── alt-text rule helpers ─────────────────────────────────────────────────────
+
+// Build a slide with one picture. Pass nullptr to omit descr/title entirely;
+// decorative adds the Microsoft adec:decorative extension marker.
+std::string slide_xml_with_pic(const char* descr,
+                               const char* title = nullptr,
+                               bool decorative = false,
+                               const char* name = "Picture 1") {
+    const std::string descr_attr = descr ? std::format(R"( descr="{}")", descr) : "";
+    const std::string title_attr = title ? std::format(R"( title="{}")", title) : "";
+    const char* ext = decorative ? R"(
+        <a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}">
+          <adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/>
+        </a:ext></a:extLst>)"
+                                 : "";
+    return std::format(
+        R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:pic>
+      <p:nvPicPr><p:cNvPr id="2" name="{}"{}{}>{}</p:cNvPr><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rId2"/></p:blipFill>
+      <p:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="1000000" cy="500000"/></a:xfrm>
+      </p:spPr>
+    </p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)",
+        name,
+        descr_attr,
+        title_attr,
+        ext);
+}
+
+std::vector<pptctl::Diagnostic> alt_text_diags(const std::string& xml) {
+    auto diags = lint_xml(xml);
+    std::erase_if(diags, [](const auto& d) { return d.rule_id != "alt-text"; });
+    return diags;
+}
+
+// ── alt-text rule: no-fire cases ──────────────────────────────────────────────
+
+TEST_CASE("alt-text: picture with non-empty descr — no diagnostic") {
+    CHECK(alt_text_diags(slide_xml_with_pic("A chart of revenue")).empty());
+}
+
+TEST_CASE("alt-text: picture with empty descr but non-empty title — no diagnostic") {
+    CHECK(alt_text_diags(slide_xml_with_pic("", "Revenue chart")).empty());
+}
+
+TEST_CASE("alt-text: picture with title only (no descr attribute) — no diagnostic") {
+    CHECK(alt_text_diags(slide_xml_with_pic(nullptr, "Revenue chart")).empty());
+}
+
+TEST_CASE("alt-text: decorative picture without descr — no diagnostic") {
+    CHECK(alt_text_diags(slide_xml_with_pic(nullptr, nullptr, true)).empty());
+}
+
+TEST_CASE("alt-text: non-picture shape without descr — no diagnostic") {
+    CHECK(alt_text_diags(slide_xml_with_text(2400)).empty());
+}
+
+// ── alt-text rule: fire cases ─────────────────────────────────────────────────
+
+TEST_CASE("alt-text: picture with no descr and no title — diagnostic") {
+    auto diags = alt_text_diags(slide_xml_with_pic(nullptr));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "alt-text");
+    CHECK(diags[0].severity == pptctl::Severity::Warning);
+    CHECK(diags[0].slide_index == 1);
+    CHECK(diags[0].shape_name == "Picture 1");
+}
+
+TEST_CASE("alt-text: picture with empty descr and empty title — diagnostic") {
+    auto diags = alt_text_diags(slide_xml_with_pic("", ""));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "alt-text");
+}
+
+TEST_CASE("alt-text: diagnostic message contains shape name") {
+    auto diags = alt_text_diags(slide_xml_with_pic(nullptr, nullptr, false, "Logo 7"));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].message.find("Logo 7") != std::string::npos);
+}
+
+TEST_CASE("alt-text: integration — minimal.pptx produces no alt-text findings") {
+    std::string out;
+    run("minimal.pptx", out);
+    CHECK(out.find("alt-text") == std::string::npos);
+}
