@@ -84,10 +84,36 @@ void rule_tiny_text(const Slide& slide,
     }
 }
 
+// ── alt-text rule ─────────────────────────────────────────────────────────────
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void check_alt_text_shape(const Shape& shape, std::size_t slide_idx, std::vector<Diagnostic>& out) {
+    if (shape.kind == ShapeKind::Picture && shape.picture) {
+        const auto& pic = *shape.picture;
+        if (!pic.decorative && !pic.alt_text && !pic.title) {
+            out.push_back({"alt-text",
+                           Severity::Warning,
+                           slide_idx,
+                           shape.name,
+                           std::format("picture \"{}\" has no alt text", shape.name)});
+        }
+    }
+    for (const auto& child : shape.children) {
+        check_alt_text_shape(child, slide_idx, out);
+    }
+}
+
+void rule_alt_text(const Slide& slide, const CanvasSize& /*canvas*/, std::vector<Diagnostic>& out) {
+    for (const auto& shape : slide.shapes()) {
+        check_alt_text_shape(shape, slide.index(), out);
+    }
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
-    return {{"overflow", rule_overflow}, {"tiny-text", rule_tiny_text}};
+    return {
+        {"overflow", rule_overflow}, {"tiny-text", rule_tiny_text}, {"alt-text", rule_alt_text}};
 }
 
 // ── output ────────────────────────────────────────────────────────────────────

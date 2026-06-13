@@ -109,6 +109,8 @@ struct Picture {
     std::string content_type;                 // e.g. "image/png"; empty if unknown
     std::optional<std::uint64_t> size_bytes;  // uncompressed media size; nullopt if unknown
     std::optional<std::string> alt_text;      // p:cNvPr@descr
+    std::optional<std::string> title;         // p:cNvPr@title
+    bool decorative = false;                  // adec:decorative marker in cNvPr extLst
 };
 
 // One data series from a chart part. parse() captures rel_id; Slide::load()
