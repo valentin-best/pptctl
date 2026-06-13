@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace pptctl::cmd {
@@ -233,6 +234,28 @@ void collect_shape_fonts(const Shape& shape, std::set<std::string>& out) {
     }
 }
 
+// ── ctype rule ────────────────────────────────────────────────────────────────
+//
+// Deck-level: checks [Content_Types].xml for parts that commonly break
+// renderers or that lack a content-type declaration entirely.
+
+const std::set<std::string>& suspect_content_types() {
+    static const std::set<std::string> s{
+        "application/vnd.ms-office.activeX",
+        "application/vnd.ms-office.activeX+xml",
+        "application/vnd.ms-office.vbaProject",
+        "application/vnd.openxmlformats-officedocument.oleObject",
+        "application/vnd.openxmlformats-officedocument.presentationml.printerSettings",
+    };
+    return s;
+}
+
+// Package infrastructure files are not OOXML "parts" and need no content type.
+bool is_infrastructure(std::string_view name) noexcept {
+    return name == "[Content_Types].xml" || name.ends_with('/') || name.starts_with("_rels/") ||
+           name.find("/_rels/") != std::string_view::npos;
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
@@ -301,6 +324,33 @@ std::vector<Diagnostic> check_font_risk(const std::set<std::string>& referenced,
     return out;
 }
 
+// One diagnostic per part whose content type is on the suspect list, plus one per
+// part with no declared content type. Infrastructure files ([Content_Types].xml,
+// relationship parts) are excluded. Input pairs are (part_name, content_type).
+std::vector<Diagnostic> check_ctype(const std::vector<std::pair<std::string, std::string>>& parts) {
+    const auto& suspects = suspect_content_types();
+    std::vector<Diagnostic> out;
+    for (const auto& [part, ct] : parts) {
+        if (is_infrastructure(part)) {
+            continue;
+        }
+        if (ct.empty()) {
+            out.push_back({"ctype",
+                           Severity::Warning,
+                           0,
+                           "",
+                           std::format(R"(part "{}" has no declared content type)", part)});
+        } else if (suspects.contains(ct)) {
+            out.push_back({"ctype",
+                           Severity::Warning,
+                           0,
+                           "",
+                           std::format(R"(part "{}" has suspect content type "{}")", part, ct)});
+        }
+    }
+    return out;
+}
+
 int lint_to(const std::string& path, std::ostream& os) {
     Package pkg;
     if (!pkg.open(path)) {
@@ -343,6 +393,13 @@ int lint_to(const std::string& path, std::ostream& os) {
     }
     const auto font_risks = check_font_risk(referenced_fonts, pres.embedded_fonts());
     diagnostics.insert(diagnostics.end(), font_risks.begin(), font_risks.end());
+
+    std::vector<std::pair<std::string, std::string>> part_ctypes;
+    for (const auto& p : pkg.part_names()) {
+        part_ctypes.emplace_back(p, pkg.content_type(p));
+    }
+    const auto ctype_diags = check_ctype(part_ctypes);
+    diagnostics.insert(diagnostics.end(), ctype_diags.begin(), ctype_diags.end());
 
     emit_diagnostics(os, path, diagnostics);
     return 0;
