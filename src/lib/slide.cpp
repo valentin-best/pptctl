@@ -189,6 +189,9 @@ Shape parse_sp(pugi::xml_node sp_el) {
         if (auto type = ph.attribute("type")) {
             shape.placeholder_type = type.as_string("");
         }
+        if (auto idx = ph.attribute("idx")) {
+            shape.placeholder_idx = idx.as_int(0);
+        }
     } else {
         shape.kind = ShapeKind::TextBox;
     }
