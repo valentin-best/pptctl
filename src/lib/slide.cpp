@@ -60,6 +60,16 @@ RunProperties parse_run_props(pugi::xml_node rpr) {
             props.font = tf.as_string("");
         }
     }
+    if (auto ea = rpr.child("a:ea")) {
+        if (auto tf = ea.attribute("typeface")) {
+            props.font_ea = tf.as_string("");
+        }
+    }
+    if (auto cs = rpr.child("a:cs")) {
+        if (auto tf = cs.attribute("typeface")) {
+            props.font_cs = tf.as_string("");
+        }
+    }
     return props;
 }
 

@@ -1,5 +1,6 @@
 // pptctl lint — static analysis for .pptx files.
 
+#include <cctype>
 #include <format>
 #include <iostream>
 #include <pptctl/lint.hpp>
@@ -7,6 +8,7 @@
 #include <pptctl/presentation.hpp>
 #include <pptctl/print.hpp>
 #include <pptctl/slide.hpp>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -156,6 +158,81 @@ void rule_empty_ph(const Slide& slide, const CanvasSize& /*canvas*/, std::vector
     }
 }
 
+// ── font-risk rule ────────────────────────────────────────────────────────────
+//
+// Deck-level: unlike the per-slide rules above, this one needs every referenced
+// face across the whole deck cross-checked against the embedded-font list, so it
+// runs once after the slide walk rather than through the per-slide registry.
+
+std::string to_lower(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return out;
+}
+
+// Fonts that ship with mainstream platforms / Office, so a bare reference won't
+// trigger a silent substitution at render time. Stored lowercased for matching.
+const std::set<std::string>& safe_font_list() {
+    static const std::set<std::string> kSafe = {"arial",
+                                                "arial black",
+                                                "arial narrow",
+                                                "calibri",
+                                                "calibri light",
+                                                "cambria",
+                                                "cambria math",
+                                                "candara",
+                                                "comic sans ms",
+                                                "consolas",
+                                                "constantia",
+                                                "corbel",
+                                                "courier new",
+                                                "georgia",
+                                                "impact",
+                                                "lucida console",
+                                                "lucida sans unicode",
+                                                "palatino linotype",
+                                                "segoe ui",
+                                                "segoe ui light",
+                                                "segoe ui semibold",
+                                                "symbol",
+                                                "tahoma",
+                                                "times new roman",
+                                                "trebuchet ms",
+                                                "verdana",
+                                                "webdings",
+                                                "wingdings"};
+    return kSafe;
+}
+
+// A typeface beginning with '+' (e.g. "+mn-lt", "+mj-ea") is a theme-font
+// reference, not a literal face: it resolves through the theme, so it is never
+// at risk on its own.
+bool is_theme_ref(std::string_view tf) noexcept {
+    return !tf.empty() && tf.front() == '+';
+}
+
+void collect_run_fonts(const RunProperties& p, std::set<std::string>& out) {
+    for (const auto* f : {&p.font, &p.font_ea, &p.font_cs}) {
+        if (*f && !(*f)->empty() && !is_theme_ref(**f)) {
+            out.insert(**f);
+        }
+    }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void collect_shape_fonts(const Shape& shape, std::set<std::string>& out) {
+    for (const auto& para : shape.paragraphs) {
+        for (const auto& run : para.runs) {
+            collect_run_fonts(run.props, out);
+        }
+    }
+    for (const auto& child : shape.children) {
+        collect_shape_fonts(child, out);
+    }
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
@@ -187,6 +264,43 @@ void emit_diagnostics(std::ostream& os,
 
 }  // namespace
 
+// Every literal typeface referenced by the slide's runs (latin/ea/cs), recursing
+// into groups. Theme-font references ("+mn-lt", …) are excluded.
+std::set<std::string> slide_referenced_fonts(const Slide& slide) {
+    std::set<std::string> out;
+    for (const auto& shape : slide.shapes()) {
+        collect_shape_fonts(shape, out);
+    }
+    return out;
+}
+
+// One diagnostic per referenced face that is neither embedded in the deck nor on
+// the built-in safe list — those substitute silently at render time. Matching is
+// case-insensitive; the input set's ordering makes the output deterministic.
+std::vector<Diagnostic> check_font_risk(const std::set<std::string>& referenced,
+                                        const std::vector<std::string>& embedded) {
+    std::set<std::string> embedded_lc;
+    for (const auto& e : embedded) {
+        embedded_lc.insert(to_lower(e));
+    }
+    const auto& safe = safe_font_list();
+    std::vector<Diagnostic> out;
+    for (const auto& face : referenced) {
+        const std::string lc = to_lower(face);
+        if (safe.contains(lc) || embedded_lc.contains(lc)) {
+            continue;
+        }
+        out.push_back({"font-risk",
+                       Severity::Warning,
+                       0,  // deck-level: not tied to a single slide
+                       "",
+                       std::format("font \"{}\" is referenced but not embedded "
+                                   "and not on the safe list",
+                                   face)});
+    }
+    return out;
+}
+
 int lint_to(const std::string& path, std::ostream& os) {
     Package pkg;
     if (!pkg.open(path)) {
@@ -203,6 +317,7 @@ int lint_to(const std::string& path, std::ostream& os) {
     const CanvasSize canvas = pres.canvas();
     std::vector<Diagnostic> diagnostics;
 
+    std::set<std::string> referenced_fonts;
     std::size_t n = 0;
     for (const auto& part : pres.slide_parts()) {
         ++n;
@@ -215,7 +330,19 @@ int lint_to(const std::string& path, std::ostream& os) {
         for (const auto& rule : rules) {
             rule.fn(slide, canvas, diagnostics);
         }
+        const auto slide_fonts = slide_referenced_fonts(slide);
+        referenced_fonts.insert(slide_fonts.begin(), slide_fonts.end());
     }
+
+    // Theme major/minor faces are the deck's chosen fonts; a custom one that
+    // isn't embedded is just as at-risk as one referenced by a run.
+    for (const auto& tf : pres.fonts()) {
+        if (!tf.empty() && !is_theme_ref(tf)) {
+            referenced_fonts.insert(tf);
+        }
+    }
+    const auto font_risks = check_font_risk(referenced_fonts, pres.embedded_fonts());
+    diagnostics.insert(diagnostics.end(), font_risks.begin(), font_risks.end());
 
     emit_diagnostics(os, path, diagnostics);
     return 0;

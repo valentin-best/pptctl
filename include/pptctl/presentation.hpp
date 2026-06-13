@@ -78,6 +78,10 @@ class Presentation {
     [[nodiscard]] const std::vector<std::string>& fonts() const noexcept {
         return fonts_;
     }
+    // Typefaces declared in p:embeddedFontLst (fonts bundled inside the package).
+    [[nodiscard]] const std::vector<std::string>& embedded_fonts() const noexcept {
+        return embedded_fonts_;
+    }
     [[nodiscard]] const ColorScheme& color_scheme() const noexcept {
         return color_scheme_;
     }
@@ -93,6 +97,7 @@ class Presentation {
     std::size_t master_count_ = 0;
     std::size_t layout_count_ = 0;
     std::vector<std::string> fonts_;
+    std::vector<std::string> embedded_fonts_;
     ColorScheme color_scheme_{};
     MediaSummary media_{};
 };

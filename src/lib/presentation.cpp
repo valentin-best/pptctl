@@ -147,6 +147,17 @@ bool Presentation::load() {
         }
     }
 
+    // --- presentation.xml: embedded font list -------------------------------
+    // p:embeddedFontLst/p:embeddedFont/p:font/@typeface — fonts bundled in the deck.
+    if (auto efl = pres.child("p:embeddedFontLst")) {
+        for (auto ef : efl.children("p:embeddedFont")) {
+            const char* tf = ef.child("p:font").attribute("typeface").as_string("");
+            if (tf[0] != '\0') {
+                embedded_fonts_.emplace_back(tf);
+            }
+        }
+    }
+
     // --- enumerate parts: count masters, layouts, summarize media -----------
     const auto& parts = package_->part_names();
     std::set<std::string> theme_paths;
