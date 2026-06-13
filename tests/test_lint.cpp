@@ -405,3 +405,111 @@ TEST_CASE("alt-text: integration — minimal.pptx produces no alt-text findings"
     run("minimal.pptx", out);
     CHECK(out.find("alt-text") == std::string::npos);
 }
+
+// ── empty-ph rule helpers ─────────────────────────────────────────────────────
+
+// Build a slide with one placeholder shape. type/idx == nullptr/-1 omit the
+// attribute; body == nullptr omits txBody entirely.
+std::string slide_xml_with_ph(const char* type,
+                              int idx,
+                              const char* body,
+                              const char* name = "Title 1") {
+    const std::string type_attr = type ? std::format(R"( type="{}")", type) : "";
+    const std::string idx_attr = idx >= 0 ? std::format(R"( idx="{}")", idx) : "";
+    const std::string tx_body =
+        body ? std::format("<p:txBody><a:bodyPr/><a:p><a:r><a:t>{}</a:t></a:r></a:p></p:txBody>",
+                           body)
+             : "";
+    return std::format(
+        R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="{}"/><p:cNvSpPr/>
+        <p:nvPr><p:ph{}{}/></p:nvPr>
+      </p:nvSpPr>
+      <p:spPr/>
+      {}
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)",
+        name,
+        type_attr,
+        idx_attr,
+        tx_body);
+}
+
+std::vector<pptctl::Diagnostic> empty_ph_diags(const std::string& xml) {
+    auto diags = lint_xml(xml);
+    std::erase_if(diags, [](const auto& d) { return d.rule_id != "empty-ph"; });
+    return diags;
+}
+
+// ── empty-ph rule: no-fire cases ──────────────────────────────────────────────
+
+TEST_CASE("empty-ph: placeholder with text — no diagnostic") {
+    CHECK(empty_ph_diags(slide_xml_with_ph("title", 0, "Quarterly results")).empty());
+}
+
+TEST_CASE("empty-ph: non-placeholder text box with no text — no diagnostic") {
+    // slide_xml() builds a plain sp without p:ph and without txBody
+    CHECK(empty_ph_diags(slide_xml(0, 0, 100, 100)).empty());
+}
+
+TEST_CASE("empty-ph: slide-number placeholder with no text — no diagnostic") {
+    CHECK(empty_ph_diags(slide_xml_with_ph("sldNum", 10, nullptr)).empty());
+}
+
+TEST_CASE("empty-ph: date placeholder with no text — no diagnostic") {
+    CHECK(empty_ph_diags(slide_xml_with_ph("dt", 11, nullptr)).empty());
+}
+
+TEST_CASE("empty-ph: footer placeholder with no text — no diagnostic") {
+    CHECK(empty_ph_diags(slide_xml_with_ph("ftr", 12, nullptr)).empty());
+}
+
+// ── empty-ph rule: fire cases ─────────────────────────────────────────────────
+
+TEST_CASE("empty-ph: title placeholder with no txBody — diagnostic") {
+    auto diags = empty_ph_diags(slide_xml_with_ph("title", -1, nullptr));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "empty-ph");
+    CHECK(diags[0].severity == pptctl::Severity::Warning);
+    CHECK(diags[0].slide_index == 1);
+    CHECK(diags[0].shape_name == "Title 1");
+}
+
+TEST_CASE("empty-ph: body placeholder with empty paragraph — diagnostic") {
+    auto diags = empty_ph_diags(slide_xml_with_ph("body", 1, ""));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "empty-ph");
+}
+
+TEST_CASE("empty-ph: placeholder with whitespace-only text — diagnostic") {
+    auto diags = empty_ph_diags(slide_xml_with_ph("body", 1, "  \t "));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "empty-ph");
+}
+
+TEST_CASE("empty-ph: untyped placeholder (defaults to body) with no text — diagnostic") {
+    auto diags = empty_ph_diags(slide_xml_with_ph(nullptr, 1, nullptr));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "empty-ph");
+}
+
+TEST_CASE("empty-ph: diagnostic message contains placeholder type and idx") {
+    auto diags = empty_ph_diags(slide_xml_with_ph("body", 3, nullptr, "Content 4"));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].message.find("Content 4") != std::string::npos);
+    CHECK(diags[0].message.find("body") != std::string::npos);
+    CHECK(diags[0].message.find('3') != std::string::npos);
+}
+
+TEST_CASE("empty-ph: integration — minimal.pptx produces no empty-ph findings") {
+    std::string out;
+    run("minimal.pptx", out);
+    CHECK(out.find("empty-ph") == std::string::npos);
+}

@@ -109,11 +109,60 @@ void rule_alt_text(const Slide& slide, const CanvasSize& /*canvas*/, std::vector
     }
 }
 
+// ── empty-ph rule ─────────────────────────────────────────────────────────────
+
+// Chrome placeholders are field-driven and routinely empty on authored slides;
+// flagging them would be all noise.
+bool is_chrome_placeholder(std::string_view type) noexcept {
+    return type == "sldNum" || type == "dt" || type == "ftr";
+}
+
+bool all_whitespace(std::string_view s) noexcept {
+    return s.find_first_not_of(" \t\n\r\f\v") == std::string_view::npos;
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void check_empty_ph_shape(const Shape& shape, std::size_t slide_idx, std::vector<Diagnostic>& out) {
+    if (shape.kind == ShapeKind::Placeholder &&
+        !is_chrome_placeholder(shape.placeholder_type.value_or(""))) {
+        bool has_text = false;
+        for (const auto& para : shape.paragraphs) {
+            if (!all_whitespace(para.text())) {
+                has_text = true;
+                break;
+            }
+        }
+        if (!has_text) {
+            // Untyped placeholders default to "body" per OOXML.
+            const std::string& type = shape.placeholder_type ? *shape.placeholder_type : "body";
+            const std::string idx =
+                shape.placeholder_idx ? std::format(", idx {}", *shape.placeholder_idx) : "";
+            out.push_back(
+                {"empty-ph",
+                 Severity::Warning,
+                 slide_idx,
+                 shape.name,
+                 std::format("placeholder \"{}\" ({}{}) is empty", shape.name, type, idx)});
+        }
+    }
+    for (const auto& child : shape.children) {
+        check_empty_ph_shape(child, slide_idx, out);
+    }
+}
+
+void rule_empty_ph(const Slide& slide, const CanvasSize& /*canvas*/, std::vector<Diagnostic>& out) {
+    for (const auto& shape : slide.shapes()) {
+        check_empty_ph_shape(shape, slide.index(), out);
+    }
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
-    return {
-        {"overflow", rule_overflow}, {"tiny-text", rule_tiny_text}, {"alt-text", rule_alt_text}};
+    return {{"overflow", rule_overflow},
+            {"tiny-text", rule_tiny_text},
+            {"alt-text", rule_alt_text},
+            {"empty-ph", rule_empty_ph}};
 }
 
 // ── output ────────────────────────────────────────────────────────────────────

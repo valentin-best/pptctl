@@ -137,6 +137,7 @@ struct Shape {
     std::string id;                               // p:cNvPr@id
     std::string name;                             // p:cNvPr@name
     std::optional<std::string> placeholder_type;  // p:nvPr/p:ph@type
+    std::optional<int> placeholder_idx;           // p:nvPr/p:ph@idx
     std::optional<Geometry> geometry;
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
