@@ -34,11 +34,13 @@ enum class ShapeKind : std::uint8_t {
 // attribute is present, so "unset" (inherit) stays distinct from "explicitly
 // off".
 struct RunProperties {
-    std::optional<bool> bold;         // a:rPr@b
-    std::optional<bool> italic;       // a:rPr@i
-    std::optional<bool> underlined;   // a:rPr@u != "none"
-    std::optional<int> size_centipt;  // a:rPr@sz, hundredths of a point (native)
-    std::optional<std::string> font;  // a:rPr/a:latin@typeface
+    std::optional<bool> bold;            // a:rPr@b
+    std::optional<bool> italic;          // a:rPr@i
+    std::optional<bool> underlined;      // a:rPr@u != "none"
+    std::optional<int> size_centipt;     // a:rPr@sz, hundredths of a point (native)
+    std::optional<std::string> font;     // a:rPr/a:latin@typeface
+    std::optional<std::string> font_ea;  // a:rPr/a:ea@typeface (East-Asian)
+    std::optional<std::string> font_cs;  // a:rPr/a:cs@typeface (complex-script)
 
     // Convenience; mirrors the EMU->inches pattern. 0 when size is unset.
     [[nodiscard]] double size_pt() const noexcept {

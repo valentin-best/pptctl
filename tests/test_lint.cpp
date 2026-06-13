@@ -7,6 +7,7 @@
 #include <pptctl/lint.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -19,6 +20,9 @@ namespace pptctl::cmd {
 int lint_to(const std::string& path, std::ostream& os);
 std::vector<pptctl::Diagnostic> lint_slide(const pptctl::Slide& slide,
                                            const pptctl::CanvasSize& canvas);
+std::set<std::string> slide_referenced_fonts(const pptctl::Slide& slide);
+std::vector<pptctl::Diagnostic> check_font_risk(const std::set<std::string>& referenced,
+                                                const std::vector<std::string>& embedded);
 }  // namespace pptctl::cmd
 
 namespace {
@@ -512,4 +516,117 @@ TEST_CASE("empty-ph: integration — minimal.pptx produces no empty-ph findings"
     std::string out;
     run("minimal.pptx", out);
     CHECK(out.find("empty-ph") == std::string::npos);
+}
+
+// ── font-risk rule helpers ────────────────────────────────────────────────────
+
+// Build a slide with one text run carrying the given a:latin / a:ea / a:cs
+// typefaces. Pass nullptr to omit an element.
+std::string slide_xml_with_font(const char* latin,
+                                const char* ea = nullptr,
+                                const char* cs = nullptr) {
+    const std::string latin_el = latin ? std::format(R"(<a:latin typeface="{}"/>)", latin) : "";
+    const std::string ea_el = ea ? std::format(R"(<a:ea typeface="{}"/>)", ea) : "";
+    const std::string cs_el = cs ? std::format(R"(<a:cs typeface="{}"/>)", cs) : "";
+    return std::format(
+        R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Label 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/>
+        <a:p><a:r><a:rPr>{}{}{}</a:rPr><a:t>Hi</a:t></a:r></a:p>
+      </p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)",
+        latin_el,
+        ea_el,
+        cs_el);
+}
+
+std::set<std::string> referenced_fonts(const std::string& xml) {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    return pptctl::cmd::slide_referenced_fonts(slide);
+}
+
+// ── font-risk: font collection ────────────────────────────────────────────────
+
+TEST_CASE("font-risk: collects latin, ea and cs typefaces from a run") {
+    auto fonts = referenced_fonts(slide_xml_with_font("Acme Sans", "Acme Mincho", "Acme Arabic"));
+    CHECK(fonts.count("Acme Sans") == 1);
+    CHECK(fonts.count("Acme Mincho") == 1);
+    CHECK(fonts.count("Acme Arabic") == 1);
+}
+
+TEST_CASE("font-risk: ignores theme-font references (+mn-lt)") {
+    auto fonts = referenced_fonts(slide_xml_with_font("+mn-lt", "+mn-ea", "+mn-cs"));
+    CHECK(fonts.empty());
+}
+
+TEST_CASE("font-risk: collects a font from a run nested inside a group") {
+    constexpr const char* kGrouped = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 1"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr/>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="Child 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr/>
+        <p:txBody><a:bodyPr/>
+          <a:p><a:r><a:rPr><a:latin typeface="Nested Sans"/></a:rPr><a:t>Hi</a:t></a:r></a:p>
+        </p:txBody>
+      </p:sp>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    CHECK(referenced_fonts(kGrouped).count("Nested Sans") == 1);
+}
+
+// ── font-risk: check_font_risk no-fire cases ──────────────────────────────────
+
+TEST_CASE("font-risk: safe-list font is not flagged") {
+    CHECK(pptctl::cmd::check_font_risk({"Arial"}, {}).empty());
+}
+
+TEST_CASE("font-risk: safe-list match is case-insensitive") {
+    CHECK(pptctl::cmd::check_font_risk({"TIMES NEW ROMAN"}, {}).empty());
+}
+
+TEST_CASE("font-risk: embedded font is not flagged (case-insensitive)") {
+    CHECK(pptctl::cmd::check_font_risk({"Acme Sans"}, {"acme sans"}).empty());
+}
+
+// ── font-risk: check_font_risk fire cases ─────────────────────────────────────
+
+TEST_CASE("font-risk: custom font, not embedded, not safe — diagnostic") {
+    auto diags = pptctl::cmd::check_font_risk({"Acme Sans"}, {});
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "font-risk");
+    CHECK(diags[0].severity == pptctl::Severity::Warning);
+    CHECK(diags[0].slide_index == 0);  // deck-level
+    CHECK(diags[0].shape_name.empty());
+    CHECK(diags[0].message.find("Acme Sans") != std::string::npos);
+}
+
+TEST_CASE("font-risk: one diagnostic per at-risk face, deterministic order") {
+    auto diags = pptctl::cmd::check_font_risk({"Zeta Sans", "Acme Sans"}, {});
+    REQUIRE(diags.size() == 2);
+    CHECK(diags[0].message.find("Acme Sans") != std::string::npos);
+    CHECK(diags[1].message.find("Zeta Sans") != std::string::npos);
+}
+
+TEST_CASE("font-risk: integration — minimal.pptx produces no font-risk findings") {
+    std::string out;
+    run("minimal.pptx", out);
+    CHECK(out.find("font-risk") == std::string::npos);
 }
