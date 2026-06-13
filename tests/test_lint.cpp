@@ -10,6 +10,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -23,6 +24,8 @@ std::vector<pptctl::Diagnostic> lint_slide(const pptctl::Slide& slide,
 std::set<std::string> slide_referenced_fonts(const pptctl::Slide& slide);
 std::vector<pptctl::Diagnostic> check_font_risk(const std::set<std::string>& referenced,
                                                 const std::vector<std::string>& embedded);
+std::vector<pptctl::Diagnostic> check_ctype(
+    const std::vector<std::pair<std::string, std::string>>& parts);
 }  // namespace pptctl::cmd
 
 namespace {
@@ -117,10 +120,13 @@ std::vector<pptctl::Diagnostic> lint_xml(const std::string& xml) {
 
 // ── integration: clean fixtures produce no spurious overflow ──────────────────
 
-TEST_CASE("lint: minimal.pptx — no findings") {
+TEST_CASE("lint: minimal.pptx — no slide-level findings") {
     std::string out;
     CHECK(run("minimal.pptx", out) == 0);
-    CHECK(out.empty());
+    CHECK(out.find("overflow") == std::string::npos);
+    CHECK(out.find("tiny-text") == std::string::npos);
+    CHECK(out.find("alt-text") == std::string::npos);
+    CHECK(out.find("empty-ph") == std::string::npos);
 }
 
 TEST_CASE("lint: three_slides.pptx — no overflow") {
@@ -629,4 +635,130 @@ TEST_CASE("font-risk: integration — minimal.pptx produces no font-risk finding
     std::string out;
     run("minimal.pptx", out);
     CHECK(out.find("font-risk") == std::string::npos);
+}
+
+// ── ctype rule helpers ────────────────────────────────────────────────────────
+
+using Parts = std::vector<std::pair<std::string, std::string>>;
+
+std::vector<pptctl::Diagnostic> ctype_diags(const Parts& parts) {
+    return pptctl::cmd::check_ctype(parts);
+}
+
+// ── ctype rule: no-fire cases ─────────────────────────────────────────────────
+
+TEST_CASE("ctype: normal slide XML part — no diagnostic") {
+    Parts parts{{"ppt/slides/slide1.xml",
+                 "application/vnd.openxmlformats-officedocument.presentationml.slide+xml"}};
+    CHECK(ctype_diags(parts).empty());
+}
+
+TEST_CASE("ctype: [Content_Types].xml itself — not flagged as undeclared") {
+    Parts parts{{"[Content_Types].xml", ""}};
+    CHECK(ctype_diags(parts).empty());
+}
+
+TEST_CASE("ctype: relationship file with declared content type — not flagged") {
+    Parts parts{{"_rels/.rels", "application/vnd.openxmlformats-package.relationships+xml"},
+                {"ppt/_rels/presentation.xml.rels",
+                 "application/vnd.openxmlformats-package.relationships+xml"}};
+    CHECK(ctype_diags(parts).empty());
+}
+
+TEST_CASE("ctype: relationship file with empty content type — not flagged as undeclared") {
+    // is_infrastructure() must suppress the diagnostic even when content_type() returns ""
+    // (which can happen in packages where the .rels Default entry is missing).
+    Parts parts{{"_rels/.rels", ""}, {"ppt/_rels/presentation.xml.rels", ""}};
+    CHECK(ctype_diags(parts).empty());
+}
+
+TEST_CASE("ctype: directory entry — not flagged") {
+    Parts parts{{"ppt/slides/", ""}};
+    CHECK(ctype_diags(parts).empty());
+}
+
+// ── ctype rule: fire cases — suspect content types ────────────────────────────
+
+TEST_CASE("ctype: printer-settings part — diagnostic") {
+    Parts parts{{"ppt/printerSettings/printerSettings1.bin",
+                 "application/vnd.openxmlformats-officedocument.presentationml.printerSettings"}};
+    auto diags = ctype_diags(parts);
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "ctype");
+    CHECK(diags[0].severity == pptctl::Severity::Warning);
+    CHECK(diags[0].slide_index == 0);
+    CHECK(diags[0].shape_name.empty());
+    CHECK(diags[0].message.find("printerSettings1.bin") != std::string::npos);
+}
+
+TEST_CASE("ctype: activeX binary part — diagnostic") {
+    Parts parts{{"ppt/activeX/activeX1.bin", "application/vnd.ms-office.activeX"}};
+    auto diags = ctype_diags(parts);
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "ctype");
+}
+
+TEST_CASE("ctype: activeX XML part — diagnostic") {
+    Parts parts{{"ppt/activeX/activeX1.xml", "application/vnd.ms-office.activeX+xml"}};
+    CHECK(ctype_diags(parts).size() == 1);
+}
+
+TEST_CASE("ctype: VBA project part — diagnostic") {
+    Parts parts{{"ppt/vbaProject.bin", "application/vnd.ms-office.vbaProject"}};
+    auto diags = ctype_diags(parts);
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "ctype");
+}
+
+TEST_CASE("ctype: OLE object part — diagnostic") {
+    Parts parts{{"ppt/embeddings/oleObject1.bin",
+                 "application/vnd.openxmlformats-officedocument.oleObject"}};
+    CHECK(ctype_diags(parts).size() == 1);
+}
+
+TEST_CASE("ctype: diagnostic message contains part name and content type") {
+    Parts parts{{"ppt/printerSettings/printerSettings1.bin",
+                 "application/vnd.openxmlformats-officedocument.presentationml.printerSettings"}};
+    auto diags = ctype_diags(parts);
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].message.find("printerSettings1.bin") != std::string::npos);
+    CHECK(diags[0].message.find("printerSettings") != std::string::npos);
+}
+
+// ── ctype rule: fire cases — undeclared parts ─────────────────────────────────
+
+TEST_CASE("ctype: part with no declared content type — diagnostic") {
+    Parts parts{{"ppt/customXml/item1.xml", ""}};
+    auto diags = ctype_diags(parts);
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "ctype");
+    CHECK(diags[0].message.find("item1.xml") != std::string::npos);
+}
+
+TEST_CASE("ctype: multiple suspect parts — one diagnostic per part") {
+    Parts parts{
+        {"ppt/printerSettings/printerSettings1.bin",
+         "application/vnd.openxmlformats-officedocument.presentationml.printerSettings"},
+        {"ppt/printerSettings/printerSettings2.bin",
+         "application/vnd.openxmlformats-officedocument.presentationml.printerSettings"},
+    };
+    CHECK(ctype_diags(parts).size() == 2);
+}
+
+// ── ctype rule: integration ───────────────────────────────────────────────────
+
+TEST_CASE("ctype: integration — minimal.pptx printer-settings flagged") {
+    // Real PowerPoint files typically carry a printerSettings stub; minimal.pptx
+    // does, so the ctype rule should fire exactly once for it.
+    std::string out;
+    CHECK(run("minimal.pptx", out) == 0);
+    CHECK(out.find("ctype") != std::string::npos);
+    CHECK(out.find("printerSettings") != std::string::npos);
+}
+
+TEST_CASE("ctype: integration — three_slides.pptx printer-settings flagged") {
+    std::string out;
+    CHECK(run("three_slides.pptx", out) == 0);
+    CHECK(out.find("ctype") != std::string::npos);
+    CHECK(out.find("printerSettings") != std::string::npos);
 }
