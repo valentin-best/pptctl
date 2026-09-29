@@ -49,7 +49,40 @@ enum class SlideStatus : std::uint8_t { Unchanged, Changed, Added, Removed };
 // text op never reaches into shape geometry, and vice versa.
 
 // Text-level change within a matched shape (or the notes). Owned by #70.
-struct TextChange {};
+//
+// Shapes are matched across the pair by id, then name, then placeholder
+// type+idx (group children included); each matched pair's paragraphs are
+// aligned by LCS over their text. Whitespace-only differences and field runs
+// (a:fld) are ignored unless DiffOptions::strict_text is set.
+enum class TextChangeKind : std::uint8_t {
+    Inserted,     // paragraph only in B
+    Deleted,      // paragraph only in A
+    Changed,      // paragraph text differs
+    Reformatted,  // same text, run formatting differs (see `formatting`)
+};
+
+struct TextChange {
+    TextChangeKind kind = TextChangeKind::Changed;
+    std::string shape;            // p:cNvPr@name of the B shape; "" for notes
+    std::string shape_id;         // p:cNvPr@id of the B shape; "" for notes
+    bool notes = false;           // true when the change is in the speaker notes
+    std::size_t a_paragraph = 0;  // 1-based paragraph index in A; 0 when Inserted
+    std::size_t b_paragraph = 0;  // 1-based paragraph index in B; 0 when Deleted
+    std::string old_text;         // A paragraph text; empty when Inserted
+    std::string new_text;         // B paragraph text; empty when Deleted
+    std::string formatting;       // Reformatted only: `"world": bold on, size 18pt -> 24pt`
+};
+
+// One-line human-readable summary, e.g.
+//   shape "Title 1": paragraph 2 changed: "old" -> "new"
+//   notes: paragraph 1 inserted: "Remember to pause"
+[[nodiscard]] std::string describe(const TextChange& c);
+
+// Stable snake_case keys: kind ("inserted" | "deleted" | "changed" |
+// "reformatted"), shape, shape_id, notes, a_paragraph, b_paragraph, old_text,
+// new_text, formatting. Inapplicable fields are null (a 0 index, the absent
+// side's text, formatting on a non-Reformatted op).
+[[nodiscard]] nlohmann::json to_json(const TextChange& c);
 
 // Structural change to a shape: added, removed, moved, resized, recolored.
 // Owned by #72.
@@ -131,6 +164,9 @@ struct DiffOptions {
     // moved/resized, so sub-pixel jitter from a re-save stays quiet. The
     // default is 1 px at 96 DPI (914400 / 96); 0 reports every change.
     Emu geometry_tolerance_emu = 9525;
+    // Text diff (#70): report whitespace-only differences and field-run
+    // (a:fld) churn instead of ignoring them.
+    bool strict_text = false;
 };
 
 // Pair the slides of A with the slides of B: exact fingerprints first (so a
