@@ -5,6 +5,19 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [Unreleased]
+
+Phase 4: `pptctl diff`, in progress.
+
+### Added
+
+- `diff` subcommand scaffold (#69): slide-level report — added, removed,
+  moved, changed — from a fingerprint match (exact reorders are cheap) with a
+  best-match fallback for edited slides (`--match-threshold`, default 0.5).
+  Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
+  text and picture detail, and the unified/JSON/HTML renderers, follow in
+  later Phase 4 issues.
+
 ## [0.3.0] — 2026-09-29
 
 Phase 3: `pptctl lint`, static analysis for `.pptx` files.
