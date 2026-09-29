@@ -37,8 +37,10 @@ std::vector<pptctl::Diagnostic> lint_slide(const pptctl::Slide& slide,
                                            const pptctl::CanvasSize& canvas,
                                            const pptctl::LintOptions& opts = {});
 std::set<std::string> slide_referenced_fonts(const pptctl::Slide& slide);
-std::vector<pptctl::Diagnostic> check_font_risk(const std::set<std::string>& referenced,
-                                                const std::vector<std::string>& embedded);
+std::vector<pptctl::Diagnostic> check_font_risk(
+    const std::set<std::string>& referenced,
+    const std::vector<std::string>& embedded,
+    pptctl::FontTarget target = pptctl::FontTarget::All);
 std::vector<pptctl::Diagnostic> check_ctype(
     const std::vector<std::pair<std::string, std::string>>& parts);
 using ImageProbe = std::function<std::optional<pptctl::ImageDimensions>(const pptctl::Picture&)>;
@@ -730,6 +732,88 @@ TEST_CASE("font-risk: one diagnostic per at-risk face, deterministic order") {
     REQUIRE(diags.size() == 2);
     CHECK(diags[0].message.find("Acme Sans") != std::string::npos);
     CHECK(diags[1].message.find("Zeta Sans") != std::string::npos);
+}
+
+// ── font-risk: platform tiers (#62) ───────────────────────────────────────────
+
+namespace {
+using pptctl::FontTarget;
+std::vector<pptctl::Diagnostic> font_diags(const char* face, FontTarget target) {
+    return pptctl::cmd::check_font_risk({face}, {}, target);
+}
+}  // namespace
+
+TEST_CASE("font-risk: macOS-only font (Helvetica) — flagged under all and windows, not macos") {
+    CHECK(font_diags("Helvetica", FontTarget::All).size() == 1);
+    CHECK(font_diags("Helvetica", FontTarget::Windows).size() == 1);
+    CHECK(font_diags("Helvetica", FontTarget::MacOS).empty());
+}
+
+TEST_CASE("font-risk: macOS-only font message says it is missing on Windows") {
+    const auto d = font_diags("Helvetica Neue", FontTarget::All);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].message ==
+          "font \"Helvetica Neue\" is referenced but not embedded and not available on Windows");
+}
+
+TEST_CASE("font-risk: Windows-only font (Segoe UI) — flagged under all and macos, not windows") {
+    CHECK(font_diags("Segoe UI", FontTarget::All).size() == 1);
+    CHECK(font_diags("Segoe UI", FontTarget::MacOS).size() == 1);
+    CHECK(font_diags("Segoe UI", FontTarget::Windows).empty());
+}
+
+TEST_CASE("font-risk: Windows-only font message says it is missing on macOS") {
+    const auto d = font_diags("Segoe UI", FontTarget::MacOS);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].message.find("not available on macOS") != std::string::npos);
+}
+
+TEST_CASE("font-risk: Office-bundled fonts are safe under every target") {
+    for (const char* f : {"Garamond",
+                          "Tw Cen MT",
+                          "Franklin Gothic Book",
+                          "Copperplate Gothic Light",
+                          "Calibri",
+                          "Cambria",
+                          "Century Gothic",
+                          "Book Antiqua"}) {
+        CAPTURE(f);
+        CHECK(font_diags(f, FontTarget::All).empty());
+        CHECK(font_diags(f, FontTarget::Windows).empty());
+        CHECK(font_diags(f, FontTarget::MacOS).empty());
+    }
+}
+
+TEST_CASE("font-risk: fonts on both platforms are safe under every target") {
+    for (const char* f : {"Arial", "Times New Roman", "Georgia", "Verdana", "Courier New"}) {
+        CAPTURE(f);
+        CHECK(font_diags(f, FontTarget::All).empty());
+        CHECK(font_diags(f, FontTarget::Windows).empty());
+        CHECK(font_diags(f, FontTarget::MacOS).empty());
+    }
+}
+
+TEST_CASE("font-risk: unknown font is flagged under every target with the generic reason") {
+    for (auto t : {FontTarget::All, FontTarget::Windows, FontTarget::MacOS}) {
+        const auto d = font_diags("Acme Sans", t);
+        REQUIRE(d.size() == 1);
+        CHECK(d[0].message.find("not a system or Office font") != std::string::npos);
+    }
+}
+
+TEST_CASE("font-risk: full-width Japanese system font name (MS PGothic) is safe on Windows") {
+    CHECK(font_diags("ＭＳ Ｐゴシック", FontTarget::Windows).empty());
+    CHECK(font_diags("MS PGothic", FontTarget::Windows).empty());
+    CHECK(font_diags("ＭＳ Ｐゴシック", FontTarget::MacOS).size() == 1);
+}
+
+TEST_CASE("font-risk: tier match is case-insensitive") {
+    CHECK(font_diags("HELVETICA", FontTarget::MacOS).empty());
+    CHECK(font_diags("garamond", FontTarget::All).empty());
+}
+
+TEST_CASE("font-risk: embedded font wins over every tier") {
+    CHECK(pptctl::cmd::check_font_risk({"Helvetica"}, {"Helvetica"}, FontTarget::Windows).empty());
 }
 
 TEST_CASE("font-risk: integration — minimal.pptx produces no font-risk findings") {
