@@ -50,7 +50,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 |---|---|---|
 | `info` | Quick metadata: slide count, dimensions, fonts, media | ✅ Implemented |
 | `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
-| `lint` | Detect canvas overflow, missing alt-text, font fallback risks | Planned |
+| `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat; `--json`, `--strict` | ✅ Implemented |
 | `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
 | `diff` | Semantic diff: slides added/removed, text changed, charts modified | Planned |
 | `merge` | Merge decks while preserving images, themes, and slide masters | Planned |

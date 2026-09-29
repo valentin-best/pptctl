@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <format>
 #include <functional>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
@@ -21,7 +22,11 @@
 #endif
 
 namespace pptctl::cmd {
-int lint_to(const std::string& path, std::ostream& os);
+int lint_to(const std::string& path, std::ostream& os, const pptctl::LintOptions& opts);
+int report(const std::string& path,
+           std::vector<pptctl::Diagnostic> diagnostics,
+           const pptctl::LintOptions& opts,
+           std::ostream& os);
 std::vector<pptctl::Diagnostic> lint_slide(const pptctl::Slide& slide,
                                            const pptctl::CanvasSize& canvas);
 std::set<std::string> slide_referenced_fonts(const pptctl::Slide& slide);
@@ -40,9 +45,9 @@ std::string fixture(const char* name) {
     return std::string(PPTCTL_FIXTURES_DIR) + "/" + name;
 }
 
-int run(const char* fixture_name, std::string& out) {
+int run(const char* fixture_name, std::string& out, pptctl::LintOptions opts = {}) {
     std::ostringstream oss;
-    const int rc = pptctl::cmd::lint_to(fixture(fixture_name), oss);
+    const int rc = pptctl::cmd::lint_to(fixture(fixture_name), oss, opts);
     out = oss.str();
     return rc;
 }
@@ -922,4 +927,217 @@ TEST_CASE("img-bloat: integration — minimal.pptx produces no findings") {
     std::string out;
     REQUIRE(run("minimal.pptx", out) == 0);
     CHECK(out.find("[img-bloat]") == std::string::npos);
+}
+
+// ── output & exit codes (#46) ─────────────────────────────────────────────────
+
+namespace {
+
+using pptctl::Diagnostic;
+using pptctl::LintOptions;
+using pptctl::Severity;
+
+// Deliberately out of order: slide 2, deck-level, slide 1, slide 2 again.
+std::vector<Diagnostic> mixed_diags() {
+    return {
+        {"tiny-text", Severity::Warning, 2, "Box A", "text too small"},
+        {"ctype", Severity::Warning, 0, "", "suspect part"},
+        {"overflow", Severity::Warning, 1, "Box B", "off canvas"},
+        {"alt-text", Severity::Warning, 2, "Pic C", "no alt text"},
+    };
+}
+
+struct Rendered {
+    int rc = 0;
+    std::string out;
+};
+
+Rendered render(std::vector<Diagnostic> diags, LintOptions opts = {}) {
+    std::ostringstream oss;
+    Rendered r;
+    r.rc = pptctl::cmd::report("deck.pptx", std::move(diags), opts, oss);
+    r.out = oss.str();
+    return r;
+}
+
+std::vector<std::string> lines(const std::string& s) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (const char c : s) {
+        if (c == '\n') {
+            out.push_back(cur);
+            cur.clear();
+        } else {
+            cur += c;
+        }
+    }
+    if (!cur.empty()) {
+        out.push_back(cur);
+    }
+    return out;
+}
+
+}  // namespace
+
+// ── human-readable ────────────────────────────────────────────────────────────
+
+TEST_CASE("output: no diagnostics — prints 'no issues found', exit 0") {
+    const auto r = render({});
+    CHECK(r.rc == 0);
+    CHECK(r.out == "deck.pptx: no issues found\n");
+}
+
+TEST_CASE("output: deck-level diagnostics come first, then slides in ascending order") {
+    const auto l = lines(render(mixed_diags()).out);
+    REQUIRE(l.size() == 5);  // 4 diagnostics + summary
+    CHECK(l[0].find("[ctype]") != std::string::npos);
+    CHECK(l[1].find("[overflow]") != std::string::npos);
+    CHECK(l[2].find("[tiny-text]") != std::string::npos);
+    CHECK(l[3].find("[alt-text]") != std::string::npos);
+}
+
+TEST_CASE("output: ordering is stable within a slide") {
+    // tiny-text was emitted before alt-text on slide 2; that order must survive.
+    const auto l = lines(render(mixed_diags()).out);
+    CHECK(l[2].find("[tiny-text]") != std::string::npos);
+    CHECK(l[3].find("[alt-text]") != std::string::npos);
+}
+
+TEST_CASE("output: deck-level line has no slide number") {
+    const auto l = lines(render(mixed_diags()).out);
+    CHECK(l[0] == "deck.pptx: warning[ctype]: suspect part");
+}
+
+TEST_CASE("output: slide-level line is compiler-style file:slide:") {
+    const auto l = lines(render(mixed_diags()).out);
+    CHECK(l[1] == "deck.pptx:1: warning[overflow]: off canvas");
+}
+
+TEST_CASE("output: summary line counts warnings") {
+    const auto l = lines(render(mixed_diags()).out);
+    CHECK(l.back() == "deck.pptx: 4 warnings");
+}
+
+TEST_CASE("output: summary uses singular for one warning") {
+    const auto l = lines(render({{"ctype", Severity::Warning, 0, "", "x"}}).out);
+    CHECK(l.back() == "deck.pptx: 1 warning");
+}
+
+TEST_CASE("output: summary reports errors separately when present") {
+    const auto l = lines(render({{"ctype", Severity::Warning, 0, "", "x"},
+                                 {"ctype", Severity::Error, 0, "", "y"},
+                                 {"ctype", Severity::Error, 1, "", "z"}})
+                             .out);
+    CHECK(l.back() == "deck.pptx: 1 warning, 2 errors");
+}
+
+TEST_CASE("output: error severity label appears on its line") {
+    const auto l = lines(render({{"ctype", Severity::Error, 3, "S", "boom"}}).out);
+    CHECK(l[0] == "deck.pptx:3: error[ctype]: boom");
+}
+
+// ── exit codes ────────────────────────────────────────────────────────────────
+
+TEST_CASE("exit: diagnostics without --strict — exit 0") {
+    CHECK(render(mixed_diags()).rc == 0);
+}
+
+TEST_CASE("exit: diagnostics with --strict — exit 2") {
+    CHECK(render(mixed_diags(), {.strict = true}).rc == 2);
+}
+
+TEST_CASE("exit: clean with --strict — exit 0") {
+    CHECK(render({}, {.strict = true}).rc == 0);
+}
+
+TEST_CASE("exit: --strict applies to JSON output too") {
+    CHECK(render(mixed_diags(), {.json = true, .strict = true}).rc == 2);
+}
+
+// ── JSON ──────────────────────────────────────────────────────────────────────
+
+TEST_CASE("json: root carries schema_version 1, file, diagnostics and summary") {
+    const auto r = render(mixed_diags(), {.json = true});
+    CHECK(r.rc == 0);
+    const auto j = nlohmann::json::parse(r.out);
+    CHECK(j["schema_version"] == 1);
+    CHECK(j["file"] == "deck.pptx");
+    REQUIRE(j["diagnostics"].is_array());
+    CHECK(j["diagnostics"].size() == 4);
+    CHECK(j["summary"]["warnings"] == 4);
+    CHECK(j["summary"]["errors"] == 0);
+}
+
+TEST_CASE("json: diagnostic fields and ordering match the human output") {
+    const auto j = nlohmann::json::parse(render(mixed_diags(), {.json = true}).out);
+    const auto& d = j["diagnostics"];
+    CHECK(d[0]["rule"] == "ctype");
+    CHECK(d[1]["rule"] == "overflow");
+    CHECK(d[2]["rule"] == "tiny-text");
+    CHECK(d[3]["rule"] == "alt-text");
+    CHECK(d[1]["severity"] == "warning");
+    CHECK(d[1]["slide"] == 1);
+    CHECK(d[1]["shape"] == "Box B");
+    CHECK(d[1]["message"] == "off canvas");
+}
+
+TEST_CASE("json: deck-level diagnostic has null slide and null shape") {
+    const auto j = nlohmann::json::parse(render(mixed_diags(), {.json = true}).out);
+    CHECK(j["diagnostics"][0]["slide"].is_null());
+    CHECK(j["diagnostics"][0]["shape"].is_null());
+}
+
+TEST_CASE("json: error severity is serialised as \"error\" and counted") {
+    const auto j = nlohmann::json::parse(
+        render({{"ctype", Severity::Error, 1, "", "boom"}}, {.json = true}).out);
+    CHECK(j["diagnostics"][0]["severity"] == "error");
+    CHECK(j["summary"]["errors"] == 1);
+    CHECK(j["summary"]["warnings"] == 0);
+}
+
+TEST_CASE("json: no diagnostics — empty array, zero summary, still valid JSON") {
+    const auto r = render({}, {.json = true});
+    const auto j = nlohmann::json::parse(r.out);
+    CHECK(j["diagnostics"].empty());
+    CHECK(j["summary"]["warnings"] == 0);
+    CHECK(j["summary"]["errors"] == 0);
+}
+
+TEST_CASE("json: output is exactly one JSON document, no human lines mixed in") {
+    const auto r = render(mixed_diags(), {.json = true});
+    CHECK(r.out.find("warning[") == std::string::npos);
+    CHECK(r.out.back() == '\n');
+    CHECK_NOTHROW(static_cast<void>(nlohmann::json::parse(r.out)));
+}
+
+// ── integration ───────────────────────────────────────────────────────────────
+
+TEST_CASE("output: integration — three_slides.pptx, deck-level ctype line precedes slide lines") {
+    std::string out;
+    REQUIRE(run("three_slides.pptx", out) == 0);
+    const auto l = lines(out);
+    REQUIRE(l.size() >= 5);
+    CHECK(l[0].find("[ctype]") != std::string::npos);
+    CHECK(l[0].find(".pptx: warning") != std::string::npos);
+    CHECK(l[1].find(".pptx:1: warning[empty-ph]") != std::string::npos);
+    CHECK(l.back().find("4 warnings") != std::string::npos);
+}
+
+TEST_CASE("output: integration — three_slides.pptx --strict exits 2") {
+    std::string out;
+    CHECK(run("three_slides.pptx", out, {.strict = true}) == 2);
+}
+
+TEST_CASE("output: integration — three_slides.pptx --json parses with 4 diagnostics") {
+    std::string out;
+    REQUIRE(run("three_slides.pptx", out, {.json = true}) == 0);
+    const auto j = nlohmann::json::parse(out);
+    CHECK(j["schema_version"] == 1);
+    CHECK(j["diagnostics"].size() == 4);
+    CHECK(j["file"].get<std::string>().ends_with("three_slides.pptx"));
+}
+
+TEST_CASE("output: integration — unreadable file still exits 1 (distinct from --strict's 2)") {
+    std::ostringstream oss;
+    CHECK(pptctl::cmd::lint_to(fixture("does_not_exist.pptx"), oss, {.strict = true}) == 1);
 }
