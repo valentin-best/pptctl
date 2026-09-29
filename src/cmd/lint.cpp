@@ -1,6 +1,7 @@
 // pptctl lint — static analysis for .pptx files.
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <format>
 #include <functional>
@@ -74,15 +75,29 @@ Transform child_transform(const Transform& parent, const Geometry& group) noexce
     return t;
 }
 
-// Half an EMU of slack absorbs floating-point noise from non-integer group
-// scales; nothing smaller than one EMU is representable in the file anyway.
-constexpr double kOverflowSlack = 0.5;
+// Google Slides / Keynote exports routinely place pictures flush to an edge
+// with a few EMU of rounding in the extent. Overshoots up to this are invisible
+// and are not reported (#60). Also absorbs float noise from group scales.
+constexpr double kOverflowToleranceEmu = 45720.0;  // 0.05 in
 
-bool overflows(const Box& b, const CanvasSize& canvas) noexcept {
+struct Overshoot {
+    const char* edge;
+    double emu;
+};
+
+// The largest overshoot past any canvas edge, or nullopt when every edge is
+// within tolerance.
+std::optional<Overshoot> worst_overshoot(const Box& b, const CanvasSize& canvas) noexcept {
     const auto w = static_cast<double>(canvas.width_emu);
     const auto h = static_cast<double>(canvas.height_emu);
-    return b.x < -kOverflowSlack || b.y < -kOverflowSlack || b.w < 0.0 || b.h < 0.0 ||
-           b.x + b.w > w + kOverflowSlack || b.y + b.h > h + kOverflowSlack;
+    const std::array<Overshoot, 4> edges = {
+        {{"left", -b.x}, {"top", -b.y}, {"right", b.x + b.w - w}, {"bottom", b.y + b.h - h}}};
+    const auto* const worst = std::max_element(
+        edges.begin(), edges.end(), [](const auto& a, const auto& c) { return a.emu < c.emu; });
+    if (worst->emu <= kOverflowToleranceEmu) {
+        return std::nullopt;
+    }
+    return *worst;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -93,14 +108,25 @@ void check_overflow_shape(const Shape& shape,
                           std::vector<Diagnostic>& out) {
     Transform for_children = to_slide;
     if (shape.geometry) {
-        if (overflows(map_box(to_slide, *shape.geometry), canvas)) {
+        const Geometry& g = *shape.geometry;
+        if (g.ext_cx < 0 || g.ext_cy < 0) {
+            // Malformed rather than misplaced; no tolerance applies.
             out.push_back({"overflow",
                            Severity::Warning,
                            slide_idx,
                            shape.name,
-                           std::format("shape \"{}\" extends past slide boundary", shape.name)});
+                           std::format("shape \"{}\" has a negative extent", shape.name)});
+        } else if (const auto over = worst_overshoot(map_box(to_slide, g), canvas)) {
+            out.push_back({"overflow",
+                           Severity::Warning,
+                           slide_idx,
+                           shape.name,
+                           std::format("shape \"{}\" extends {:.2f} in past the {} edge",
+                                       shape.name,
+                                       over->emu / static_cast<double>(kEmuPerInch),
+                                       over->edge)});
         }
-        for_children = child_transform(to_slide, *shape.geometry);
+        for_children = child_transform(to_slide, g);
     }
     for (const auto& child : shape.children) {
         check_overflow_shape(child, canvas, for_children, slide_idx, out);

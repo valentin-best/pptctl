@@ -15,7 +15,7 @@
       "slide": null
     },
     {
-      "message": "shape \"TextBox 1\" extends past slide boundary",
+      "message": "shape \"TextBox 1\" extends 2.00 in past the right edge",
       "rule": "overflow",
       "severity": "warning",
       "shape": "TextBox 1",

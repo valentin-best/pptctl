@@ -82,6 +82,9 @@ and against `pptctl extract --format json` geometry, not by eye in a renderer.
 - **14 of the remaining 20 overshoot by ≤ 0.1 in**, 8 of them by < 0.005 in
   (a few EMU). All from Google Slides / Keynote exports that place pictures
   flush to an edge with rounding in the extent. Invisible, so noise → **#60**.
+  *Update after #60 landed:* a 0.05 in tolerance drops the count from 20 to
+  10: the 6 real ones plus 4 in the 0.07–0.09 in band, and the message now
+  names the edge and the overshoot.
 - **6 are real**: pictures and a text placeholder hanging 0.5–1.3 in off the
   slide (`edu_cornell_cs5412_lecture23` slide 17, `edu_uva_virtualization`
   slides 43/46, `edu_augusta_resident` slide 5, `edu_bu_teaching_strategies`
@@ -145,7 +148,7 @@ and threshold review → **#61**.
 
 | rule | hits | genuine | action |
 |---|---:|---|---|
-| overflow  |  28 | 6 (8 group-child FPs fixed by #59 → 20) | add tolerance (#60) |
+| overflow  |  28 | 6 (8 group-child FPs fixed by #59 → 20; tolerance #60 → 10) | done |
 | tiny-text |  15 | 9–15 | keep; tunable threshold (#61) |
 | alt-text  | 100 | 100 | keep |
 | font-risk |  11 | 11, platform-dependent | tiered safe list (#62) |

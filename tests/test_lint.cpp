@@ -189,10 +189,42 @@ TEST_CASE("overflow: shape without geometry — no diagnostic") {
     CHECK(diags.empty());
 }
 
+// ── overflow rule: hairline tolerance (#60) ───────────────────────────────────
+//
+// Google Slides / Keynote exports routinely place pictures flush to an edge
+// with a few EMU of rounding in the extent. Overshoots up to 0.05 in are
+// invisible and are not reported.
+
+constexpr pptctl::Emu kTol = 45'720;  // 0.05 in
+constexpr pptctl::Emu kIn = pptctl::kEmuPerInch;
+
+TEST_CASE("overflow: shape extends 1 EMU past right edge — no diagnostic (hairline)") {
+    CHECK(lint_xml(slide_xml(0, 0, kW + 1, kH)).empty());
+}
+
+TEST_CASE("overflow: shape extends 1 EMU past bottom edge — no diagnostic (hairline)") {
+    CHECK(lint_xml(slide_xml(0, 0, kW, kH + 1)).empty());
+}
+
+TEST_CASE("overflow: off_x of -1 EMU — no diagnostic (hairline)") {
+    CHECK(lint_xml(slide_xml(-1, 0, kW, kH)).empty());
+}
+
+TEST_CASE("overflow: off_y of -1 EMU — no diagnostic (hairline)") {
+    CHECK(lint_xml(slide_xml(0, -1, kW, kH)).empty());
+}
+
+TEST_CASE("overflow: exactly the tolerance past each edge — no diagnostic") {
+    CHECK(lint_xml(slide_xml(0, 0, kW + kTol, kH)).empty());
+    CHECK(lint_xml(slide_xml(0, 0, kW, kH + kTol)).empty());
+    CHECK(lint_xml(slide_xml(-kTol, 0, kW, kH)).empty());
+    CHECK(lint_xml(slide_xml(0, -kTol, kW, kH)).empty());
+}
+
 // ── overflow rule: fire cases ─────────────────────────────────────────────────
 
-TEST_CASE("overflow: shape extends 1 EMU past right edge — diagnostic") {
-    auto diags = lint_xml(slide_xml(0, 0, kW + 1, kH));
+TEST_CASE("overflow: one EMU beyond the tolerance past the right edge — diagnostic") {
+    auto diags = lint_xml(slide_xml(0, 0, kW + kTol + 1, kH));
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].rule_id == "overflow");
     CHECK(diags[0].severity == pptctl::Severity::Warning);
@@ -200,27 +232,27 @@ TEST_CASE("overflow: shape extends 1 EMU past right edge — diagnostic") {
     CHECK(diags[0].shape_name == "Box 1");
 }
 
-TEST_CASE("overflow: shape extends 1 EMU past bottom edge — diagnostic") {
-    auto diags = lint_xml(slide_xml(0, 0, kW, kH + 1));
+TEST_CASE("overflow: one EMU beyond the tolerance past the bottom edge — diagnostic") {
+    auto diags = lint_xml(slide_xml(0, 0, kW, kH + kTol + 1));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "overflow");
+}
+
+TEST_CASE("overflow: one EMU beyond the tolerance past the left edge — diagnostic") {
+    auto diags = lint_xml(slide_xml(-kTol - 1, 0, kW, kH));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].rule_id == "overflow");
+}
+
+TEST_CASE("overflow: one EMU beyond the tolerance past the top edge — diagnostic") {
+    auto diags = lint_xml(slide_xml(0, -kTol - 1, kW, kH));
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].rule_id == "overflow");
 }
 
 TEST_CASE("overflow: shape offset past right edge — diagnostic") {
-    // off_x = kW + 1, even a zero-width shape at x > canvas_width overflows
-    auto diags = lint_xml(slide_xml(kW + 1, 0, 100, 100));
-    REQUIRE(diags.size() == 1);
-    CHECK(diags[0].rule_id == "overflow");
-}
-
-TEST_CASE("overflow: negative off_x — diagnostic") {
-    auto diags = lint_xml(slide_xml(-1, 0, kW, kH));
-    REQUIRE(diags.size() == 1);
-    CHECK(diags[0].rule_id == "overflow");
-}
-
-TEST_CASE("overflow: negative off_y — diagnostic") {
-    auto diags = lint_xml(slide_xml(0, -1, kW, kH));
+    // Even a tiny shape whose offset is beyond the canvas overflows.
+    auto diags = lint_xml(slide_xml(kW + kIn, 0, 100, 100));
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].rule_id == "overflow");
 }
@@ -238,14 +270,45 @@ TEST_CASE("overflow: negative ext_cy — diagnostic") {
 }
 
 TEST_CASE("overflow: diagnostic message contains shape name") {
-    auto diags = lint_xml(slide_xml(0, 0, kW + 1, kH, "OffCanvas Box"));
+    auto diags = lint_xml(slide_xml(0, 0, kW + kIn, kH, "OffCanvas Box"));
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].message.find("OffCanvas Box") != std::string::npos);
 }
 
+TEST_CASE("overflow: message names the edge and the overshoot in inches") {
+    auto right = lint_xml(slide_xml(0, 0, kW + kIn * 127 / 100, kH));
+    REQUIRE(right.size() == 1);
+    CHECK(right[0].message == "shape \"Box 1\" extends 1.27 in past the right edge");
+
+    auto bottom = lint_xml(slide_xml(0, 0, kW, kH + kIn / 2));
+    REQUIRE(bottom.size() == 1);
+    CHECK(bottom[0].message.find("0.50 in past the bottom edge") != std::string::npos);
+
+    auto left = lint_xml(slide_xml(-kIn, 0, kW, kH));
+    REQUIRE(left.size() == 1);
+    CHECK(left[0].message.find("1.00 in past the left edge") != std::string::npos);
+
+    auto top = lint_xml(slide_xml(0, -kIn / 4, kW, kH));
+    REQUIRE(top.size() == 1);
+    CHECK(top[0].message.find("0.25 in past the top edge") != std::string::npos);
+}
+
+TEST_CASE("overflow: message reports the worst edge when several overshoot") {
+    // 2 in past the right, 1 in past the bottom.
+    auto diags = lint_xml(slide_xml(0, 0, kW + 2 * kIn, kH + kIn));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].message.find("2.00 in past the right edge") != std::string::npos);
+}
+
+TEST_CASE("overflow: negative extent has its own message") {
+    auto diags = lint_xml(slide_xml(0, 0, -1, kH));
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].message == "shape \"Box 1\" has a negative extent");
+}
+
 TEST_CASE("overflow: child shape in group overflows — diagnostic fires recursively") {
     // Group itself fits the canvas; only the child overflows.
-    auto diags = lint_xml(group_slide_xml(0, 0, kW + 1, kH));
+    auto diags = lint_xml(group_slide_xml(0, 0, kW + kIn, kH));
     REQUIRE(diags.size() == 1);
     CHECK(diags[0].rule_id == "overflow");
     CHECK(diags[0].shape_name == "Child 1");
@@ -1338,9 +1401,9 @@ TEST_CASE("overflow: child fills its group's child space, group inside canvas �
 
 TEST_CASE("overflow: child pushed past the edge by a 2x group scale — diagnostic") {
     // Group maps a half-size child space onto the full canvas (scale 2).
-    // Raw child right edge = kW/2 + 100 (fits); mapped = kW + 200.
-    const auto xml =
-        tree(grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), sp(kW / 2 - 100, 0, 200, 100)));
+    // Raw child right edge = kW/2 + in/2 (fits); mapped = kW + 1 in.
+    const auto xml = tree(
+        grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), sp(kW / 2 - kIn / 2, 0, kIn, kIn / 2)));
     const auto d = overflow_diags(xml);
     REQUIRE(d.size() == 1);
     CHECK(d[0].shape_name == "Child");
@@ -1356,9 +1419,10 @@ TEST_CASE("overflow: child fits after group scale-down — no diagnostic") {
 TEST_CASE("overflow: nested groups compose their transforms — diagnostic") {
     // Outer: scale 2 (child space kW/2 x kH/2 -> canvas). Inner lives in the
     // outer child space, fills it, and itself has scale 2. Total scale 4.
-    // Raw child right = kW/4 + 50 (fits); mapped = kW + 200.
-    const auto inner = grp(
-        xf(0, 0, kW / 2, kH / 2) + ch(0, 0, kW / 4, kH / 4), sp(kW / 4 - 50, 0, 100, 100), "Inner");
+    // Raw child right = kW/4 + in/4 (fits); mapped = kW + 1 in.
+    const auto inner = grp(xf(0, 0, kW / 2, kH / 2) + ch(0, 0, kW / 4, kH / 4),
+                           sp(kW / 4 - kIn / 4, 0, kIn / 2, kIn / 4),
+                           "Inner");
     const auto xml = tree(grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), inner, "Outer"));
     const auto d = overflow_diags(xml);
     REQUIRE(d.size() == 1);
@@ -1376,7 +1440,7 @@ TEST_CASE("overflow: nested groups compose their transforms — no diagnostic wh
 TEST_CASE("overflow: degenerate group (zero child extent) falls back to raw coordinates") {
     // Seen in edu_utsa_oral_presentation.pptx slide 10. No division by zero,
     // and children are judged on their raw offsets.
-    const auto off = tree(grp(xf(0, 0, 0, 0) + ch(0, 0, 0, 0), sp(kW + 1, 0, 100, 100)));
+    const auto off = tree(grp(xf(0, 0, 0, 0) + ch(0, 0, 0, 0), sp(kW + kIn, 0, 100, 100)));
     REQUIRE(overflow_diags(off).size() == 1);
     CHECK(overflow_diags(off)[0].shape_name == "Child");
     const auto in = tree(grp(xf(0, 0, 0, 0) + ch(0, 0, 0, 0), sp(0, 0, 100, 100)));
@@ -1384,7 +1448,7 @@ TEST_CASE("overflow: degenerate group (zero child extent) falls back to raw coor
 }
 
 TEST_CASE("overflow: group's own box overflows — one diagnostic on the group, not the child") {
-    const auto xml = tree(grp(xf(0, 0, kW + 1, kH) + ch(0, 0, kW + 1, kH), sp(0, 0, 100, 100)));
+    const auto xml = tree(grp(xf(0, 0, kW + kIn, kH) + ch(0, 0, kW + kIn, kH), sp(0, 0, 100, 100)));
     const auto d = overflow_diags(xml);
     REQUIRE(d.size() == 1);
     CHECK(d[0].shape_name == "Group 1");
