@@ -134,11 +134,53 @@ std::optional<Geometry> parse_geometry(pugi::xml_node shape_el) {
     return g;
 }
 
+// The shape's own solid/no fill from p:spPr (or p:grpSpPr for groups). Only
+// a:solidFill and a:noFill are modelled; anything else (gradient, pattern,
+// blip) or no fill element at all yields nullopt, i.e. "inherited".
+std::optional<Fill> parse_fill(pugi::xml_node shape_el) {
+    pugi::xml_node props = shape_el.child("p:spPr");
+    if (!props) {
+        props = shape_el.child("p:grpSpPr");
+    }
+    if (!props) {
+        return std::nullopt;
+    }
+    if (props.child("a:noFill")) {
+        return Fill{"none", ""};
+    }
+    auto solid = props.child("a:solidFill");
+    if (!solid) {
+        return std::nullopt;
+    }
+    if (auto srgb = solid.child("a:srgbClr")) {
+        // Producers disagree on hex case; normalize so a re-save isn't a recolor.
+        std::string hex = srgb.attribute("val").as_string("");
+        for (char& c : hex) {
+            if (c >= 'a' && c <= 'f') {
+                c = static_cast<char>(c - ('a' - 'A'));
+            }
+        }
+        return Fill{"solid", std::move(hex)};
+    }
+    if (auto scheme = solid.child("a:schemeClr")) {
+        return Fill{"solid", scheme.attribute("val").as_string("")};
+    }
+    // Other colour choices (a:sysClr, a:prstClr, a:hslClr, a:scrgbClr): rare on
+    // shapes; report as solid with the raw value so a change is still visible.
+    for (auto clr : solid.children()) {
+        if (auto val = clr.attribute("val")) {
+            return Fill{"solid", val.as_string("")};
+        }
+    }
+    return Fill{"solid", ""};
+}
+
 void set_identity(pugi::xml_node shape_el, Shape& shape) {
     auto cnvpr = nv_cnvpr(shape_el);
     shape.id = cnvpr.attribute("id").as_string("");
     shape.name = cnvpr.attribute("name").as_string("");
     shape.geometry = parse_geometry(shape_el);
+    shape.fill = parse_fill(shape_el);
 }
 
 ShapeKind graphic_frame_kind(pugi::xml_node gf) {

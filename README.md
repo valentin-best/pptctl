@@ -52,7 +52,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
 | `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat; `--json`, `--strict` | ✅ Implemented |
 | `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
-| `diff` | Semantic diff: slides added/removed, text changed, charts modified | 🚧 In progress (slide-level) |
+| `diff` | Semantic diff: slides added/removed/moved/changed, text and shape ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | 🚧 In progress (slide-level) |
 | `merge` | Merge decks while preserving images, themes, and slide masters | Planned |
 | `fill` | Template-fill from a `.pptx` template + JSON data | Planned |
 

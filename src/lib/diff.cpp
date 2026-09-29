@@ -109,6 +109,12 @@ void feed_shape(Fnv1a& h, const Shape& s) {
     } else {
         h.feed(std::string_view{"nogeom"});
     }
+    if (s.fill) {
+        h.feed(s.fill->kind);
+        h.feed(s.fill->color);
+    } else {
+        h.feed(std::string_view{"nofill"});
+    }
     feed_paragraphs(h, s.paragraphs);
     if (s.picture) {
         h.feed(picture_identity(*s.picture));

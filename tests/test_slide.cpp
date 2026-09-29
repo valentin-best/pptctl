@@ -934,3 +934,58 @@ TEST_CASE("Slide: parse alone leaves media_hash and dimensions unset") {
     CHECK_FALSE(slide.shapes()[0].picture->media_hash.has_value());
     CHECK_FALSE(slide.shapes()[0].picture->dimensions.has_value());
 }
+
+// ── solid fills (#72) ─────────────────────────────────────────────────────────
+
+TEST_CASE("Slide: parses solid fills (srgb, scheme, none) and leaves inherited fills empty") {
+    const char* xml = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Srgb"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm>
+        <a:solidFill><a:srgbClr val="ff8800"/></a:solidFill></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="3" name="Scheme"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:solidFill><a:schemeClr val="accent1"><a:lumMod val="75000"/></a:schemeClr></a:solidFill></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="4" name="None"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:noFill/></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="5" name="Inherited"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="6" name="Gradient"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="000000"/></a:gs></a:gsLst></a:gradFill></p:spPr>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    REQUIRE(slide.shapes().size() == 5);
+
+    const auto& srgb = slide.shapes()[0];
+    REQUIRE(srgb.fill.has_value());
+    CHECK(srgb.fill->kind == "solid");
+    CHECK(srgb.fill->color == "FF8800");  // hex is normalized to upper case
+
+    const auto& scheme = slide.shapes()[1];
+    REQUIRE(scheme.fill.has_value());
+    CHECK(scheme.fill->kind == "solid");
+    CHECK(scheme.fill->color == "accent1");
+
+    const auto& none = slide.shapes()[2];
+    REQUIRE(none.fill.has_value());
+    CHECK(none.fill->kind == "none");
+    CHECK(none.fill->color.empty());
+
+    CHECK_FALSE(slide.shapes()[3].fill.has_value());
+    CHECK_FALSE(slide.shapes()[4].fill.has_value());  // gradients are not modelled
+}

@@ -20,7 +20,10 @@ int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
 int lint(const std::string& path, const LintOptions& opts);
 int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
-int diff(const std::string& a, const std::string& b, const DiffOptions& opts);
+int diff(const std::string& a,
+         const std::string& b,
+         const DiffOptions& opts,
+         const DiffOutputOptions& out);
 
 }  // namespace pptctl::cmd
 
@@ -128,7 +131,26 @@ int main(int argc, char** argv) {
                      "remove + add")
         ->check(CLI::Range(0.0, 1.0))
         ->capture_default_str();
-    diff_cmd->callback([&]() { std::exit(pptctl::cmd::diff(diff_a, diff_b, diff_opts)); });
+    pptctl::DiffOutputOptions diff_out;
+    bool diff_color = false;
+    bool diff_no_color = false;
+    diff_cmd
+        ->add_option("--format", diff_out.format, "output format: unified (default), json, html")
+        ->capture_default_str()
+        ->check(CLI::IsMember({"unified", "json", "html"}));
+    diff_cmd->add_flag("-q,--quiet", diff_out.quiet, "print nothing; exit code only");
+    auto* diff_color_flag =
+        diff_cmd->add_flag("--color", diff_color, "colour unified output even when not a TTY");
+    diff_cmd->add_flag("--no-color", diff_no_color, "never colour unified output")
+        ->excludes(diff_color_flag);
+    diff_cmd->callback([&]() {
+        if (diff_color) {
+            diff_out.color = true;
+        } else if (diff_no_color) {
+            diff_out.color = false;
+        }
+        std::exit(pptctl::cmd::diff(diff_a, diff_b, diff_opts, diff_out));
+    });
 
     app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")->callback([] {
         std::exit(not_implemented("merge"));
