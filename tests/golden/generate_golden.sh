@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate all golden files from a built pptctl binary.
+# Regenerate all golden files (extract + lint) from a built pptctl binary.
 # Usage: ./tests/golden/generate_golden.sh <path-to-pptctl-binary>
 # Example: ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
 set -euo pipefail
@@ -27,4 +27,17 @@ for fixture in "${FIXTURES_LIST[@]}"; do
         fi
         echo "wrote $outfile"
     done
+done
+
+# Lint goldens: one <fixture>.lint.json per fixture, path normalized the same way.
+LINT_FIXTURES=(minimal three_slides images_deck notes_and_masters tables_deck charts_deck
+               bloat_deck lint_problems lint_clean)
+
+for fixture in "${LINT_FIXTURES[@]}"; do
+    outfile="$GOLDEN/${fixture}.lint.json"
+    # lint exits 0 without --strict even when it reports findings.
+    "$BIN" lint --json "$FIXTURES/${fixture}.pptx" > "$outfile"
+    sed -i.bak 's|"file": ".*"|"file": "<path>"|' "$outfile"
+    rm -f "${outfile}.bak"
+    echo "wrote $outfile"
 done

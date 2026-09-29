@@ -17,6 +17,10 @@ Pass --check to verify committed fixtures match regenerated output (useful in CI
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
   - bloat_deck.pptx         2 slides: a 1600x1200 PNG shown 1 in wide, and a small PNG.
+  - lint_problems.pptx      7 slides, one per lint rule (plus the printer-settings stub
+                            python-pptx ships, which trips the deck-level ctype rule).
+  - lint_clean.pptx         2 ordinary slides with the printer-settings stub stripped;
+                            the only fixture that lints to zero diagnostics.
   - notes_and_masters.pptx  4 slides with speaker notes, plus a 2nd slide master.
   - tables_deck.pptx        2 slides: a plain 2×2 table and a merged-cell table.
   - charts_deck.pptx        2 slides: a clustered-bar chart and a pie chart.
@@ -47,7 +51,7 @@ import zlib
 from pathlib import Path
 
 from pptx import Presentation
-from pptx.util import Emu, Inches
+from pptx.util import Emu, Inches, Pt
 
 HERE = Path(__file__).resolve().parent
 
@@ -174,6 +178,98 @@ def build_bloat_deck(path: Path) -> None:
     _set_core_props(prs, "pptctl image bloat fixture")
     prs.save(str(path))
     _normalize_zip(path)
+
+
+def build_lint_problems_deck(path: Path) -> None:
+    """One slide per lint rule, each tripping exactly one slide-level rule, in
+    rule-registry order. Blank layouts carry no content placeholders, so
+    empty-ph can only fire on the Title Only slide. The printer-settings stub
+    python-pptx ships is kept: it is the deck-level ctype finding."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    title_only = prs.slide_layouts[5]
+
+    # 1. overflow: text box starting 2 in from the right edge but 4 in wide.
+    s = prs.slides.add_slide(blank)
+    box = s.shapes.add_textbox(Inches(8), Inches(1), Inches(4), Inches(1))
+    box.text_frame.text = "Off the right edge"
+
+    # 2. tiny-text: an 8 pt run.
+    s = prs.slides.add_slide(blank)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+    box.text_frame.text = "Fine print"
+    box.text_frame.paragraphs[0].runs[0].font.size = Pt(8)
+
+    # 3. alt-text: small picture shown large (no bloat) with its descr removed.
+    s = prs.slides.add_slide(blank)
+    pic = s.shapes.add_picture(
+        io.BytesIO(_png(64, 48, (40, 160, 40))), Inches(1), Inches(1), height=Inches(3)
+    )
+    pic._element.nvPicPr.cNvPr.attrib.pop("descr", None)
+
+    # 4. font-risk: a face that is neither embedded nor on the safe list.
+    s = prs.slides.add_slide(blank)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+    box.text_frame.text = "Custom typeface"
+    box.text_frame.paragraphs[0].runs[0].font.name = "Nonexistent Sans"
+
+    # 5. empty-ph: Title Only layout with the title left blank.
+    prs.slides.add_slide(title_only)
+
+    # 6. ctype: deck-level, from the retained printerSettings1.bin. A text box
+    #    keeps the slide count aligned with the rule list.
+    s = prs.slides.add_slide(blank)
+    box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
+    box.text_frame.text = "Deck-level ctype finding lives in [Content_Types].xml"
+
+    # 7. img-bloat: 1600x1200 PNG shown 1 in wide (about 1600 DPI effective).
+    s = prs.slides.add_slide(blank)
+    s.shapes.add_picture(
+        io.BytesIO(_png(1600, 1200, (200, 40, 40))), Inches(1), Inches(1), width=Inches(1)
+    )
+
+    _set_core_props(prs, "pptctl lint problems fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def build_lint_clean_deck(path: Path) -> None:
+    """Two ordinary slides that trip no rule: filled placeholders, theme fonts
+    only, a small picture (python-pptx sets descr) shown at a low DPI, and
+    everything inside the canvas. strip_printer_settings() runs afterwards."""
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+    s.shapes.title.text = "A clean deck"
+    s.placeholders[1].text_frame.text = "Nothing to see here"
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    s.shapes.add_picture(
+        io.BytesIO(_png(64, 48, (40, 40, 200))), Inches(1), Inches(1), height=Inches(3)
+    )
+    _set_core_props(prs, "pptctl lint clean fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def strip_printer_settings(path: Path) -> None:
+    """Remove the printerSettings1.bin stub python-pptx's default template
+    carries: the part, its relationship from presentation.xml, and its
+    [Content_Types].xml Default entry (the only .bin part in the package)."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+
+    stubs = [n for n in parts if n.startswith("ppt/printerSettings/")]
+    for n in stubs:
+        del parts[n]
+
+    rels = parts["ppt/_rels/presentation.xml.rels"].decode("utf-8")
+    rels = re.sub(r'<Relationship [^>]*printerSettings[^>]*/>', "", rels)
+    parts["ppt/_rels/presentation.xml.rels"] = rels.encode("utf-8")
+
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = re.sub(r'<Default Extension="bin" [^>]*/>', "", ct)
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+
+    _write_zip(path, parts)
 
 
 def build_notes_deck_base(path: Path) -> None:
@@ -354,6 +450,8 @@ def inject_second_master(path: Path) -> None:
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
     ("bloat_deck.pptx", [build_bloat_deck]),
+    ("lint_problems.pptx", [build_lint_problems_deck]),
+    ("lint_clean.pptx", [build_lint_clean_deck, strip_printer_settings]),
     ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),
     ("tables_deck.pptx", [build_tables_deck]),
     ("charts_deck.pptx", [build_charts_deck]),

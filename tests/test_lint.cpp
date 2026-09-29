@@ -4,13 +4,16 @@
 
 #include <algorithm>
 #include <format>
+#include <fstream>
 #include <functional>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -19,6 +22,9 @@
 
 #ifndef PPTCTL_FIXTURES_DIR
 #define PPTCTL_FIXTURES_DIR "tests/fixtures"
+#endif
+#ifndef PPTCTL_GOLDEN_DIR
+#define PPTCTL_GOLDEN_DIR "tests/golden"
 #endif
 
 namespace pptctl::cmd {
@@ -1140,4 +1146,122 @@ TEST_CASE("output: integration — three_slides.pptx --json parses with 4 diagno
 TEST_CASE("output: integration — unreadable file still exits 1 (distinct from --strict's 2)") {
     std::ostringstream oss;
     CHECK(pptctl::cmd::lint_to(fixture("does_not_exist.pptx"), oss, {.strict = true}) == 1);
+}
+
+// ── golden tests (#47) ────────────────────────────────────────────────────────
+//
+// Every fixture has its `lint --json` output checked in under tests/golden/ as
+// <fixture>.lint.json. To regenerate after an intentional output change:
+//   ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
+
+namespace {
+
+std::string read_golden(const char* name) {
+    const std::string path = std::string(PPTCTL_GOLDEN_DIR) + "/" + name;
+    std::ifstream f(path);
+    REQUIRE_MESSAGE(f.is_open(), "golden file missing: ", path);
+    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
+}
+
+// Same canonicalisation as the extract goldens: the "file" field carries a
+// machine-specific absolute path, so it is replaced by a placeholder.
+std::string normalize_json_path(const std::string& json) {
+    static const std::regex kFileField(R"("file": "[^"]*")");
+    return std::regex_replace(json, kFileField, R"("file": "<path>")");
+}
+
+void check_lint_golden(const char* fixture_name, const char* golden_name) {
+    std::string out;
+    REQUIRE(run(fixture_name, out, {.json = true}) == 0);
+    CHECK(normalize_json_path(out) == read_golden(golden_name));
+}
+
+// rule id -> number of diagnostics carrying it
+std::map<std::string, int> rule_histogram(const nlohmann::json& doc) {
+    std::map<std::string, int> h;
+    for (const auto& d : doc["diagnostics"]) {
+        ++h[d["rule"].get<std::string>()];
+    }
+    return h;
+}
+
+}  // namespace
+
+TEST_CASE("golden: minimal.lint.json") {
+    check_lint_golden("minimal.pptx", "minimal.lint.json");
+}
+TEST_CASE("golden: three_slides.lint.json") {
+    check_lint_golden("three_slides.pptx", "three_slides.lint.json");
+}
+TEST_CASE("golden: images_deck.lint.json") {
+    check_lint_golden("images_deck.pptx", "images_deck.lint.json");
+}
+TEST_CASE("golden: notes_and_masters.lint.json") {
+    check_lint_golden("notes_and_masters.pptx", "notes_and_masters.lint.json");
+}
+TEST_CASE("golden: tables_deck.lint.json") {
+    check_lint_golden("tables_deck.pptx", "tables_deck.lint.json");
+}
+TEST_CASE("golden: charts_deck.lint.json") {
+    check_lint_golden("charts_deck.pptx", "charts_deck.lint.json");
+}
+TEST_CASE("golden: bloat_deck.lint.json") {
+    check_lint_golden("bloat_deck.pptx", "bloat_deck.lint.json");
+}
+TEST_CASE("golden: lint_problems.lint.json") {
+    check_lint_golden("lint_problems.pptx", "lint_problems.lint.json");
+}
+TEST_CASE("golden: lint_clean.lint.json") {
+    check_lint_golden("lint_clean.pptx", "lint_clean.lint.json");
+}
+
+// The goldens above would happily freeze a regression; these pin the intent.
+
+TEST_CASE("golden: lint_clean.pptx produces zero diagnostics") {
+    std::string out;
+    REQUIRE(run("lint_clean.pptx", out, {.json = true}) == 0);
+    const auto j = nlohmann::json::parse(out);
+    CHECK(j["diagnostics"].empty());
+    CHECK(j["summary"]["warnings"] == 0);
+    CHECK(j["summary"]["errors"] == 0);
+}
+
+TEST_CASE("golden: lint_clean.pptx --strict exits 0 and says so") {
+    std::string out;
+    CHECK(run("lint_clean.pptx", out, {.strict = true}) == 0);
+    CHECK(out.find("no issues found") != std::string::npos);
+}
+
+TEST_CASE("golden: lint_problems.pptx trips every rule exactly once") {
+    std::string out;
+    REQUIRE(run("lint_problems.pptx", out, {.json = true}) == 0);
+    const auto h = rule_histogram(nlohmann::json::parse(out));
+    const std::map<std::string, int> want = {{"overflow", 1},
+                                             {"tiny-text", 1},
+                                             {"alt-text", 1},
+                                             {"font-risk", 1},
+                                             {"empty-ph", 1},
+                                             {"ctype", 1},
+                                             {"img-bloat", 1}};
+    CHECK(h == want);
+}
+
+TEST_CASE("golden: lint_problems.pptx slide-level findings land on their own slide") {
+    std::string out;
+    REQUIRE(run("lint_problems.pptx", out, {.json = true}) == 0);
+    const auto j = nlohmann::json::parse(out);
+    std::map<std::string, int> slide_of;
+    for (const auto& d : j["diagnostics"]) {
+        if (!d["slide"].is_null()) {
+            slide_of[d["rule"].get<std::string>()] = d["slide"].get<int>();
+        }
+    }
+    CHECK(slide_of["overflow"] == 1);
+    CHECK(slide_of["tiny-text"] == 2);
+    CHECK(slide_of["alt-text"] == 3);
+    CHECK(slide_of["empty-ph"] == 5);
+    CHECK(slide_of["img-bloat"] == 7);
+    // font-risk and ctype are deck-level (slide: null).
+    CHECK(!slide_of.contains("font-risk"));
+    CHECK(!slide_of.contains("ctype"));
 }

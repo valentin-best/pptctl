@@ -1,0 +1,17 @@
+{
+  "diagnostics": [
+    {
+      "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
+      "rule": "ctype",
+      "severity": "warning",
+      "shape": null,
+      "slide": null
+    }
+  ],
+  "file": "<path>",
+  "schema_version": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 1
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "diagnostics": [
+    {
+      "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
+      "rule": "ctype",
+      "severity": "warning",
+      "shape": null,
+      "slide": null
+    },
+    {
+      "message": "picture \"Picture 1\" is 1600x1200 px shown at 1.0x0.8 in (1600 DPI effective, above 200 DPI, 7.3 KiB stored)",
+      "rule": "img-bloat",
+      "severity": "warning",
+      "shape": "Picture 1",
+      "slide": 1
+    }
+  ],
+  "file": "<path>",
+  "schema_version": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 2
+  }
+}
