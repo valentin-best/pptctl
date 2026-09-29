@@ -26,6 +26,16 @@ namespace {
 
 constexpr auto kVersion = "0.0.1-dev";
 
+pptctl::FontTarget parse_font_target(const std::string& s) {
+    if (s == "windows") {
+        return pptctl::FontTarget::Windows;
+    }
+    if (s == "macos") {
+        return pptctl::FontTarget::MacOS;
+    }
+    return pptctl::FontTarget::All;
+}
+
 int not_implemented(const char* name) {
     pptctl::eprintln("{}: not yet implemented", name);
     return 2;
@@ -62,6 +72,7 @@ int main(int argc, char** argv) {
     // --- lint ----------------------------------------------------------------
     std::string lint_path;
     pptctl::LintOptions lint_opts;
+    std::string lint_target = "all";
     auto* lint_cmd = app.add_subcommand("lint", "Static analysis for .pptx files");
     lint_cmd->add_option("file", lint_path, "path to .pptx")->required()->check(CLI::ExistingFile);
     lint_cmd->add_flag("--json", lint_opts.json, "emit machine-readable JSON");
@@ -79,7 +90,17 @@ int main(int argc, char** argv) {
                      lint_opts.min_font_pt,
                      "tiny-text: flag text below this size in pt (default 12)")
         ->check(CLI::PositiveNumber);
-    lint_cmd->callback([&]() { std::exit(pptctl::cmd::lint(lint_path, lint_opts)); });
+    lint_cmd
+        ->add_option("--target",
+                     lint_target,
+                     "font-risk: platform whose bundled fonts count as safe: all (default; "
+                     "must be on both Windows and macOS), windows, macos. Office fonts are "
+                     "always safe")
+        ->check(CLI::IsMember({"all", "windows", "macos"}));
+    lint_cmd->callback([&]() {
+        lint_opts.font_target = parse_font_target(lint_target);
+        std::exit(pptctl::cmd::lint(lint_path, lint_opts));
+    });
 
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`

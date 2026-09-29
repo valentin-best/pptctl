@@ -1,7 +1,7 @@
 {
   "diagnostics": [
     {
-      "message": "font \"Nonexistent Sans\" is referenced but not embedded and not on the safe list",
+      "message": "font \"Nonexistent Sans\" is referenced but not embedded and not a system or Office font",
       "rule": "font-risk",
       "severity": "warning",
       "shape": null,

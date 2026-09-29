@@ -113,6 +113,12 @@ Garamond / Tw Cen MT / Franklin Gothic Book / Copperplate Gothic Light (ship
 with Office, 4 hits), MS PGothic (Windows Japanese, 1 hit). Each *does*
 substitute somewhere, but the safe list is Windows-centric, so every
 Mac-authored deck lights up. Tiered or platform-aware safe list → **#62**.
+*Update after #62 landed:* three tiers (Windows, macOS, Office) and a
+`--target` flag. Default `all` still reports fonts missing on either platform
+but Office fonts are always safe and the message names the gap; corpus hits
+11 → 8 (`--target windows` → 6, `--target macos` → 2). Two new hits are
+Windows-only faces (Lucida Sans Unicode, MS PGothic) the old list had
+treated as universal.
 
 ### empty-ph — 18 hits: genuine, low severity
 
@@ -154,7 +160,7 @@ floor, both tunable (`--max-image-dpi`, `--min-image-bytes`; tiny-text got
 | overflow  |  28 | 6 (8 group-child FPs fixed by #59 → 20; tolerance #60 → 10) | done |
 | tiny-text |  15 | 9–15 | keep; `--min-font-size` (#61) |
 | alt-text  | 100 | 100 | keep |
-| font-risk |  11 | 11, platform-dependent | tiered safe list (#62) |
+| font-risk |  11 | 11, platform-dependent (tiers + `--target`, #62 → 8/6/2) | done |
 | empty-ph  |  18 | 18, low severity | keep |
 | ctype     |   5 | 5 | keep |
 | img-bloat |  94 | ~60 (300 DPI + 64 KiB floor, #61 → 53) | done |

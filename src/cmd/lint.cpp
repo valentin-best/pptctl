@@ -274,38 +274,284 @@ std::string to_lower(std::string_view s) {
     return out;
 }
 
-// Fonts that ship with mainstream platforms / Office, so a bare reference won't
-// trigger a silent substitution at render time. Stored lowercased for matching.
-const std::set<std::string>& safe_font_list() {
-    static const std::set<std::string> kSafe = {"arial",
-                                                "arial black",
-                                                "arial narrow",
-                                                "calibri",
-                                                "calibri light",
-                                                "cambria",
-                                                "cambria math",
-                                                "candara",
-                                                "comic sans ms",
-                                                "consolas",
-                                                "constantia",
-                                                "corbel",
-                                                "courier new",
-                                                "georgia",
-                                                "impact",
-                                                "lucida console",
-                                                "lucida sans unicode",
-                                                "palatino linotype",
-                                                "segoe ui",
-                                                "segoe ui light",
-                                                "segoe ui semibold",
-                                                "symbol",
-                                                "tahoma",
-                                                "times new roman",
-                                                "trebuchet ms",
-                                                "verdana",
-                                                "webdings",
-                                                "wingdings"};
-    return kSafe;
+// Font tiers, lowercased for matching. A face is "safe" for a target when it
+// ships with that platform or with Microsoft Office; anything else substitutes
+// silently at render time. Office faces count everywhere because PowerPoint
+// itself brings them. Lists are the stock fonts of Windows 10/11, macOS 12+
+// and Office 2019/365; they are deliberately not exhaustive, since a missing
+// entry only produces a warning, never a false pass.
+
+const std::set<std::string>& windows_fonts() {
+    static const std::set<std::string> k = {
+        "arial",
+        "arial black",
+        "bahnschrift",
+        "calibri",
+        "calibri light",
+        "cambria",
+        "cambria math",
+        "candara",
+        "comic sans ms",
+        "consolas",
+        "constantia",
+        "corbel",
+        "courier new",
+        "ebrima",
+        "franklin gothic medium",
+        "gabriola",
+        "gadugi",
+        "georgia",
+        "impact",
+        "ink free",
+        "javanese text",
+        "leelawadee ui",
+        "lucida console",
+        "lucida sans unicode",
+        "malgun gothic",
+        "meiryo",
+        "meiryo ui",
+        "microsoft himalaya",
+        "microsoft jhenghei",
+        "microsoft sans serif",
+        "microsoft yahei",
+        "mingliu",
+        "ms gothic",
+        "ms mincho",
+        "ms pgothic",
+        "ms pmincho",
+        "ms ui gothic",
+        "mv boli",
+        "myanmar text",
+        "nirmala ui",
+        "nsimsun",
+        "palatino linotype",
+        "segoe print",
+        "segoe script",
+        "segoe ui",
+        "segoe ui black",
+        "segoe ui emoji",
+        "segoe ui light",
+        "segoe ui semibold",
+        "segoe ui semilight",
+        "segoe ui symbol",
+        "simhei",
+        "simsun",
+        "sitka",
+        "sylfaen",
+        "symbol",
+        "tahoma",
+        "times new roman",
+        "trebuchet ms",
+        "verdana",
+        "webdings",
+        "wingdings",
+        "yu gothic",
+        "yu gothic ui",
+        "yu mincho",
+        // Native spellings PowerPoint writes for Japanese system fonts.
+        "ＭＳ Ｐゴシック",
+        "ＭＳ ゴシック",
+        "ＭＳ 明朝",
+        "ＭＳ Ｐ明朝",
+        "メイリオ",
+        "游ゴシック",
+        "游明朝"};
+    return k;
+}
+
+const std::set<std::string>& macos_fonts() {
+    static const std::set<std::string> k = {"american typewriter",
+                                            "andale mono",
+                                            "apple chancery",
+                                            "apple sd gothic neo",
+                                            "arial",
+                                            "arial black",
+                                            "arial narrow",
+                                            "arial rounded mt bold",
+                                            "arial unicode ms",
+                                            "avenir",
+                                            "avenir next",
+                                            "avenir next condensed",
+                                            "bangla sangam mn",
+                                            "baskerville",
+                                            "big caslon",
+                                            "bodoni 72",
+                                            "bradley hand",
+                                            "brush script mt",
+                                            "chalkboard",
+                                            "chalkboard se",
+                                            "chalkduster",
+                                            "charter",
+                                            "cochin",
+                                            "comic sans ms",
+                                            "copperplate",
+                                            "courier",
+                                            "courier new",
+                                            "devanagari sangam mn",
+                                            "didot",
+                                            "din alternate",
+                                            "din condensed",
+                                            "futura",
+                                            "geneva",
+                                            "georgia",
+                                            "gill sans",
+                                            "gujarati sangam mn",
+                                            "gurmukhi mn",
+                                            "helvetica",
+                                            "helvetica neue",
+                                            "herculanum",
+                                            "hiragino mincho pron",
+                                            "hiragino sans",
+                                            "hoefler text",
+                                            "impact",
+                                            "kannada sangam mn",
+                                            "lucida grande",
+                                            "luminari",
+                                            "malayalam sangam mn",
+                                            "marker felt",
+                                            "menlo",
+                                            "microsoft sans serif",
+                                            "monaco",
+                                            "noteworthy",
+                                            "optima",
+                                            "oriya sangam mn",
+                                            "palatino",
+                                            "papyrus",
+                                            "phosphate",
+                                            "pingfang sc",
+                                            "pingfang tc",
+                                            "rockwell",
+                                            "san francisco",
+                                            "savoye let",
+                                            "sf pro",
+                                            "sinhala sangam mn",
+                                            "skia",
+                                            "snell roundhand",
+                                            "symbol",
+                                            "tahoma",
+                                            "tamil sangam mn",
+                                            "telugu sangam mn",
+                                            "thonburi",
+                                            "times",
+                                            "times new roman",
+                                            "trattatello",
+                                            "trebuchet ms",
+                                            "verdana",
+                                            "webdings",
+                                            "wingdings",
+                                            "zapf dingbats",
+                                            "zapfino"};
+    return k;
+}
+
+const std::set<std::string>& office_fonts() {
+    static const std::set<std::string> k = {"algerian",
+                                            "aptos",
+                                            "aptos display",
+                                            "arial narrow",
+                                            "baskerville old face",
+                                            "bell mt",
+                                            "berlin sans fb",
+                                            "bernard mt condensed",
+                                            "bodoni mt",
+                                            "book antiqua",
+                                            "bookman old style",
+                                            "bookshelf symbol 7",
+                                            "britannic bold",
+                                            "broadway",
+                                            "brush script mt",
+                                            "calibri",
+                                            "calibri light",
+                                            "calisto mt",
+                                            "cambria",
+                                            "cambria math",
+                                            "candara",
+                                            "castellar",
+                                            "centaur",
+                                            "century",
+                                            "century gothic",
+                                            "century schoolbook",
+                                            "chiller",
+                                            "colonna mt",
+                                            "consolas",
+                                            "constantia",
+                                            "cooper black",
+                                            "copperplate gothic bold",
+                                            "copperplate gothic light",
+                                            "corbel",
+                                            "curlz mt",
+                                            "edwardian script itc",
+                                            "elephant",
+                                            "engravers mt",
+                                            "eras itc",
+                                            "felix titling",
+                                            "footlight mt light",
+                                            "forte",
+                                            "franklin gothic book",
+                                            "franklin gothic demi",
+                                            "franklin gothic heavy",
+                                            "franklin gothic medium",
+                                            "franklin gothic medium cond",
+                                            "freestyle script",
+                                            "french script mt",
+                                            "garamond",
+                                            "gigi",
+                                            "gill sans mt",
+                                            "gloucester mt",
+                                            "goudy old style",
+                                            "haettenschweiler",
+                                            "harlow solid italic",
+                                            "harrington",
+                                            "high tower text",
+                                            "imprint mt shadow",
+                                            "informal roman",
+                                            "jokerman",
+                                            "juice itc",
+                                            "kristen itc",
+                                            "kunstler script",
+                                            "lucida bright",
+                                            "lucida calligraphy",
+                                            "lucida fax",
+                                            "lucida handwriting",
+                                            "lucida sans",
+                                            "lucida sans typewriter",
+                                            "magneto",
+                                            "maiandra gd",
+                                            "matura mt script capitals",
+                                            "mistral",
+                                            "modern no. 20",
+                                            "monotype corsiva",
+                                            "ms reference sans serif",
+                                            "niagara",
+                                            "ocr a extended",
+                                            "old english text mt",
+                                            "onyx",
+                                            "palace script mt",
+                                            "papyrus",
+                                            "parchment",
+                                            "perpetua",
+                                            "playbill",
+                                            "poor richard",
+                                            "pristina",
+                                            "rage italic",
+                                            "ravie",
+                                            "rockwell",
+                                            "rockwell condensed",
+                                            "rockwell extra bold",
+                                            "script mt bold",
+                                            "showcard gothic",
+                                            "snap itc",
+                                            "stencil",
+                                            "tempus sans itc",
+                                            "tw cen mt",
+                                            "tw cen mt condensed",
+                                            "viner hand itc",
+                                            "vivaldi",
+                                            "vladimir script",
+                                            "wide latin",
+                                            "wingdings 2",
+                                            "wingdings 3"};
+    return k;
 }
 
 // A typeface beginning with '+' (e.g. "+mn-lt", "+mj-ea") is a theme-font
@@ -511,29 +757,57 @@ std::set<std::string> slide_referenced_fonts(const Slide& slide) {
     return out;
 }
 
-// One diagnostic per referenced face that is neither embedded in the deck nor on
-// the built-in safe list — those substitute silently at render time. Matching is
+bool safe_for(FontTarget target, bool win, bool mac) noexcept {
+    switch (target) {
+        case FontTarget::Windows:
+            return win;
+        case FontTarget::MacOS:
+            return mac;
+        case FontTarget::All:
+            break;
+    }
+    return win && mac;
+}
+
+const char* substitution_reason(bool win, bool mac) noexcept {
+    if (win && !mac) {
+        return "not available on macOS";
+    }
+    if (mac && !win) {
+        return "not available on Windows";
+    }
+    return "not a system or Office font";
+}
+
+// One diagnostic per referenced face that is neither embedded in the deck nor
+// safe for the target platform(s); see FontTarget. The message names the gap
+// so the author knows where the substitution happens. Matching is
 // case-insensitive; the input set's ordering makes the output deterministic.
 std::vector<Diagnostic> check_font_risk(const std::set<std::string>& referenced,
-                                        const std::vector<std::string>& embedded) {
+                                        const std::vector<std::string>& embedded,
+                                        FontTarget target) {
     std::set<std::string> embedded_lc;
     for (const auto& e : embedded) {
         embedded_lc.insert(to_lower(e));
     }
-    const auto& safe = safe_font_list();
     std::vector<Diagnostic> out;
     for (const auto& face : referenced) {
         const std::string lc = to_lower(face);
-        if (safe.contains(lc) || embedded_lc.contains(lc)) {
+        if (embedded_lc.contains(lc) || office_fonts().contains(lc)) {
             continue;
         }
-        out.push_back({"font-risk",
-                       Severity::Warning,
-                       0,  // deck-level: not tied to a single slide
-                       "",
-                       std::format("font \"{}\" is referenced but not embedded "
-                                   "and not on the safe list",
-                                   face)});
+        const bool win = windows_fonts().contains(lc);
+        const bool mac = macos_fonts().contains(lc);
+        if (safe_for(target, win, mac)) {
+            continue;
+        }
+        const char* reason = substitution_reason(win, mac);
+        out.push_back(
+            {"font-risk",
+             Severity::Warning,
+             0,  // deck-level: not tied to a single slide
+             "",
+             std::format("font \"{}\" is referenced but not embedded and {}", face, reason)});
     }
     return out;
 }
@@ -652,7 +926,8 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
             referenced_fonts.insert(tf);
         }
     }
-    const auto font_risks = check_font_risk(referenced_fonts, pres.embedded_fonts());
+    const auto font_risks =
+        check_font_risk(referenced_fonts, pres.embedded_fonts(), opts.font_target);
     diagnostics.insert(diagnostics.end(), font_risks.begin(), font_risks.end());
 
     std::vector<std::pair<std::string, std::string>> part_ctypes;

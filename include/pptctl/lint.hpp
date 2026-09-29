@@ -33,6 +33,11 @@ struct Diagnostic {
     std::string message;
 };
 
+// Which platform's bundled fonts count as "safe" for the font-risk rule.
+// Office-bundled fonts are always safe. All = safe only if present on both
+// Windows and macOS (a font that substitutes anywhere is reported).
+enum class FontTarget : std::uint8_t { All, Windows, MacOS };
+
 // Output, exit-code and threshold settings of the lint subcommand. Declared
 // before LintRule so rules can read their thresholds.
 struct LintOptions {
@@ -40,9 +45,10 @@ struct LintOptions {
     bool strict = false;  // exit 2 when any diagnostic is emitted
 
     // Rule thresholds (CLI: --max-image-dpi, --min-image-bytes, --min-font-size).
-    double max_image_dpi = 300.0;            // img-bloat: fire above this effective DPI
-    std::uint64_t min_image_bytes = 65'536;  // img-bloat: skip images stored under 64 KiB
-    double min_font_pt = 12.0;               // tiny-text: fire below this size
+    double max_image_dpi = 300.0;              // img-bloat: fire above this effective DPI
+    std::uint64_t min_image_bytes = 65'536;    // img-bloat: skip images stored under 64 KiB
+    double min_font_pt = 12.0;                 // tiny-text: fire below this size
+    FontTarget font_target = FontTarget::All;  // font-risk: --target
 };
 
 using LintRule = std::function<void(

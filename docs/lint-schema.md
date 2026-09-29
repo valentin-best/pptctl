@@ -53,7 +53,7 @@ byte-for-byte reproducible for a given deck and `pptctl` version.
 | `overflow` | Shape geometry extends past the slide boundary. |
 | `tiny-text` | A text run is below the minimum font size (default 12 pt, `--min-font-size`). |
 | `alt-text` | A picture has no alt text and is not marked decorative. |
-| `font-risk` | A font is referenced but neither embedded nor on the safe list. |
+| `font-risk` | A font is referenced but neither embedded nor bundled with the target platform (`--target all\|windows\|macos`; Office-bundled fonts always count as safe). The message says where it substitutes. |
 | `empty-ph` | A content placeholder contains no text. |
 | `ctype` | A part has a suspect content type, or none declared at all. |
 | `img-bloat` | An image is stored at far higher resolution than it is displayed (default: above 300 DPI effective and at least 64 KiB stored; `--max-image-dpi`, `--min-image-bytes`). |
