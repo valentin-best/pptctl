@@ -2,7 +2,7 @@
 
 > A fast CLI for `.pptx` files. Inspect, lint, diff, optimize, merge, extract.
 
-**Status:** early development. `info` and `extract` work; the others are stubs.
+**Status:** early development, v0.3.0. `info`, `extract` and `lint` work; the others are stubs.
 
 ```
 $ pptctl info deck.pptx

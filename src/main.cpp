@@ -24,7 +24,7 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
 
 namespace {
 
-constexpr auto kVersion = "0.0.1-dev";
+constexpr auto kVersion = "0.3.0";
 
 pptctl::FontTarget parse_font_target(const std::string& s) {
     if (s == "windows") {
