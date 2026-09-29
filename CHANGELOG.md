@@ -17,6 +17,12 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- `diff` shape-level ops (#72): shapes matched by id, name, then placeholder
+  type/idx (recursing into groups) and reported as added, removed, moved,
+  resized, kind-changed or recolored, with EMU deltas and old/new geometry;
+  sub-pixel jitter is ignored (`geometry_tolerance_emu`, default 9525 = 1 px
+  at 96 DPI). The slide model gains a minimal `Shape::fill` (solid
+  `a:srgbClr`/`a:schemeClr`, or `a:noFill`) so recolors are detectable.
 
 ## [0.3.0] — 2026-09-29
 

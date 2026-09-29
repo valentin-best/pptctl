@@ -145,6 +145,18 @@ struct Chart {
     std::vector<ChartSeries> series;
 };
 
+// A shape's own fill from p:spPr (or p:grpSpPr). Present only when the shape
+// declares one explicitly; absent means "inherited" from the style, layout or
+// master. Deliberately minimal: only a:solidFill and a:noFill are modelled —
+// gradients, patterns and picture fills are left absent.
+struct Fill {
+    std::string kind;   // "solid" (a:solidFill) or "none" (a:noFill)
+    std::string color;  // solid: a:srgbClr@val as upper-case hex ("FF0000") or the
+                        // a:schemeClr@val name ("accent1"); empty for "none"
+
+    [[nodiscard]] bool operator==(const Fill&) const = default;
+};
+
 struct Shape {
     ShapeKind kind = ShapeKind::Other;
     std::string id;                               // p:cNvPr@id
@@ -152,6 +164,7 @@ struct Shape {
     std::optional<std::string> placeholder_type;  // p:nvPr/p:ph@type
     std::optional<int> placeholder_idx;           // p:nvPr/p:ph@idx
     std::optional<Geometry> geometry;
+    std::optional<Fill> fill;           // explicit solid/no fill; nullopt when inherited
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
     std::optional<Picture> picture;     // populated only when kind == Picture

@@ -13,8 +13,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <nlohmann/json_fwd.hpp>
+#include <optional>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pptctl {
@@ -50,7 +53,45 @@ struct TextChange {};
 
 // Structural change to a shape: added, removed, moved, resized, recolored.
 // Owned by #72.
-struct ShapeChange {};
+//
+// Shapes are matched between the two slides by id, then name, then (for
+// placeholders) type/idx, recursing into matched groups. One matched pair can
+// yield several ops (a shape both moved and recolored gives two entries); each
+// op carries everything a renderer needs, in EMU — convert to inches at output.
+enum class ShapeOp : std::uint8_t { Added, Removed, Moved, Resized, KindChanged, Recolored };
+
+struct ShapeChange {
+    ShapeOp op = ShapeOp::Added;
+    std::string id;                       // p:cNvPr@id, from B (from A when Removed)
+    std::string name;                     // p:cNvPr@name, from B (from A when Removed)
+    ShapeKind kind = ShapeKind::Other;    // kind in B (in A when Removed); new kind for KindChanged
+    std::optional<ShapeKind> old_kind;    // KindChanged only
+    std::vector<std::string> group_path;  // names of enclosing groups, outermost first
+    std::optional<Geometry> old_geometry;  // A side; nullopt when Added or A has no a:xfrm
+    std::optional<Geometry> new_geometry;  // B side; nullopt when Removed or B has no a:xfrm
+    Emu delta_x = 0;                       // Moved: new.off_x - old.off_x
+    Emu delta_y = 0;                       // Moved: new.off_y - old.off_y
+    Emu delta_cx = 0;                      // Resized: new.ext_cx - old.ext_cx
+    Emu delta_cy = 0;                      // Resized: new.ext_cy - old.ext_cy
+    std::optional<Fill> old_fill;          // A side (Recolored, Removed); nullopt when inherited
+    std::optional<Fill> new_fill;          // B side (Recolored, Added); nullopt when inherited
+};
+
+// Stable lower-snake-case label: "added", "removed", "moved", "resized",
+// "kind_changed", "recolored".
+[[nodiscard]] std::string_view to_string(ShapeOp op) noexcept;
+
+// One human-readable line, inches with two decimals, e.g.
+//   shape "Picture 3" moved by (+0.25 in, -0.10 in)
+//   shape "Child" in group "Group 1" resized by (+1.00 in, -0.50 in) to 2.00 x 0.50 in
+[[nodiscard]] std::string describe(const ShapeChange& change);
+
+// Machine-readable form with stable snake_case keys. Every key is always
+// present (null when not applicable to the op): op, id, name, kind, group_path,
+// old_kind, old_geometry, new_geometry, delta, old_fill, new_fill. Geometry and
+// delta objects carry EMU as integers (x_emu, y_emu, cx_emu, cy_emu) alongside
+// inches as doubles (x_in, y_in, cx_in, cy_in).
+[[nodiscard]] nlohmann::json to_json(const ShapeChange& change);
 
 // Picture media change: added, removed, replaced, re-linked, alt-text.
 // Owned by #73.
@@ -85,6 +126,11 @@ struct DiffOptions {
     // Minimum similarity for two non-identical slides to be paired as
     // "changed" rather than reported as one removed and one added.
     double match_threshold = 0.5;
+
+    // Position/size deltas at or below this many EMU are not reported as
+    // moved/resized, so sub-pixel jitter from a re-save stays quiet. The
+    // default is 1 px at 96 DPI (914400 / 96); 0 reports every change.
+    Emu geometry_tolerance_emu = 9525;
 };
 
 // Pair the slides of A with the slides of B: exact fingerprints first (so a
