@@ -4,6 +4,9 @@
 
 #include <algorithm>
 #include <format>
+#include <functional>
+#include <optional>
+#include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
@@ -26,6 +29,9 @@ std::vector<pptctl::Diagnostic> check_font_risk(const std::set<std::string>& ref
                                                 const std::vector<std::string>& embedded);
 std::vector<pptctl::Diagnostic> check_ctype(
     const std::vector<std::pair<std::string, std::string>>& parts);
+using ImageProbe = std::function<std::optional<pptctl::ImageDimensions>(const pptctl::Picture&)>;
+std::vector<pptctl::Diagnostic> check_img_bloat(const pptctl::Slide& slide,
+                                                const ImageProbe& probe);
 }  // namespace pptctl::cmd
 
 namespace {
@@ -761,4 +767,159 @@ TEST_CASE("ctype: integration — three_slides.pptx printer-settings flagged") {
     CHECK(run("three_slides.pptx", out) == 0);
     CHECK(out.find("ctype") != std::string::npos);
     CHECK(out.find("printerSettings") != std::string::npos);
+}
+
+// ── img-bloat rule ────────────────────────────────────────────────────────────
+
+namespace {
+
+// One picture (optionally linked, optionally nested in a group) with the given
+// display extent. 914400 EMU = 1 inch.
+std::string bloat_pic_xml(pptctl::Emu cx,
+                          pptctl::Emu cy,
+                          bool linked = false,
+                          bool grouped = false) {
+    const std::string pic = std::format(
+        R"(<p:pic>
+      <p:nvPicPr><p:cNvPr id="3" name="Photo 7"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip {}="rId2"/></p:blipFill>
+      <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{}" cy="{}"/></a:xfrm></p:spPr>
+    </p:pic>)",
+        linked ? "r:link" : "r:embed",
+        cx,
+        cy);
+    const std::string body = grouped ? std::format(
+                                           R"(<p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 1"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{}" cy="{}"/></a:xfrm></p:grpSpPr>
+      {}
+    </p:grpSp>)",
+                                           kW,
+                                           kH,
+                                           pic)
+                                     : pic;
+    return std::format(
+        R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    {}
+  </p:spTree></p:cSld>
+</p:sld>)",
+        body);
+}
+
+constexpr pptctl::Emu kInch = pptctl::kEmuPerInch;
+
+// Runs the rule with a probe that always reports the given pixel size and
+// counts how often it was consulted.
+std::vector<pptctl::Diagnostic> bloat_diags(const std::string& xml,
+                                            std::optional<pptctl::ImageDimensions> dims,
+                                            int* probe_calls = nullptr) {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    slide.set_index(4);
+    return pptctl::cmd::check_img_bloat(slide, [&](const pptctl::Picture&) {
+        if (probe_calls) {
+            ++*probe_calls;
+        }
+        return dims;
+    });
+}
+
+}  // namespace
+
+TEST_CASE("img-bloat: 1600x1200 px shown at 1 inch wide — diagnostic") {
+    const auto d = bloat_diags(bloat_pic_xml(kInch, kInch * 3 / 4), {{1600, 1200}});
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].rule_id == "img-bloat");
+    CHECK(d[0].severity == pptctl::Severity::Warning);
+    CHECK(d[0].slide_index == 4);
+    CHECK(d[0].shape_name == "Photo 7");
+}
+
+TEST_CASE("img-bloat: exactly 200 DPI — no diagnostic (threshold is exclusive)") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{200, 200}}).empty());
+}
+
+TEST_CASE("img-bloat: 201 DPI — diagnostic") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{201, 200}}).size() == 1);
+}
+
+TEST_CASE("img-bloat: only the vertical axis is oversampled — diagnostic (max of both axes)") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{100, 2000}}).size() == 1);
+}
+
+TEST_CASE("img-bloat: small image shown large — no diagnostic") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch * 8, kInch * 6), {{64, 48}}).empty());
+}
+
+TEST_CASE("img-bloat: zero-width extent — no diagnostic and probe not consulted") {
+    int calls = 0;
+    CHECK(bloat_diags(bloat_pic_xml(0, kInch), {{4000, 3000}}, &calls).empty());
+    CHECK(calls == 0);
+}
+
+TEST_CASE("img-bloat: linked (external) picture — no diagnostic and probe not consulted") {
+    int calls = 0;
+    CHECK(
+        bloat_diags(bloat_pic_xml(kInch, kInch, /*linked=*/true), {{4000, 3000}}, &calls).empty());
+    CHECK(calls == 0);
+}
+
+TEST_CASE("img-bloat: probe cannot read the image — no diagnostic") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), std::nullopt).empty());
+}
+
+TEST_CASE("img-bloat: non-picture shape — probe not consulted") {
+    int calls = 0;
+    CHECK(bloat_diags(slide_xml(0, 0, kInch, kInch), {{4000, 3000}}, &calls).empty());
+    CHECK(calls == 0);
+}
+
+TEST_CASE("img-bloat: picture nested in a group — diagnostic fires recursively") {
+    const auto d =
+        bloat_diags(bloat_pic_xml(kInch, kInch, false, /*grouped=*/true), {{4000, 3000}});
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].shape_name == "Photo 7");
+}
+
+TEST_CASE("img-bloat: message reports pixel size, display size and effective DPI") {
+    const auto d = bloat_diags(bloat_pic_xml(kInch * 2, kInch * 3 / 2), {{4000, 3000}});
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].message.find("Photo 7") != std::string::npos);
+    CHECK(d[0].message.find("4000x3000 px") != std::string::npos);
+    CHECK(d[0].message.find("2.0x1.5 in") != std::string::npos);
+    CHECK(d[0].message.find("2000 DPI") != std::string::npos);
+    CHECK(d[0].message.find("200 DPI") != std::string::npos);
+}
+
+// ── img-bloat: integration ────────────────────────────────────────────────────
+
+TEST_CASE("img-bloat: integration — bloat_deck.pptx flags the oversampled picture only") {
+    std::string out;
+    REQUIRE(run("bloat_deck.pptx", out) == 0);
+    std::size_t hits = 0;
+    for (std::size_t pos = out.find("[img-bloat]"); pos != std::string::npos;
+         pos = out.find("[img-bloat]", pos + 1)) {
+        ++hits;
+    }
+    CHECK(hits == 1);
+    CHECK(out.find("bloat_deck.pptx:1: warning[img-bloat]") != std::string::npos);
+    CHECK(out.find("1600x1200 px") != std::string::npos);
+}
+
+TEST_CASE("img-bloat: integration — images_deck.pptx (64 px images at 3 in) produces no findings") {
+    std::string out;
+    REQUIRE(run("images_deck.pptx", out) == 0);
+    CHECK(out.find("[img-bloat]") == std::string::npos);
+}
+
+TEST_CASE("img-bloat: integration — minimal.pptx produces no findings") {
+    std::string out;
+    REQUIRE(run("minimal.pptx", out) == 0);
+    CHECK(out.find("[img-bloat]") == std::string::npos);
 }

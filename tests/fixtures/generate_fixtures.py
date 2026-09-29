@@ -16,6 +16,7 @@ Pass --check to verify committed fixtures match regenerated output (useful in CI
 
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
+  - bloat_deck.pptx         2 slides: a 1600x1200 PNG shown 1 in wide, and a small PNG.
   - notes_and_masters.pptx  4 slides with speaker notes, plus a 2nd slide master.
   - tables_deck.pptx        2 slides: a plain 2×2 table and a merged-cell table.
   - charts_deck.pptx        2 slides: a clustered-bar chart and a pie chart.
@@ -151,6 +152,26 @@ def build_images_deck(path: Path) -> None:
             io.BytesIO(png), Inches(1), Inches(1.5), height=Inches(3)
         )
     _set_core_props(prs, "pptctl images fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def build_bloat_deck(path: Path) -> None:
+    """2 slides. Slide 1 carries a 1600x1200 PNG displayed 1 inch wide (about
+    1600 DPI effective -> lint img-bloat). Slide 2 carries a 64x48 PNG
+    displayed 3 inches tall (about 21 DPI -> clean). Solid colour keeps the
+    large PNG a few KB on disk."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    s1 = prs.slides.add_slide(blank)
+    s1.shapes.add_picture(
+        io.BytesIO(_png(1600, 1200, (200, 40, 40))), Inches(1), Inches(1), width=Inches(1)
+    )
+    s2 = prs.slides.add_slide(blank)
+    s2.shapes.add_picture(
+        io.BytesIO(_png(64, 48, (40, 40, 200))), Inches(1), Inches(1), height=Inches(3)
+    )
+    _set_core_props(prs, "pptctl image bloat fixture")
     prs.save(str(path))
     _normalize_zip(path)
 
@@ -332,6 +353,7 @@ def inject_second_master(path: Path) -> None:
 
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
+    ("bloat_deck.pptx", [build_bloat_deck]),
     ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),
     ("tables_deck.pptx", [build_tables_deck]),
     ("charts_deck.pptx", [build_charts_deck]),

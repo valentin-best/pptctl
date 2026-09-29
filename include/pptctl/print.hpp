@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <cstddef>
 #include <format>
 #include <iostream>
 #include <ostream>
+#include <string>
 #include <utility>
 
 namespace pptctl {
@@ -49,6 +51,29 @@ void print_to(std::ostream& os, std::format_string<Args...> fmt, Args&&... args)
 template <typename... Args>
 void println_to(std::ostream& os, std::format_string<Args...> fmt, Args&&... args) {
     os << std::format(fmt, std::forward<Args>(args)...) << '\n';
+}
+
+// Human-readable byte count: "512 B", "1.5 KiB", "2.3 MiB", ...
+inline std::string human_bytes(std::size_t n) {
+    constexpr double kKi = 1024.0;
+    auto v = static_cast<double>(n);
+    const char* unit = "B";
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "KiB";
+    }
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "MiB";
+    }
+    if (v >= kKi) {
+        v /= kKi;
+        unit = "GiB";
+    }
+    if (n < 1024) {
+        return std::format("{} {}", n, unit);
+    }
+    return std::format("{:.1f} {}", v, unit);
 }
 
 }  // namespace pptctl

@@ -1,8 +1,13 @@
 // pptctl lint — static analysis for .pptx files.
 
+#include <algorithm>
 #include <cctype>
 #include <format>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <optional>
+#include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
@@ -256,6 +261,60 @@ bool is_infrastructure(std::string_view name) noexcept {
            name.find("/_rels/") != std::string_view::npos;
 }
 
+// ── img-bloat rule ────────────────────────────────────────────────────────────
+//
+// Per-picture, but it needs the media bytes behind each blip, so like font-risk
+// and ctype it runs outside the per-slide registry: lint_to hands it a probe
+// that reads (and caches) image headers through the package.
+
+// Above this the stored pixels can't be seen even on a 4K projection of a
+// standard 13.33 in wide slide (~290 DPI); 200 leaves headroom for cropping.
+constexpr double kMaxEffectiveDpi = 200.0;
+
+double emu_to_inches(Emu v) noexcept {
+    return static_cast<double>(v) / static_cast<double>(kEmuPerInch);
+}
+
+using ImageProbe = std::function<std::optional<ImageDimensions>(const Picture&)>;
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void check_img_bloat_shape(const Shape& shape,
+                           std::size_t slide_idx,
+                           const ImageProbe& probe,
+                           std::vector<Diagnostic>& out) {
+    if (shape.kind == ShapeKind::Picture && shape.picture && !shape.picture->linked &&
+        shape.geometry && shape.geometry->ext_cx > 0 && shape.geometry->ext_cy > 0) {
+        const Picture& pic = *shape.picture;
+        if (const auto dims = probe(pic)) {
+            const double w_in = emu_to_inches(shape.geometry->ext_cx);
+            const double h_in = emu_to_inches(shape.geometry->ext_cy);
+            const double dpi = std::max(static_cast<double>(dims->width) / w_in,
+                                        static_cast<double>(dims->height) / h_in);
+            if (dpi > kMaxEffectiveDpi) {
+                const std::string stored =
+                    pic.size_bytes ? std::format(", {} stored", human_bytes(*pic.size_bytes)) : "";
+                out.push_back({"img-bloat",
+                               Severity::Warning,
+                               slide_idx,
+                               shape.name,
+                               std::format("picture \"{}\" is {}x{} px shown at {:.1f}x{:.1f} in "
+                                           "({:.0f} DPI effective, above {:.0f} DPI{})",
+                                           shape.name,
+                                           dims->width,
+                                           dims->height,
+                                           w_in,
+                                           h_in,
+                                           dpi,
+                                           kMaxEffectiveDpi,
+                                           stored)});
+            }
+        }
+    }
+    for (const auto& child : shape.children) {
+        check_img_bloat_shape(child, slide_idx, probe, out);
+    }
+}
+
 // ── registry ──────────────────────────────────────────────────────────────────
 
 std::vector<RegisteredRule> make_rules() {
@@ -351,6 +410,18 @@ std::vector<Diagnostic> check_ctype(const std::vector<std::pair<std::string, std
     return out;
 }
 
+// One diagnostic per embedded picture whose intrinsic resolution exceeds
+// kMaxEffectiveDpi at its displayed size (larger of the two axes). Linked
+// pictures, pictures without a usable extent, and images the probe can't read
+// are skipped — never a false positive from missing data.
+std::vector<Diagnostic> check_img_bloat(const Slide& slide, const ImageProbe& probe) {
+    std::vector<Diagnostic> out;
+    for (const auto& shape : slide.shapes()) {
+        check_img_bloat_shape(shape, slide.index(), probe, out);
+    }
+    return out;
+}
+
 int lint_to(const std::string& path, std::ostream& os) {
     Package pkg;
     if (!pkg.open(path)) {
@@ -367,6 +438,21 @@ int lint_to(const std::string& path, std::ostream& os) {
     const CanvasSize canvas = pres.canvas();
     std::vector<Diagnostic> diagnostics;
 
+    // Media parts are shared across slides (a logo on every slide is one part),
+    // so header probes are cached by part name and each part is read once.
+    std::map<std::string, std::optional<ImageDimensions>> dims_cache;
+    const ImageProbe probe = [&](const Picture& pic) -> std::optional<ImageDimensions> {
+        if (pic.target.empty()) {
+            return std::nullopt;
+        }
+        auto it = dims_cache.find(pic.target);
+        if (it == dims_cache.end()) {
+            it = dims_cache.emplace(pic.target, probe_image_dimensions(pkg.read_part(pic.target)))
+                     .first;
+        }
+        return it->second;
+    };
+
     std::set<std::string> referenced_fonts;
     std::size_t n = 0;
     for (const auto& part : pres.slide_parts()) {
@@ -380,6 +466,8 @@ int lint_to(const std::string& path, std::ostream& os) {
         for (const auto& rule : rules) {
             rule.fn(slide, canvas, diagnostics);
         }
+        const auto bloat = check_img_bloat(slide, probe);
+        diagnostics.insert(diagnostics.end(), bloat.begin(), bloat.end());
         const auto slide_fonts = slide_referenced_fonts(slide);
         referenced_fonts.insert(slide_fonts.begin(), slide_fonts.end());
     }
