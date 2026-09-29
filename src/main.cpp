@@ -66,6 +66,19 @@ int main(int argc, char** argv) {
     lint_cmd->add_option("file", lint_path, "path to .pptx")->required()->check(CLI::ExistingFile);
     lint_cmd->add_flag("--json", lint_opts.json, "emit machine-readable JSON");
     lint_cmd->add_flag("--strict", lint_opts.strict, "exit 2 if any diagnostic is reported");
+    lint_cmd
+        ->add_option("--max-image-dpi",
+                     lint_opts.max_image_dpi,
+                     "img-bloat: flag images above this effective DPI (default 300)")
+        ->check(CLI::PositiveNumber);
+    lint_cmd->add_option("--min-image-bytes",
+                         lint_opts.min_image_bytes,
+                         "img-bloat: ignore images stored smaller than this (default 65536)");
+    lint_cmd
+        ->add_option("--min-font-size",
+                     lint_opts.min_font_pt,
+                     "tiny-text: flag text below this size in pt (default 12)")
+        ->check(CLI::PositiveNumber);
     lint_cmd->callback([&]() { std::exit(pptctl::cmd::lint(lint_path, lint_opts)); });
 
     // --- placeholders for future subcommands ---------------------------------

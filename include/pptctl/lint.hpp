@@ -33,17 +33,24 @@ struct Diagnostic {
     std::string message;
 };
 
-using LintRule = std::function<void(const Slide&, const CanvasSize&, std::vector<Diagnostic>&)>;
+// Output, exit-code and threshold settings of the lint subcommand. Declared
+// before LintRule so rules can read their thresholds.
+struct LintOptions {
+    bool json = false;    // machine-readable JSON instead of compiler-style lines
+    bool strict = false;  // exit 2 when any diagnostic is emitted
+
+    // Rule thresholds (CLI: --max-image-dpi, --min-image-bytes, --min-font-size).
+    double max_image_dpi = 300.0;            // img-bloat: fire above this effective DPI
+    std::uint64_t min_image_bytes = 65'536;  // img-bloat: skip images stored under 64 KiB
+    double min_font_pt = 12.0;               // tiny-text: fire below this size
+};
+
+using LintRule = std::function<void(
+    const Slide&, const CanvasSize&, const LintOptions&, std::vector<Diagnostic>&)>;
 
 struct RegisteredRule {
     std::string id;
     LintRule fn;
-};
-
-// Output / exit-code behaviour of the lint subcommand.
-struct LintOptions {
-    bool json = false;    // machine-readable JSON instead of compiler-style lines
-    bool strict = false;  // exit 2 when any diagnostic is emitted
 };
 
 }  // namespace pptctl

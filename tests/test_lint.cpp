@@ -34,7 +34,8 @@ int report(const std::string& path,
            const pptctl::LintOptions& opts,
            std::ostream& os);
 std::vector<pptctl::Diagnostic> lint_slide(const pptctl::Slide& slide,
-                                           const pptctl::CanvasSize& canvas);
+                                           const pptctl::CanvasSize& canvas,
+                                           const pptctl::LintOptions& opts = {});
 std::set<std::string> slide_referenced_fonts(const pptctl::Slide& slide);
 std::vector<pptctl::Diagnostic> check_font_risk(const std::set<std::string>& referenced,
                                                 const std::vector<std::string>& embedded);
@@ -42,7 +43,8 @@ std::vector<pptctl::Diagnostic> check_ctype(
     const std::vector<std::pair<std::string, std::string>>& parts);
 using ImageProbe = std::function<std::optional<pptctl::ImageDimensions>(const pptctl::Picture&)>;
 std::vector<pptctl::Diagnostic> check_img_bloat(const pptctl::Slide& slide,
-                                                const ImageProbe& probe);
+                                                const ImageProbe& probe,
+                                                const pptctl::LintOptions& opts = {});
 }  // namespace pptctl::cmd
 
 namespace {
@@ -126,11 +128,11 @@ std::string group_slide_xml(pptctl::Emu child_off_x,
         child_ext_cy);
 }
 
-std::vector<pptctl::Diagnostic> lint_xml(const std::string& xml) {
+std::vector<pptctl::Diagnostic> lint_xml(const std::string& xml, pptctl::LintOptions opts = {}) {
     pptctl::Slide slide;
     REQUIRE(slide.parse(xml));
     slide.set_index(1);
-    return pptctl::cmd::lint_slide(slide, kCanvas);
+    return pptctl::cmd::lint_slide(slide, kCanvas, opts);
 }
 
 }  // namespace
@@ -377,6 +379,25 @@ TEST_CASE("tiny-text: run at 11.99pt (1199 centipt) — diagnostic") {
     CHECK(it->severity == pptctl::Severity::Warning);
     CHECK(it->slide_index == 1);
     CHECK(it->shape_name == "Label 1");
+}
+
+TEST_CASE("tiny-text: --min-font-size 10 — 10.5pt run passes, 9.5pt fires") {
+    auto ok = lint_xml(slide_xml_with_text(1050), {.min_font_pt = 10});
+    CHECK(
+        std::none_of(ok.begin(), ok.end(), [](const auto& d) { return d.rule_id == "tiny-text"; }));
+    auto bad = lint_xml(slide_xml_with_text(950), {.min_font_pt = 10});
+    auto it = std::find_if(
+        bad.begin(), bad.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    REQUIRE(it != bad.end());
+    CHECK(it->message.find("below 10pt minimum") != std::string::npos);
+}
+
+TEST_CASE("tiny-text: message quotes the default 12pt threshold") {
+    auto diags = lint_xml(slide_xml_with_text(800));
+    auto it = std::find_if(
+        diags.begin(), diags.end(), [](const auto& d) { return d.rule_id == "tiny-text"; });
+    REQUIRE(it != diags.end());
+    CHECK(it->message.find("below 12pt minimum") != std::string::npos);
 }
 
 TEST_CASE("tiny-text: run at 8pt (800 centipt) — diagnostic") {
@@ -892,16 +913,20 @@ constexpr pptctl::Emu kInch = pptctl::kEmuPerInch;
 // counts how often it was consulted.
 std::vector<pptctl::Diagnostic> bloat_diags(const std::string& xml,
                                             std::optional<pptctl::ImageDimensions> dims,
-                                            int* probe_calls = nullptr) {
+                                            int* probe_calls = nullptr,
+                                            pptctl::LintOptions opts = {}) {
     pptctl::Slide slide;
     REQUIRE(slide.parse(xml));
     slide.set_index(4);
-    return pptctl::cmd::check_img_bloat(slide, [&](const pptctl::Picture&) {
-        if (probe_calls) {
-            ++*probe_calls;
-        }
-        return dims;
-    });
+    return pptctl::cmd::check_img_bloat(
+        slide,
+        [&](const pptctl::Picture&) {
+            if (probe_calls) {
+                ++*probe_calls;
+            }
+            return dims;
+        },
+        opts);
 }
 
 }  // namespace
@@ -915,12 +940,32 @@ TEST_CASE("img-bloat: 1600x1200 px shown at 1 inch wide — diagnostic") {
     CHECK(d[0].shape_name == "Photo 7");
 }
 
-TEST_CASE("img-bloat: exactly 200 DPI — no diagnostic (threshold is exclusive)") {
-    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{200, 200}}).empty());
+TEST_CASE("img-bloat: exactly 300 DPI — no diagnostic (threshold is exclusive)") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{300, 300}}).empty());
 }
 
-TEST_CASE("img-bloat: 201 DPI — diagnostic") {
-    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{201, 200}}).size() == 1);
+TEST_CASE("img-bloat: 250 DPI — no diagnostic (4K projection resolves ~290 DPI)") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{250, 250}}).empty());
+}
+
+TEST_CASE("img-bloat: 301 DPI — diagnostic") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{301, 300}}).size() == 1);
+}
+
+TEST_CASE("img-bloat: --max-image-dpi lowers the threshold") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{150, 150}}, nullptr, {.max_image_dpi = 100})
+              .size() == 1);
+}
+
+TEST_CASE("img-bloat: --max-image-dpi raises the threshold") {
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{900, 900}}, nullptr, {.max_image_dpi = 1000})
+              .empty());
+}
+
+TEST_CASE("img-bloat: unknown stored size — floor does not apply, diagnostic") {
+    // Parsed without a package: size_bytes is nullopt, so the byte floor can't
+    // suppress a genuinely oversampled image.
+    CHECK(bloat_diags(bloat_pic_xml(kInch, kInch), {{1600, 1200}}).size() == 1);
 }
 
 TEST_CASE("img-bloat: only the vertical axis is oversampled — diagnostic (max of both axes)") {
@@ -968,22 +1013,52 @@ TEST_CASE("img-bloat: message reports pixel size, display size and effective DPI
     CHECK(d[0].message.find("4000x3000 px") != std::string::npos);
     CHECK(d[0].message.find("2.0x1.5 in") != std::string::npos);
     CHECK(d[0].message.find("2000 DPI") != std::string::npos);
-    CHECK(d[0].message.find("200 DPI") != std::string::npos);
+    CHECK(d[0].message.find("300 DPI") != std::string::npos);
+}
+
+TEST_CASE("img-bloat: message quotes the active threshold") {
+    const auto d =
+        bloat_diags(bloat_pic_xml(kInch, kInch), {{4000, 3000}}, nullptr, {.max_image_dpi = 150});
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].message.find("above 150 DPI") != std::string::npos);
 }
 
 // ── img-bloat: integration ────────────────────────────────────────────────────
 
-TEST_CASE("img-bloat: integration — bloat_deck.pptx flags the oversampled picture only") {
-    std::string out;
-    REQUIRE(run("bloat_deck.pptx", out) == 0);
+namespace {
+std::size_t count_bloat(const std::string& out) {
     std::size_t hits = 0;
     for (std::size_t pos = out.find("[img-bloat]"); pos != std::string::npos;
          pos = out.find("[img-bloat]", pos + 1)) {
         ++hits;
     }
-    CHECK(hits == 1);
+    return hits;
+}
+}  // namespace
+
+TEST_CASE("img-bloat: integration — bloat_deck.pptx flags the large oversampled picture only") {
+    // Slide 1: 1600x1200 solid PNG (7 KiB) at 1600 DPI — under the 64 KiB
+    // floor, skipped. Slide 2: 200x150 noise PNG (~90 KiB) at 400 DPI — fires.
+    // Slide 3: 64x48 at 3 in — clean.
+    std::string out;
+    REQUIRE(run("bloat_deck.pptx", out) == 0);
+    CHECK(count_bloat(out) == 1);
+    CHECK(out.find("bloat_deck.pptx:2: warning[img-bloat]") != std::string::npos);
+    CHECK(out.find("200x150 px") != std::string::npos);
+    CHECK(out.find("1600x1200 px") == std::string::npos);
+}
+
+TEST_CASE("img-bloat: integration — --min-image-bytes 0 lets the tiny 1600 DPI image fire") {
+    std::string out;
+    REQUIRE(run("bloat_deck.pptx", out, {.min_image_bytes = 0}) == 0);
+    CHECK(count_bloat(out) == 2);
     CHECK(out.find("bloat_deck.pptx:1: warning[img-bloat]") != std::string::npos);
-    CHECK(out.find("1600x1200 px") != std::string::npos);
+}
+
+TEST_CASE("img-bloat: integration — --max-image-dpi 500 silences the 400 DPI image") {
+    std::string out;
+    REQUIRE(run("bloat_deck.pptx", out, {.max_image_dpi = 500}) == 0);
+    CHECK(count_bloat(out) == 0);
 }
 
 TEST_CASE("img-bloat: integration — images_deck.pptx (64 px images at 3 in) produces no findings") {
