@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development — only `info` is implemented; the other subcommands are stubs that print "not yet implemented".
+`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.3.0) — `info`, `extract` and `lint` are implemented; `diff`, `optimize`, `merge` and `fill` are stubs that print "not yet implemented".
 
 ## Project workflow & status
 
@@ -10,7 +10,7 @@ Work is planned in `ROADMAP.md` / `PLAN.md` and tracked in GitHub **milestones**
 
 - **To see where things stand and what to do next, run `/next`** — it reports the current phase, its open issues, and a recommended next task. Prefer it over re-deriving status by hand.
 - Work issue-by-issue within the current phase. Reference the issue number in commits/PRs.
-- Phases 0 and 1 are largely already built; their open issues are the remaining **gaps** only (e.g. Windows CI, `.clang-tidy`, theme colors, relationship resolution, fixtures). Phases 3–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
+- Phases 0–3 are done and tagged (v0.1.0, v0.2.0, v0.3.0; see `CHANGELOG.md`). Phases 4–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
 - Don't publish the roadmap, make the repo public, or post launch content until something has actually shipped (a deliberate choice — see `ROADMAP.md`).
 
 ## Build, test, run

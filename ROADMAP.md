@@ -51,20 +51,20 @@ Exit criteria: `pptctl extract` produces consistent output across ten real-world
 
 **Ship moment:** v0.2.0. Now there's a story: pptctl is the OSS tool for getting structured data out of presentations. Pitch on r/MachineLearning, r/LocalLLaMA — people want this for RAG pipelines.
 
-## Phase 3 — `pptctl lint` (weeks 8–10)
+## Phase 3 — `pptctl lint` (weeks 8–10) ✅
 
 Goal: catch common authoring problems statically.
 
 Lint rules to implement (start with the most universal):
 
-- [ ] **Canvas overflow**: any shape extending past slide bounds.
-- [ ] **Tiny text**: font size below a threshold (default 12pt).
-- [ ] **Missing alt-text on images**: accessibility.
-- [ ] **Font fallback risk**: font referenced but no embed and not in safe-list.
-- [ ] **Empty placeholders**: layouts with placeholders that have no content.
-- [ ] **Suspect content types**: e.g. printer-settings stubs that break Keynote (anthropics/skills#1167).
-- [ ] **Image bloat**: images stored at much higher resolution than displayed.
-- [ ] Output: human-readable by default; `--json` for machine; `--strict` for non-zero exit on any warning.
+- [x] **Canvas overflow**: any shape extending past slide bounds.
+- [x] **Tiny text**: font size below a threshold (default 12pt).
+- [x] **Missing alt-text on images**: accessibility.
+- [x] **Font fallback risk**: font referenced but no embed and not in safe-list.
+- [x] **Empty placeholders**: layouts with placeholders that have no content.
+- [x] **Suspect content types**: e.g. printer-settings stubs that break Keynote (anthropics/skills#1167).
+- [x] **Image bloat**: images stored at much higher resolution than displayed.
+- [x] Output: human-readable by default; `--json` for machine; `--strict` for non-zero exit on any warning.
 
 Exit criteria: lint catches at least one real issue in 50% of real-world decks from a sample of ten.
 
