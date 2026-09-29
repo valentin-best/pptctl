@@ -113,6 +113,7 @@ add_library(pptctl_lib STATIC
     src/lib/package.cpp
     src/lib/presentation.cpp
     src/lib/slide.cpp
+    src/lib/image.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -146,6 +147,7 @@ add_executable(pptctl_tests
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp
+    tests/test_image.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
 )

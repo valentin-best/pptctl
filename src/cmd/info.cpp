@@ -15,28 +15,6 @@ namespace pptctl::cmd {
 
 namespace {
 
-std::string human_bytes(std::size_t n) {
-    constexpr double kKi = 1024.0;
-    auto v = static_cast<double>(n);
-    const char* unit = "B";
-    if (v >= kKi) {
-        v /= kKi;
-        unit = "KiB";
-    }
-    if (v >= kKi) {
-        v /= kKi;
-        unit = "MiB";
-    }
-    if (v >= kKi) {
-        v /= kKi;
-        unit = "GiB";
-    }
-    if (n < 1024) {
-        return std::format("{} {}", n, unit);
-    }
-    return std::format("{:.1f} {}", v, unit);
-}
-
 std::string join(const std::vector<std::string>& xs, std::string_view sep) {
     std::string out;
     for (std::size_t i = 0; i < xs.size(); ++i) {
