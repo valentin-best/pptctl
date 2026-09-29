@@ -114,6 +114,7 @@ add_library(pptctl_lib STATIC
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
+    src/lib/diff.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -131,6 +132,7 @@ add_executable(pptctl
     src/cmd/info.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
+    src/cmd/diff.cpp
 )
 target_link_libraries(pptctl
     PRIVATE
@@ -148,8 +150,10 @@ add_executable(pptctl_tests
     tests/test_extract.cpp
     tests/test_lint.cpp
     tests/test_image.cpp
+    tests/test_diff.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
+    src/cmd/diff.cpp
 )
 target_link_libraries(pptctl_tests
     PRIVATE

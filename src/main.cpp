@@ -5,6 +5,7 @@
 
 #include <CLI/CLI.hpp>
 #include <ostream>
+#include <pptctl/diff.hpp>
 #include <pptctl/lint.hpp>
 #include <pptctl/print.hpp>
 #include <string>
@@ -19,6 +20,7 @@ int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
 int lint(const std::string& path, const LintOptions& opts);
 int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
+int diff(const std::string& a, const std::string& b, const DiffOptions& opts);
 
 }  // namespace pptctl::cmd
 
@@ -108,8 +110,26 @@ int main(int argc, char** argv) {
     app.add_subcommand("optimize", "Reduce file size (not yet implemented)")->callback([] {
         std::exit(not_implemented("optimize"));
     });
-    app.add_subcommand("diff", "Semantic diff between two .pptx files (not yet implemented)")
-        ->callback([] { std::exit(not_implemented("diff")); });
+    // --- diff ----------------------------------------------------------------
+    std::string diff_a;
+    std::string diff_b;
+    pptctl::DiffOptions diff_opts;
+    auto* diff_cmd = app.add_subcommand("diff", "Semantic diff between two .pptx files");
+    diff_cmd->add_option("a", diff_a, "path to the old .pptx")
+        ->required()
+        ->check(CLI::ExistingFile);
+    diff_cmd->add_option("b", diff_b, "path to the new .pptx")
+        ->required()
+        ->check(CLI::ExistingFile);
+    diff_cmd
+        ->add_option("--match-threshold",
+                     diff_opts.match_threshold,
+                     "minimum similarity (0-1) to pair edited slides instead of reporting "
+                     "remove + add")
+        ->check(CLI::Range(0.0, 1.0))
+        ->capture_default_str();
+    diff_cmd->callback([&]() { std::exit(pptctl::cmd::diff(diff_a, diff_b, diff_opts)); });
+
     app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")->callback([] {
         std::exit(not_implemented("merge"));
     });
