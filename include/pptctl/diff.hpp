@@ -13,8 +13,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <nlohmann/json.hpp>
+#include <optional>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pptctl {
@@ -54,7 +57,42 @@ struct ShapeChange {};
 
 // Picture media change: added, removed, replaced, re-linked, alt-text.
 // Owned by #73.
-struct PictureChange {};
+//
+// Pictures are paired across the two slides by shape id, then by shape name
+// (groups are walked). Media identity is the content hash (Picture::media_hash)
+// when the picture resolved, so the same bytes under different part names are
+// not a change and different bytes under the same name are; unresolved
+// pictures fall back to the relationship target. One matched pair can yield
+// more than one op (e.g. Replaced and AltTextChanged), emitted in that order.
+enum class PictureOp : std::uint8_t {
+    Added,           // present only in B
+    Removed,         // present only in A
+    Replaced,        // same shape, different media
+    Relinked,        // embedded <-> linked (external)
+    AltTextChanged,  // alt text, title or decorative marker differs
+};
+
+struct PictureChange {
+    PictureOp op = PictureOp::Added;
+    std::string shape_id;           // p:cNvPr@id — B's when the shape exists there, else A's
+    std::string shape_name;         // p:cNvPr@name, same side as shape_id
+    std::optional<Picture> before;  // A side; nullopt when Added
+    std::optional<Picture> after;   // B side; nullopt when Removed
+};
+
+// Stable snake_case name of the op ("added", "alt_text_changed", ...), as used
+// by to_json.
+[[nodiscard]] std::string_view to_string(PictureOp op) noexcept;
+
+// One-line human summary, e.g.
+//   picture "Picture 2" replaced (image1.png 120 B 64x48 -> image7.jpg 2.3 MiB 1920x1080)
+[[nodiscard]] std::string describe(const PictureChange& change);
+
+// {"op", "shape_id", "shape_name", "before", "after"}; each side is null or
+// {"rel_id", "linked", "target", "content_type", "size_bytes", "media_hash",
+// "width", "height", "alt_text", "title", "decorative"} with null for unknowns.
+// media_hash is a 16-digit hex string (a uint64 is not JSON-safe).
+[[nodiscard]] nlohmann::json to_json(const PictureChange& change);
 
 struct SlideChanges {
     std::vector<TextChange> text;

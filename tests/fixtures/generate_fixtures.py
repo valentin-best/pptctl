@@ -16,6 +16,8 @@ Pass --check to verify committed fixtures match regenerated output (useful in CI
 
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
+  - images_deck_v2.pptx     images_deck.pptx with one picture replaced, one removed,
+                            one added and one alt text changed; media parts renamed.
   - bloat_deck.pptx         3 slides: tiny-but-oversampled PNG, large oversampled PNG, clean PNG.
   - lint_problems.pptx      7 slides, one per lint rule (plus the printer-settings stub
                             python-pptx ships, which trips the deck-level ctype rule).
@@ -176,14 +178,76 @@ def build_images_deck(path: Path) -> None:
         box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(9), Inches(0.8))
         box.text_frame.text = f"Slide {i + 1}"
         # Vary color per slide -> 12 distinct media parts.
-        color = ((i * 20) % 256, (i * 35) % 256, (255 - i * 18) % 256)
-        png = _png(64 + i, 48 + i, color)
+        png = _png(64 + i, 48 + i, _images_deck_color(i))
         slide.shapes.add_picture(
             io.BytesIO(png), Inches(1), Inches(1.5), height=Inches(3)
         )
     _set_core_props(prs, "pptctl images fixture")
     prs.save(str(path))
     _normalize_zip(path)
+
+
+def _images_deck_color(i: int) -> tuple[int, int, int]:
+    return ((i * 20) % 256, (i * 35) % 256, (255 - i * 18) % 256)
+
+
+def build_images_deck_v2(path: Path) -> None:
+    """images_deck.pptx with four picture edits, for the picture diff (#73):
+      slide 3   picture replaced by a different PNG (same shape id/name)
+      slide 5   picture removed
+      slide 7   a second picture added
+      slide 9   alt text changed (same media)
+    Every other slide is byte-for-byte the same content as images_deck.pptx.
+    rename_media_parts() then renames every media part so identical bytes live
+    under different part names in the two decks: the diff must match them by
+    content hash, not by name."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    for i in range(12):
+        slide = prs.slides.add_slide(blank)
+        box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(9), Inches(0.8))
+        box.text_frame.text = f"Slide {i + 1}"
+        color = _images_deck_color(i)
+        if i == 2:
+            color = (250, 250, 250)  # unused by the base deck: a new media part
+        if i == 4:
+            continue  # picture removed
+        png = _png(64 + i, 48 + i, color)
+        pic = slide.shapes.add_picture(
+            io.BytesIO(png), Inches(1), Inches(1.5), height=Inches(3)
+        )
+        if i == 6:
+            slide.shapes.add_picture(
+                io.BytesIO(_png(96, 72, (10, 250, 10))), Inches(5), Inches(1.5), height=Inches(3)
+            )
+        if i == 8:
+            pic._element.nvPicPr.cNvPr.set("descr", "Slide 9 picture, described")
+    _set_core_props(prs, "pptctl images fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def rename_media_parts(path: Path) -> None:
+    """Rename ppt/media/imageN.png -> ppt/media/pictureN.png and rewrite every
+    relationship target that points at one. [Content_Types].xml maps media by
+    extension (Default), so it needs no change."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+
+    renames = {
+        n: n.replace("ppt/media/image", "ppt/media/picture")
+        for n in parts
+        if n.startswith("ppt/media/image")
+    }
+    for old, new in renames.items():
+        parts[new] = parts.pop(old)
+    for n in [n for n in parts if n.endswith(".rels")]:
+        rels = parts[n].decode("utf-8")
+        for old, new in renames.items():
+            rels = rels.replace(old.removeprefix("ppt/"), new.removeprefix("ppt/"))
+        parts[n] = rels.encode("utf-8")
+
+    _write_zip(path, parts)
 
 
 def build_bloat_deck(path: Path) -> None:
@@ -481,6 +545,7 @@ def inject_second_master(path: Path) -> None:
 
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
+    ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
     ("bloat_deck.pptx", [build_bloat_deck]),
     ("lint_problems.pptx", [build_lint_problems_deck]),
     ("lint_clean.pptx", [build_lint_clean_deck, strip_printer_settings]),

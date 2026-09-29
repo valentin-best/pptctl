@@ -14,6 +14,7 @@
 #include <optional>
 #include <pptctl/package.hpp>
 #include <pugixml.hpp>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -108,6 +109,17 @@ std::string resolve_target(std::string_view base_dir, std::string_view target) {
 
 }  // namespace
 
+std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept {
+    constexpr std::uint64_t kOffset = 14695981039346656037ULL;
+    constexpr std::uint64_t kPrime = 1099511628211ULL;
+    std::uint64_t h = kOffset;
+    for (const std::byte b : bytes) {
+        h ^= static_cast<std::uint64_t>(std::to_integer<unsigned char>(b));
+        h *= kPrime;
+    }
+    return h;
+}
+
 struct Package::Impl {
     void* reader = nullptr;
     std::string path;
@@ -118,6 +130,7 @@ struct Package::Impl {
     std::map<std::string, std::string> ct_overrides;  // "/ppt/.../x.xml" -> content type
     std::map<std::string, std::string> ct_defaults;   // lowercased extension -> content type
     std::map<std::string, std::vector<Relationship>> rels_cache;  // source part -> relationships
+    std::map<std::string, std::uint64_t> hash_cache;              // part name -> fnv1a64
 
     ~Impl() {
         close();
@@ -133,6 +146,7 @@ struct Package::Impl {
         ct_overrides.clear();
         ct_defaults.clear();
         rels_cache.clear();
+        hash_cache.clear();
     }
 
     [[nodiscard]] bool is_open() const noexcept {
@@ -329,6 +343,49 @@ std::optional<std::uint64_t> Package::part_size(std::string_view name) const {
         return std::nullopt;
     }
     return static_cast<std::uint64_t>(info->uncompressed_size);
+}
+
+std::vector<std::byte> Package::read_part_prefix(std::string_view name,
+                                                 std::size_t max_bytes) const {
+    if (!impl_->is_open()) {
+        return {};
+    }
+    const std::string name_str(name);
+    if (mz_zip_reader_locate_entry(impl_->reader, name_str.c_str(), 0) != MZ_OK) {
+        return {};
+    }
+    if (mz_zip_reader_entry_open(impl_->reader) != MZ_OK) {
+        return {};
+    }
+    std::vector<std::byte> bytes(max_bytes);
+    std::size_t got = 0;
+    while (got < max_bytes) {
+        const int32_t n = mz_zip_reader_entry_read(
+            impl_->reader, bytes.data() + got, static_cast<int32_t>(max_bytes - got));
+        if (n <= 0) {
+            break;
+        }
+        got += static_cast<std::size_t>(n);
+    }
+    mz_zip_reader_entry_close(impl_->reader);
+    bytes.resize(got);
+    return bytes;
+}
+
+std::optional<std::uint64_t> Package::part_hash(std::string_view name) const {
+    if (!impl_->is_open()) {
+        return std::nullopt;
+    }
+    const std::string key(name);
+    if (const auto it = impl_->hash_cache.find(key); it != impl_->hash_cache.end()) {
+        return it->second;
+    }
+    if (!part_size(name)) {
+        return std::nullopt;  // no such part; an empty part still hashes
+    }
+    const auto h = fnv1a64(read_part(name));
+    impl_->hash_cache.emplace(key, h);
+    return h;
 }
 
 }  // namespace pptctl

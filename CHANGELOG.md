@@ -17,6 +17,14 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- Picture diff (#73): pictures on a matched slide pair are paired by shape id
+  (then name, groups walked) and reported as added, removed, replaced,
+  re-linked (embed ↔ link) or alt-text changed. Media identity is a content
+  hash, not a part name: the same image under a different `ppt/media/` name
+  is not a change, and an image swap alone marks the slide changed. Each side
+  carries size and, for PNG/JPEG, pixel dimensions. `Picture` gains
+  `media_hash` and `dimensions`; `Package` gains a per-package hash cache
+  (`part_hash`) and a header-only `read_part_prefix`. Rendering lands with #71.
 
 ## [0.3.0] — 2026-09-29
 

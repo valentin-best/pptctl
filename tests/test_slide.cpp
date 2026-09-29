@@ -2,9 +2,13 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
 #define PPTCTL_FIXTURES_DIR "tests/fixtures"
@@ -890,4 +894,43 @@ TEST_CASE("Slide: group xfrm without chOff/chExt leaves child_space empty") {
     REQUIRE(slide.shapes().size() == 1);
     REQUIRE(slide.shapes()[0].geometry.has_value());
     CHECK_FALSE(slide.shapes()[0].geometry->child_space.has_value());
+}
+
+TEST_CASE("Slide: load hashes each embedded picture's media bytes and probes its size") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    std::vector<std::uint64_t> hashes;
+    for (const auto& part : pres.slide_parts()) {
+        pptctl::Slide slide;
+        REQUIRE(slide.load(pkg, part));
+        for (const auto& s : slide.shapes()) {
+            if (!s.picture) {
+                continue;
+            }
+            REQUIRE(s.picture->media_hash.has_value());
+            REQUIRE(s.picture->dimensions.has_value());
+            CHECK(s.picture->dimensions->width == 64 + hashes.size());
+            CHECK(s.picture->dimensions->height == 48 + hashes.size());
+            // The hash is the FNV-1a 64 of the part bytes, so it can be
+            // recomputed from the package alone.
+            const auto bytes = pkg.read_part(s.picture->target);
+            CHECK(*s.picture->media_hash == pptctl::fnv1a64(bytes));
+            hashes.push_back(*s.picture->media_hash);
+        }
+    }
+    // 12 distinct PNGs -> 12 distinct hashes.
+    REQUIRE(hashes.size() == 12);
+    std::sort(hashes.begin(), hashes.end());
+    CHECK(std::unique(hashes.begin(), hashes.end()) == hashes.end());
+}
+
+TEST_CASE("Slide: parse alone leaves media_hash and dimensions unset") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kEmbeddedPicture));
+    REQUIRE(slide.shapes().at(0).picture.has_value());
+    CHECK_FALSE(slide.shapes()[0].picture->media_hash.has_value());
+    CHECK_FALSE(slide.shapes()[0].picture->dimensions.has_value());
 }

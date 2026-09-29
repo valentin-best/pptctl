@@ -1,6 +1,8 @@
 // pptctl/slide.cpp — parses a slide's shape tree into a content model.
 
+#include <cstddef>
 #include <format>
+#include <pptctl/image.hpp>
 #include <pptctl/slide.hpp>
 #include <pugixml.hpp>
 #include <string_view>
@@ -292,10 +294,16 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
 }
 
 // Resolves each embedded picture's blip rId to its media part via the package's
-// relationship graph, recursing into group children. Linked (external) and
-// unresolved pictures are left as parsed.
+// relationship graph, recursing into group children, and identifies the media
+// by content: a hash (cached by the package, so shared media costs one read
+// per deck) and, for PNG/JPEG, the pixel size from the part's first bytes.
+// Linked (external) and unresolved pictures are left as parsed.
 // NOLINTNEXTLINE(misc-no-recursion)
 void resolve_pictures(const Package& pkg, std::string_view part_name, std::vector<Shape>& shapes) {
+    // A PNG's IHDR is in the first 33 bytes; a JPEG's SOF sits behind its APP
+    // segments (EXIF, ICC), which are each at most 64 KiB. Anything past that
+    // is a pathological header and simply reports no dimensions.
+    constexpr std::size_t kHeaderBytes = 65'536;
     for (auto& shape : shapes) {
         if (shape.picture && !shape.picture->linked && !shape.picture->rel_id.empty()) {
             Picture& pic = *shape.picture;
@@ -303,6 +311,9 @@ void resolve_pictures(const Package& pkg, std::string_view part_name, std::vecto
             if (!pic.target.empty()) {
                 pic.content_type = pkg.content_type(pic.target);
                 pic.size_bytes = pkg.part_size(pic.target);
+                pic.media_hash = pkg.part_hash(pic.target);
+                pic.dimensions =
+                    probe_image_dimensions(pkg.read_part_prefix(pic.target, kHeaderBytes));
             }
         }
         if (!shape.children.empty()) {
