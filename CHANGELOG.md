@@ -24,6 +24,17 @@ Phase 4: `pptctl diff`, in progress.
   schema (`docs/diff-schema.md`; unchanged slides included, null indices for
   added/removed), `--format html` as one self-contained page, and `--quiet`
   for exit-code-only use.
+- `diff` shape-level ops (#72): shapes matched by id, name, then placeholder
+  type/idx (recursing into groups) and reported as added, removed, moved,
+  resized, kind-changed or recolored, with EMU deltas and old/new geometry;
+  sub-pixel jitter is ignored (`geometry_tolerance_emu`, default 9525 = 1 px
+  at 96 DPI). The slide model gains a minimal `Shape::fill` (solid
+  `a:srgbClr`/`a:schemeClr`, or `a:noFill`) so recolors are detectable.
+- `diff` text ops (#70): within each changed slide, shapes are matched (id,
+  name, then placeholder) and their paragraphs and the speaker notes aligned
+  by LCS, reporting inserted / deleted / changed paragraphs and run
+  reformatting (bold, italic, underline, size, fonts). Whitespace-only and
+  field-run (`a:fld`) churn is ignored unless `strict_text` is set.
 
 ## [0.3.0] — 2026-09-29
 
