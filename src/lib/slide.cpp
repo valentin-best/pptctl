@@ -120,6 +120,15 @@ std::optional<Geometry> parse_geometry(pugi::xml_node shape_el) {
     g.off_y = off.attribute("y").as_llong(0);
     g.ext_cx = ext.attribute("cx").as_llong(0);
     g.ext_cy = ext.attribute("cy").as_llong(0);
+    // Groups also declare the coordinate space their children are drawn in.
+    auto choff = xfrm.child("a:chOff");
+    auto chext = xfrm.child("a:chExt");
+    if (choff || chext) {
+        g.child_space = ChildSpace{choff.attribute("x").as_llong(0),
+                                   choff.attribute("y").as_llong(0),
+                                   chext.attribute("cx").as_llong(0),
+                                   chext.attribute("cy").as_llong(0)};
+    }
     return g;
 }
 

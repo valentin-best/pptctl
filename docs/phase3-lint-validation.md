@@ -75,6 +75,10 @@ and against `pptctl extract --format json` geometry, not by eye in a renderer.
   fills its group's child space exactly, and the group sits inside the canvas,
   yet the raw child bottom (6 934 363 EMU) exceeds the 6 858 000 canvas.
   **False positive** until the transform is applied → **#59**.
+  *Update after #59 landed:* mapping children through their group transform
+  removed exactly these 8 findings (28 → 20); every one of them was inside the
+  canvas once mapped, including the `edu_utsa_oral_presentation` shape the
+  raw-coordinate review had marked "fully off".
 - **14 of the remaining 20 overshoot by ≤ 0.1 in**, 8 of them by < 0.005 in
   (a few EMU). All from Google Slides / Keynote exports that place pictures
   flush to an edge with rounding in the extent. Invisible, so noise → **#60**.
@@ -141,7 +145,7 @@ and threshold review → **#61**.
 
 | rule | hits | genuine | action |
 |---|---:|---|---|
-| overflow  |  28 | 6 (+8 unverifiable) | fix group transform (#59), add tolerance (#60) |
+| overflow  |  28 | 6 (8 group-child FPs fixed by #59 → 20) | add tolerance (#60) |
 | tiny-text |  15 | 9–15 | keep; tunable threshold (#61) |
 | alt-text  | 100 | 100 | keep |
 | font-risk |  11 | 11, platform-dependent | tiered safe list (#62) |

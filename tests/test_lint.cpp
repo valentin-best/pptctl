@@ -1265,3 +1265,139 @@ TEST_CASE("golden: lint_problems.pptx slide-level findings land on their own sli
     CHECK(!slide_of.contains("font-risk"));
     CHECK(!slide_of.contains("ctype"));
 }
+
+// ── overflow: group child transform (#59) ─────────────────────────────────────
+
+namespace {
+
+std::string xf(pptctl::Emu ox, pptctl::Emu oy, pptctl::Emu cx, pptctl::Emu cy) {
+    return std::format(R"(<a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/>)", ox, oy, cx, cy);
+}
+
+std::string ch(pptctl::Emu ox, pptctl::Emu oy, pptctl::Emu cx, pptctl::Emu cy) {
+    return std::format(R"(<a:chOff x="{}" y="{}"/><a:chExt cx="{}" cy="{}"/>)", ox, oy, cx, cy);
+}
+
+std::string sp(
+    pptctl::Emu ox, pptctl::Emu oy, pptctl::Emu cx, pptctl::Emu cy, const char* name = "Child") {
+    return std::format(R"(<p:sp>
+      <p:nvSpPr><p:cNvPr id="9" name="{}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm>{}</a:xfrm></p:spPr>
+    </p:sp>)",
+                       name,
+                       xf(ox, oy, cx, cy));
+}
+
+// A group whose a:xfrm content is given verbatim (off/ext plus optional chOff/chExt).
+std::string grp(const std::string& xfrm_inner,
+                const std::string& body,
+                const char* name = "Group 1",
+                const char* xfrm_attrs = "") {
+    return std::format(R"(<p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="8" name="{}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm{}>{}</a:xfrm></p:grpSpPr>
+      {}
+    </p:grpSp>)",
+                       name,
+                       xfrm_attrs,
+                       xfrm_inner,
+                       body);
+}
+
+std::string tree(const std::string& body) {
+    return std::format(R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    {}
+  </p:spTree></p:cSld>
+</p:sld>)",
+                       body);
+}
+
+std::vector<pptctl::Diagnostic> overflow_diags(const std::string& xml) {
+    auto diags = lint_xml(xml);
+    std::erase_if(diags, [](const auto& d) { return d.rule_id != "overflow"; });
+    return diags;
+}
+
+}  // namespace
+
+TEST_CASE("overflow: child fills its group's child space, group inside canvas — no diagnostic") {
+    // Verbatim from edu_umass_dns.pptx slide 34: raw child bottom (6 934 363)
+    // exceeds the canvas, but mapped through the group it ends at 6 694 714.
+    const auto xml =
+        tree(grp(xf(435427, 5043713, 8305815, 1651001) + ch(98612, 5007574, 6346007, 1926789),
+                 sp(98612, 5007574, 6346007, 1926789),
+                 "Group 1",
+                 R"( flipH="1")"));
+    CHECK(overflow_diags(xml).empty());
+}
+
+TEST_CASE("overflow: child pushed past the edge by a 2x group scale — diagnostic") {
+    // Group maps a half-size child space onto the full canvas (scale 2).
+    // Raw child right edge = kW/2 + 100 (fits); mapped = kW + 200.
+    const auto xml =
+        tree(grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), sp(kW / 2 - 100, 0, 200, 100)));
+    const auto d = overflow_diags(xml);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].shape_name == "Child");
+}
+
+TEST_CASE("overflow: child fits after group scale-down — no diagnostic") {
+    // Child space is twice the canvas; the group squeezes it into the canvas.
+    // Raw child right edge = 2*kW (way off); mapped = kW exactly.
+    const auto xml = tree(grp(xf(0, 0, kW, kH) + ch(0, 0, 2 * kW, 2 * kH), sp(kW, 0, kW, kH)));
+    CHECK(overflow_diags(xml).empty());
+}
+
+TEST_CASE("overflow: nested groups compose their transforms — diagnostic") {
+    // Outer: scale 2 (child space kW/2 x kH/2 -> canvas). Inner lives in the
+    // outer child space, fills it, and itself has scale 2. Total scale 4.
+    // Raw child right = kW/4 + 50 (fits); mapped = kW + 200.
+    const auto inner = grp(
+        xf(0, 0, kW / 2, kH / 2) + ch(0, 0, kW / 4, kH / 4), sp(kW / 4 - 50, 0, 100, 100), "Inner");
+    const auto xml = tree(grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), inner, "Outer"));
+    const auto d = overflow_diags(xml);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].shape_name == "Child");
+}
+
+TEST_CASE("overflow: nested groups compose their transforms — no diagnostic when it fits") {
+    const auto inner = grp(xf(0, 0, kW / 2, kH / 2) + ch(0, 0, kW / 4, kH / 4),
+                           sp(kW / 4 - 100, 0, 100, 100),
+                           "Inner");
+    const auto xml = tree(grp(xf(0, 0, kW, kH) + ch(0, 0, kW / 2, kH / 2), inner, "Outer"));
+    CHECK(overflow_diags(xml).empty());
+}
+
+TEST_CASE("overflow: degenerate group (zero child extent) falls back to raw coordinates") {
+    // Seen in edu_utsa_oral_presentation.pptx slide 10. No division by zero,
+    // and children are judged on their raw offsets.
+    const auto off = tree(grp(xf(0, 0, 0, 0) + ch(0, 0, 0, 0), sp(kW + 1, 0, 100, 100)));
+    REQUIRE(overflow_diags(off).size() == 1);
+    CHECK(overflow_diags(off)[0].shape_name == "Child");
+    const auto in = tree(grp(xf(0, 0, 0, 0) + ch(0, 0, 0, 0), sp(0, 0, 100, 100)));
+    CHECK(overflow_diags(in).empty());
+}
+
+TEST_CASE("overflow: group's own box overflows — one diagnostic on the group, not the child") {
+    const auto xml = tree(grp(xf(0, 0, kW + 1, kH) + ch(0, 0, kW + 1, kH), sp(0, 0, 100, 100)));
+    const auto d = overflow_diags(xml);
+    REQUIRE(d.size() == 1);
+    CHECK(d[0].shape_name == "Group 1");
+}
+
+TEST_CASE("overflow: group offset moves an in-space child off canvas — diagnostic") {
+    // Identity scale, but the group itself sits 1 in from the right edge and
+    // is 2 in wide: the child at the far end of the child space is off canvas.
+    const pptctl::Emu in = pptctl::kEmuPerInch;
+    const auto xml = tree(
+        grp(xf(kW - in, 0, 2 * in, in) + ch(0, 0, 2 * in, in), sp(in + in / 2, 0, in / 4, in / 4)));
+    const auto d = overflow_diags(xml);
+    REQUIRE(d.size() == 2);  // the group box itself, and the child
+    CHECK(d[0].shape_name == "Group 1");
+    CHECK(d[1].shape_name == "Child");
+}
