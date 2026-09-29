@@ -17,6 +17,13 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- `diff` output (#71): `--format unified` (default; file header, one
+  `@@ slide A -> B (…) @@` hunk per slide that is not simply unchanged,
+  summary line, colour on a TTY with `--color`/`--no-color` and `NO_COLOR`,
+  nothing at all for identical decks), `--format json` with a versioned
+  schema (`docs/diff-schema.md`; unchanged slides included, null indices for
+  added/removed), `--format html` as one self-contained page, and `--quiet`
+  for exit-code-only use.
 
 ## [0.3.0] — 2026-09-29
 

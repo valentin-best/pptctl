@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <pptctl/slide.hpp>
 #include <string>
 #include <vector>
@@ -99,5 +100,15 @@ struct DiffOptions {
 // the command layer calls this in a second pass that re-loads only the pairs
 // match_slides() reported as Changed, so unchanged slides are parsed once.
 [[nodiscard]] SlideChanges compare_slides(const Slide& a, const Slide& b, const DiffOptions& opts);
+
+// ── command-layer output settings (#71) ───────────────────────────────────────
+//
+// Read only by src/cmd/diff.cpp — the renderers, not the engine. Kept apart
+// from DiffOptions so the matching/comparison knobs stay a library concern.
+struct DiffOutputOptions {
+    std::string format = "unified";  // unified | json | html
+    bool quiet = false;              // print nothing; exit code only
+    std::optional<bool> color;       // unified: nullopt = auto (TTY and no NO_COLOR)
+};
 
 }  // namespace pptctl

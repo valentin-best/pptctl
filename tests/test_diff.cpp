@@ -2,9 +2,13 @@
 
 #include <doctest/doctest.h>
 
+#include <cctype>
+#include <fstream>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/diff.hpp>
 #include <pptctl/slide.hpp>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -12,9 +16,16 @@
 #ifndef PPTCTL_FIXTURES_DIR
 #define PPTCTL_FIXTURES_DIR "tests/fixtures"
 #endif
+#ifndef PPTCTL_GOLDEN_DIR
+#define PPTCTL_GOLDEN_DIR "tests/golden"
+#endif
 
 namespace pptctl::cmd {
-int diff_to(const std::string& a, const std::string& b, std::ostream& os, const DiffOptions& opts);
+int diff_to(const std::string& a,
+            const std::string& b,
+            std::ostream& os,
+            const DiffOptions& opts,
+            const DiffOutputOptions& out);
 }  // namespace pptctl::cmd
 
 namespace {
@@ -192,8 +203,8 @@ TEST_CASE("Diff: match — empty decks are identical") {
 
 TEST_CASE("Diff: command — self-diff of a fixture is identical, exit 0") {
     std::ostringstream os;
-    const int rc =
-        pptctl::cmd::diff_to(fixture("three_slides.pptx"), fixture("three_slides.pptx"), os, {});
+    const int rc = pptctl::cmd::diff_to(
+        fixture("three_slides.pptx"), fixture("three_slides.pptx"), os, {}, {});
     CHECK(rc == 0);
     CHECK(os.str().empty());
 }
@@ -201,14 +212,14 @@ TEST_CASE("Diff: command — self-diff of a fixture is identical, exit 0") {
 TEST_CASE("Diff: command — different fixtures exit 1 and describe slide ops") {
     std::ostringstream os;
     const int rc =
-        pptctl::cmd::diff_to(fixture("minimal.pptx"), fixture("three_slides.pptx"), os, {});
+        pptctl::cmd::diff_to(fixture("minimal.pptx"), fixture("three_slides.pptx"), os, {}, {});
     CHECK(rc == 1);
     CHECK(os.str().find("added") != std::string::npos);
 }
 
 TEST_CASE("Diff: command — unreadable input exits 2") {
     std::ostringstream os;
-    const int rc = pptctl::cmd::diff_to(fixture("nope.pptx"), fixture("minimal.pptx"), os, {});
+    const int rc = pptctl::cmd::diff_to(fixture("nope.pptx"), fixture("minimal.pptx"), os, {}, {});
     CHECK(rc == 2);
 }
 
@@ -241,4 +252,210 @@ TEST_CASE("Diff: diff_report — changed pairs carry a (possibly empty) change s
 
 TEST_CASE("Diff: diff_report — unreadable input yields nullopt") {
     CHECK_FALSE(pptctl::cmd::diff_report(fixture("nope.pptx"), fixture("minimal.pptx"), {}));
+}
+
+// ── output formats (#71) ──────────────────────────────────────────────────────
+
+namespace {
+
+// Run the command with the given output settings and capture stdout.
+int run_diff(const char* a, const char* b, std::string& out, pptctl::DiffOutputOptions opts = {}) {
+    std::ostringstream os;
+    const int rc = pptctl::cmd::diff_to(fixture(a), fixture(b), os, {}, opts);
+    out = os.str();
+    return rc;
+}
+
+bool has_escape_codes(const std::string& s) {
+    return s.find('\x1b') != std::string::npos;
+}
+
+std::string read_golden(const char* name) {
+    const std::string path = std::string(PPTCTL_GOLDEN_DIR) + "/" + name;
+    std::ifstream f(path);
+    REQUIRE_MESSAGE(f.is_open(), "golden file missing: ", path);
+    return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
+}
+
+// The three renderers all carry the (machine-specific) input paths exactly
+// once each: the `---`/`+++` header lines, the `a`/`b` JSON fields, and the
+// `<code class="path">` elements. Same rewrite as generate_golden.sh.
+std::string normalize_paths(const std::string& s) {
+    static const std::regex kUnified(R"re(^(---|\+\+\+) .*$)re", std::regex::multiline);
+    static const std::regex kJson(R"re("(a|b)": "[^"]*")re");
+    static const std::regex kHtml(R"re(<code class="path">[^<]*</code>)re");
+    std::string out = std::regex_replace(s, kUnified, "$1 <path>");
+    out = std::regex_replace(out, kJson, R"re("$1": "<path>")re");
+    out = std::regex_replace(out, kHtml, R"re(<code class="path">&lt;path&gt;</code>)re");
+    return out;
+}
+
+void check_diff_golden(const char* a, const char* b, const char* format, const char* golden) {
+    std::string out;
+    const int rc = run_diff(a, b, out, {.format = format});
+    CHECK(rc <= 1);
+    CHECK(normalize_paths(out) == read_golden(golden));
+}
+
+}  // namespace
+
+TEST_CASE("Diff: unified — identical decks print nothing at all") {
+    std::string out;
+    CHECK(run_diff("three_slides.pptx", "three_slides.pptx", out, {.format = "unified"}) == 0);
+    CHECK(out.empty());
+}
+
+TEST_CASE("Diff: unified — different decks print a file header, hunks and a summary line") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.format = "unified"}) == 1);
+    CHECK(out.find("--- ") == 0);
+    CHECK(out.find("\n+++ ") != std::string::npos);
+    CHECK(out.find("@@ slide ") != std::string::npos);
+    CHECK(out.find("(added) @@") != std::string::npos);
+    CHECK(out.find(" slides: ") != std::string::npos);
+    CHECK(out.find(" added, ") != std::string::npos);
+    CHECK(out.find(" removed, ") != std::string::npos);
+    CHECK(out.find(" moved, ") != std::string::npos);
+    CHECK(out.find(" changed\n") != std::string::npos);
+}
+
+TEST_CASE("Diff: unified — colour is off by default on a non-TTY stream and with --no-color") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {}) == 1);
+    CHECK_FALSE(has_escape_codes(out));
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.color = false}) == 1);
+    CHECK_FALSE(has_escape_codes(out));
+}
+
+TEST_CASE("Diff: unified — --color forces ANSI escapes even on a non-TTY stream") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.color = true}) == 1);
+    CHECK(has_escape_codes(out));
+    CHECK(out.find("\x1b[36m@@ slide") != std::string::npos);  // hunk headers are cyan
+    CHECK(out.find("\x1b[0m") != std::string::npos);           // and every colour is reset
+    // Stripping the escapes yields exactly the plain rendering.
+    static const std::regex kAnsi("\x1b\\[[0-9;]*m");
+    std::string plain;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", plain, {.color = false}) == 1);
+    CHECK(std::regex_replace(out, kAnsi, "") == plain);
+}
+
+TEST_CASE("Diff: json — parses, is versioned, and includes unchanged slides") {
+    std::string out;
+    CHECK(run_diff("three_slides.pptx", "three_slides.pptx", out, {.format = "json"}) == 0);
+    const auto j = nlohmann::json::parse(out);
+    CHECK(j["schema_version"] == 1);
+    CHECK(j["a"].is_string());
+    CHECK(j["b"].is_string());
+    REQUIRE(j["slides"].size() == 3);
+    for (const auto& s : j["slides"]) {
+        CHECK(s["status"] == "unchanged");
+        CHECK(s["a_index"] == s["b_index"]);
+        CHECK(s["moved"] == false);
+        CHECK(s["similarity"] == 1.0);
+        CHECK(s["changes"]["text"].is_array());
+        CHECK(s["changes"]["shapes"].is_array());
+        CHECK(s["changes"]["pictures"].is_array());
+    }
+    CHECK(j["summary"]["unchanged"] == 3);
+    CHECK(j["summary"]["added"] == 0);
+}
+
+TEST_CASE("Diff: json — added slides have a null a_index, removed slides a null b_index") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.format = "json"}) == 1);
+    auto j = nlohmann::json::parse(out);
+    bool saw_added = false;
+    for (const auto& s : j["slides"]) {
+        if (s["status"] == "added") {
+            saw_added = true;
+            CHECK(s["a_index"].is_null());
+            CHECK(s["b_index"].is_number());
+        }
+    }
+    CHECK(saw_added);
+
+    CHECK(run_diff("three_slides.pptx", "minimal.pptx", out, {.format = "json"}) == 1);
+    j = nlohmann::json::parse(out);
+    bool saw_removed = false;
+    for (const auto& s : j["slides"]) {
+        if (s["status"] == "removed") {
+            saw_removed = true;
+            CHECK(s["a_index"].is_number());
+            CHECK(s["b_index"].is_null());
+        }
+    }
+    CHECK(saw_removed);
+}
+
+TEST_CASE("Diff: html — self-contained document with a status badge per slide, text escaped") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.format = "html"}) == 1);
+    std::string lower = out;
+    for (auto& ch : lower) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    CHECK(lower.find("<!doctype html>") == 0);
+    CHECK(lower.find("<style>") != std::string::npos);
+    CHECK(lower.find("<script") == std::string::npos);
+    CHECK(lower.find("http://") == std::string::npos);  // no external assets
+    CHECK(lower.find("https://") == std::string::npos);
+    CHECK(out.find("badge added") != std::string::npos);
+    // Every '<' opens a tag or a comment: nothing from the decks leaks unescaped.
+    for (std::size_t i = out.find('<'); i != std::string::npos; i = out.find('<', i + 1)) {
+        REQUIRE(i + 1 < out.size());
+        const char next = out[i + 1];
+        CHECK((std::isalpha(static_cast<unsigned char>(next)) || next == '/' || next == '!'));
+    }
+    // Identical decks still get a full page (unlike unified).
+    CHECK(run_diff("three_slides.pptx", "three_slides.pptx", out, {.format = "html"}) == 0);
+    CHECK(out.find("badge unchanged") != std::string::npos);
+}
+
+TEST_CASE("Diff: --quiet prints nothing but keeps the exit code") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.quiet = true}) == 1);
+    CHECK(out.empty());
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.format = "json", .quiet = true}) ==
+          1);
+    CHECK(out.empty());
+    CHECK(run_diff("three_slides.pptx", "three_slides.pptx", out, {.quiet = true}) == 0);
+    CHECK(out.empty());
+}
+
+TEST_CASE("Diff: unknown --format exits 2 without writing to stdout") {
+    std::string out;
+    CHECK(run_diff("minimal.pptx", "three_slides.pptx", out, {.format = "yaml"}) == 2);
+    CHECK(out.empty());
+}
+
+// ── golden tests ──────────────────────────────────────────────────────────────
+//
+// tests/golden/<a>__<b>.diff.{txt,json,html} pin each renderer's output for
+// one differing pair and one self-diff. Regenerate after an intentional
+// output change: ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
+
+TEST_CASE("golden: minimal__three_slides.diff.txt") {
+    check_diff_golden(
+        "minimal.pptx", "three_slides.pptx", "unified", "minimal__three_slides.diff.txt");
+}
+TEST_CASE("golden: minimal__three_slides.diff.json") {
+    check_diff_golden(
+        "minimal.pptx", "three_slides.pptx", "json", "minimal__three_slides.diff.json");
+}
+TEST_CASE("golden: minimal__three_slides.diff.html") {
+    check_diff_golden(
+        "minimal.pptx", "three_slides.pptx", "html", "minimal__three_slides.diff.html");
+}
+TEST_CASE("golden: three_slides__three_slides.diff.txt") {
+    check_diff_golden(
+        "three_slides.pptx", "three_slides.pptx", "unified", "three_slides__three_slides.diff.txt");
+}
+TEST_CASE("golden: three_slides__three_slides.diff.json") {
+    check_diff_golden(
+        "three_slides.pptx", "three_slides.pptx", "json", "three_slides__three_slides.diff.json");
+}
+TEST_CASE("golden: three_slides__three_slides.diff.html") {
+    check_diff_golden(
+        "three_slides.pptx", "three_slides.pptx", "html", "three_slides__three_slides.diff.html");
 }
