@@ -92,12 +92,15 @@ std::optional<Overshoot> worst_overshoot(const Box& b, const CanvasSize& canvas)
     const auto h = static_cast<double>(canvas.height_emu);
     const std::array<Overshoot, 4> edges = {
         {{"left", -b.x}, {"top", -b.y}, {"right", b.x + b.w - w}, {"bottom", b.y + b.h - h}}};
-    const auto* const worst = std::max_element(
+    // Copied out rather than held by iterator: std::array's iterator is a raw
+    // pointer on libc++/libstdc++ but a class on MSVC, so naming its type is
+    // not portable.
+    const Overshoot worst = *std::max_element(
         edges.begin(), edges.end(), [](const auto& a, const auto& c) { return a.emu < c.emu; });
-    if (worst->emu <= kOverflowToleranceEmu) {
+    if (worst.emu <= kOverflowToleranceEmu) {
         return std::nullopt;
     }
-    return *worst;
+    return worst;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
