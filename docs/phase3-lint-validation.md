@@ -143,18 +143,21 @@ will act on these). The 200–300 band is a third of all hits and includes
 images that are pixel-perfect on a 4K projector, and the rule also flags a
 9.9 KiB image at 202 DPI where downscaling gains nothing. Stored-size floor
 and threshold review → **#61**.
+*Update after #61 landed:* defaults moved to 300 DPI with a 64 KiB stored-size
+floor, both tunable (`--max-image-dpi`, `--min-image-bytes`; tiny-text got
+`--min-font-size`). Corpus hits 94 → 53; the ≥ 500 DPI hits are all retained.
 
 ## Verdict
 
 | rule | hits | genuine | action |
 |---|---:|---|---|
 | overflow  |  28 | 6 (8 group-child FPs fixed by #59 → 20; tolerance #60 → 10) | done |
-| tiny-text |  15 | 9–15 | keep; tunable threshold (#61) |
+| tiny-text |  15 | 9–15 | keep; `--min-font-size` (#61) |
 | alt-text  | 100 | 100 | keep |
 | font-risk |  11 | 11, platform-dependent | tiered safe list (#62) |
 | empty-ph  |  18 | 18, low severity | keep |
 | ctype     |   5 | 5 | keep |
-| img-bloat |  94 | ~60 | size floor + threshold review (#61) |
+| img-bloat |  94 | ~60 (300 DPI + 64 KiB floor, #61 → 53) | done |
 
 The exit criterion holds even if every overflow, font-risk and img-bloat
 finding were discarded: alt-text, ctype, empty-ph and tiny-text alone still

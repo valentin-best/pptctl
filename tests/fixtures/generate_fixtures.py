@@ -16,7 +16,7 @@ Pass --check to verify committed fixtures match regenerated output (useful in CI
 
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
-  - bloat_deck.pptx         2 slides: a 1600x1200 PNG shown 1 in wide, and a small PNG.
+  - bloat_deck.pptx         3 slides: tiny-but-oversampled PNG, large oversampled PNG, clean PNG.
   - lint_problems.pptx      7 slides, one per lint rule (plus the printer-settings stub
                             python-pptx ships, which trips the deck-level ctype rule).
   - lint_clean.pptx         2 ordinary slides with the printer-settings stub stripped;
@@ -78,6 +78,32 @@ def _png(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
         b"\x89PNG\r\n\x1a\n"
         + chunk(b"IHDR", ihdr)
         + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def _noise_png(width: int, height: int, seed: int) -> bytes:
+    """An incompressible RGB PNG from a fixed LCG, stored with zlib level 0 so
+    the bytes are identical across zlib versions. ~3 bytes/pixel on disk: use
+    it where a fixture must exceed lint's img-bloat stored-size floor."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    state = seed & 0xFFFFFFFF
+    pixels = bytearray()
+    for _ in range(width * height * 3):
+        state = (1103515245 * state + 12345) & 0x7FFFFFFF
+        pixels.append((state >> 16) & 0xFF)
+    rows = b"".join(
+        b"\x00" + bytes(pixels[y * width * 3 : (y + 1) * width * 3]) for y in range(height)
+    )
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(rows, 0))
         + chunk(b"IEND", b"")
     )
 
@@ -161,10 +187,11 @@ def build_images_deck(path: Path) -> None:
 
 
 def build_bloat_deck(path: Path) -> None:
-    """2 slides. Slide 1 carries a 1600x1200 PNG displayed 1 inch wide (about
-    1600 DPI effective -> lint img-bloat). Slide 2 carries a 64x48 PNG
-    displayed 3 inches tall (about 21 DPI -> clean). Solid colour keeps the
-    large PNG a few KB on disk."""
+    """3 slides for the img-bloat rule.
+    1. 1600x1200 solid PNG (~7 KiB) shown 1 in wide: ~1600 DPI but under the
+       64 KiB stored-size floor, so lint must NOT flag it by default.
+    2. 200x150 noise PNG (~90 KiB) shown 0.5 in wide: ~400 DPI, flagged.
+    3. 64x48 PNG shown 3 in tall: ~21 DPI, clean."""
     prs = Presentation()
     blank = prs.slide_layouts[6]
     s1 = prs.slides.add_slide(blank)
@@ -173,6 +200,10 @@ def build_bloat_deck(path: Path) -> None:
     )
     s2 = prs.slides.add_slide(blank)
     s2.shapes.add_picture(
+        io.BytesIO(_noise_png(200, 150, 7)), Inches(1), Inches(1), width=Inches(0.5)
+    )
+    s3 = prs.slides.add_slide(blank)
+    s3.shapes.add_picture(
         io.BytesIO(_png(64, 48, (40, 40, 200))), Inches(1), Inches(1), height=Inches(3)
     )
     _set_core_props(prs, "pptctl image bloat fixture")
@@ -222,10 +253,11 @@ def build_lint_problems_deck(path: Path) -> None:
     box = s.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(1))
     box.text_frame.text = "Deck-level ctype finding lives in [Content_Types].xml"
 
-    # 7. img-bloat: 1600x1200 PNG shown 1 in wide (about 1600 DPI effective).
+    # 7. img-bloat: 200x150 noise PNG (~90 KiB, above the stored-size floor)
+    #    shown 0.5 in wide (about 400 DPI effective).
     s = prs.slides.add_slide(blank)
     s.shapes.add_picture(
-        io.BytesIO(_png(1600, 1200, (200, 40, 40))), Inches(1), Inches(1), width=Inches(1)
+        io.BytesIO(_noise_png(200, 150, 7)), Inches(1), Inches(1), width=Inches(0.5)
     )
 
     _set_core_props(prs, "pptctl lint problems fixture")

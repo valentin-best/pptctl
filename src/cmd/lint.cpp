@@ -136,7 +136,10 @@ void check_overflow_shape(const Shape& shape,
     }
 }
 
-void rule_overflow(const Slide& slide, const CanvasSize& canvas, std::vector<Diagnostic>& out) {
+void rule_overflow(const Slide& slide,
+                   const CanvasSize& canvas,
+                   const LintOptions& /*opts*/,
+                   std::vector<Diagnostic>& out) {
     for (const auto& shape : slide.shapes()) {
         check_overflow_shape(shape, canvas, Transform{}, slide.index(), out);
     }
@@ -144,37 +147,38 @@ void rule_overflow(const Slide& slide, const CanvasSize& canvas, std::vector<Dia
 
 // ── tiny-text rule ────────────────────────────────────────────────────────────
 
-constexpr int kMinFontSizeCentipt = 1200;  // 12 pt
-
 // NOLINTNEXTLINE(misc-no-recursion)
 void check_tiny_text_shape(const Shape& shape,
                            std::size_t slide_idx,
+                           double min_pt,
                            std::vector<Diagnostic>& out) {
     for (const auto& para : shape.paragraphs) {
         for (const auto& run : para.runs) {
-            if (run.props.size_centipt && *run.props.size_centipt < kMinFontSizeCentipt) {
-                out.push_back({"tiny-text",
-                               Severity::Warning,
-                               slide_idx,
-                               shape.name,
-                               std::format("shape \"{}\" has text at {:.1f}pt (below {}pt minimum)",
-                                           shape.name,
-                                           run.props.size_pt(),
-                                           kMinFontSizeCentipt / 100)});
+            if (run.props.size_centipt && run.props.size_pt() < min_pt) {
+                out.push_back(
+                    {"tiny-text",
+                     Severity::Warning,
+                     slide_idx,
+                     shape.name,
+                     std::format("shape \"{}\" has text at {:.1f}pt (below {:g}pt minimum)",
+                                 shape.name,
+                                 run.props.size_pt(),
+                                 min_pt)});
                 return;  // one diagnostic per shape is enough
             }
         }
     }
     for (const auto& child : shape.children) {
-        check_tiny_text_shape(child, slide_idx, out);
+        check_tiny_text_shape(child, slide_idx, min_pt, out);
     }
 }
 
 void rule_tiny_text(const Slide& slide,
                     const CanvasSize& /*canvas*/,
+                    const LintOptions& opts,
                     std::vector<Diagnostic>& out) {
     for (const auto& shape : slide.shapes()) {
-        check_tiny_text_shape(shape, slide.index(), out);
+        check_tiny_text_shape(shape, slide.index(), opts.min_font_pt, out);
     }
 }
 
@@ -197,7 +201,10 @@ void check_alt_text_shape(const Shape& shape, std::size_t slide_idx, std::vector
     }
 }
 
-void rule_alt_text(const Slide& slide, const CanvasSize& /*canvas*/, std::vector<Diagnostic>& out) {
+void rule_alt_text(const Slide& slide,
+                   const CanvasSize& /*canvas*/,
+                   const LintOptions& /*opts*/,
+                   std::vector<Diagnostic>& out) {
     for (const auto& shape : slide.shapes()) {
         check_alt_text_shape(shape, slide.index(), out);
     }
@@ -244,7 +251,10 @@ void check_empty_ph_shape(const Shape& shape, std::size_t slide_idx, std::vector
     }
 }
 
-void rule_empty_ph(const Slide& slide, const CanvasSize& /*canvas*/, std::vector<Diagnostic>& out) {
+void rule_empty_ph(const Slide& slide,
+                   const CanvasSize& /*canvas*/,
+                   const LintOptions& /*opts*/,
+                   std::vector<Diagnostic>& out) {
     for (const auto& shape : slide.shapes()) {
         check_empty_ph_shape(shape, slide.index(), out);
     }
@@ -353,9 +363,9 @@ bool is_infrastructure(std::string_view name) noexcept {
 // and ctype it runs outside the per-slide registry: lint_to hands it a probe
 // that reads (and caches) image headers through the package.
 
-// Above this the stored pixels can't be seen even on a 4K projection of a
-// standard 13.33 in wide slide (~290 DPI); 200 leaves headroom for cropping.
-constexpr double kMaxEffectiveDpi = 200.0;
+// Thresholds live in LintOptions (defaults: 300 DPI, 64 KiB). A 4K projection
+// of a standard 13.33 in slide resolves ~290 DPI, so pixels above 300 are
+// invisible; images stored under the byte floor gain nothing from downscaling.
 
 double emu_to_inches(Emu v) noexcept {
     return static_cast<double>(v) / static_cast<double>(kEmuPerInch);
@@ -367,16 +377,20 @@ using ImageProbe = std::function<std::optional<ImageDimensions>(const Picture&)>
 void check_img_bloat_shape(const Shape& shape,
                            std::size_t slide_idx,
                            const ImageProbe& probe,
+                           const LintOptions& opts,
                            std::vector<Diagnostic>& out) {
     if (shape.kind == ShapeKind::Picture && shape.picture && !shape.picture->linked &&
         shape.geometry && shape.geometry->ext_cx > 0 && shape.geometry->ext_cy > 0) {
         const Picture& pic = *shape.picture;
-        if (const auto dims = probe(pic)) {
+        // Byte floor first: it comes from ZIP metadata and avoids reading the
+        // media at all. An unknown size never suppresses a finding.
+        const bool too_small = pic.size_bytes && *pic.size_bytes < opts.min_image_bytes;
+        if (const auto dims = too_small ? std::nullopt : probe(pic)) {
             const double w_in = emu_to_inches(shape.geometry->ext_cx);
             const double h_in = emu_to_inches(shape.geometry->ext_cy);
             const double dpi = std::max(static_cast<double>(dims->width) / w_in,
                                         static_cast<double>(dims->height) / h_in);
-            if (dpi > kMaxEffectiveDpi) {
+            if (dpi > opts.max_image_dpi) {
                 const std::string stored =
                     pic.size_bytes ? std::format(", {} stored", human_bytes(*pic.size_bytes)) : "";
                 out.push_back({"img-bloat",
@@ -384,20 +398,20 @@ void check_img_bloat_shape(const Shape& shape,
                                slide_idx,
                                shape.name,
                                std::format("picture \"{}\" is {}x{} px shown at {:.1f}x{:.1f} in "
-                                           "({:.0f} DPI effective, above {:.0f} DPI{})",
+                                           "({:.0f} DPI effective, above {:g} DPI{})",
                                            shape.name,
                                            dims->width,
                                            dims->height,
                                            w_in,
                                            h_in,
                                            dpi,
-                                           kMaxEffectiveDpi,
+                                           opts.max_image_dpi,
                                            stored)});
             }
         }
     }
     for (const auto& child : shape.children) {
-        check_img_bloat_shape(child, slide_idx, probe, out);
+        check_img_bloat_shape(child, slide_idx, probe, opts, out);
     }
 }
 
@@ -552,13 +566,15 @@ std::vector<Diagnostic> check_ctype(const std::vector<std::pair<std::string, std
 }
 
 // One diagnostic per embedded picture whose intrinsic resolution exceeds
-// kMaxEffectiveDpi at its displayed size (larger of the two axes). Linked
+// opts.max_image_dpi at its displayed size (larger of the two axes). Linked
 // pictures, pictures without a usable extent, and images the probe can't read
 // are skipped — never a false positive from missing data.
-std::vector<Diagnostic> check_img_bloat(const Slide& slide, const ImageProbe& probe) {
+std::vector<Diagnostic> check_img_bloat(const Slide& slide,
+                                        const ImageProbe& probe,
+                                        const LintOptions& opts) {
     std::vector<Diagnostic> out;
     for (const auto& shape : slide.shapes()) {
-        check_img_bloat_shape(shape, slide.index(), probe, out);
+        check_img_bloat_shape(shape, slide.index(), probe, opts, out);
     }
     return out;
 }
@@ -621,9 +637,9 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
         }
         slide.set_index(n);
         for (const auto& rule : rules) {
-            rule.fn(slide, canvas, diagnostics);
+            rule.fn(slide, canvas, opts, diagnostics);
         }
-        const auto bloat = check_img_bloat(slide, probe);
+        const auto bloat = check_img_bloat(slide, probe, opts);
         diagnostics.insert(diagnostics.end(), bloat.begin(), bloat.end());
         const auto slide_fonts = slide_referenced_fonts(slide);
         referenced_fonts.insert(slide_fonts.begin(), slide_fonts.end());
@@ -653,11 +669,13 @@ int lint(const std::string& path, const LintOptions& opts) {
     return lint_to(path, std::cout, opts);
 }
 
-std::vector<Diagnostic> lint_slide(const Slide& slide, const CanvasSize& canvas) {
+std::vector<Diagnostic> lint_slide(const Slide& slide,
+                                   const CanvasSize& canvas,
+                                   const LintOptions& opts) {
     const auto rules = make_rules();
     std::vector<Diagnostic> diagnostics;
     for (const auto& rule : rules) {
-        rule.fn(slide, canvas, diagnostics);
+        rule.fn(slide, canvas, opts, diagnostics);
     }
     return diagnostics;
 }
