@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <optional>
 #include <pptctl/diff.hpp>
 #include <pptctl/slide.hpp>
 #include <sstream>
@@ -209,4 +210,35 @@ TEST_CASE("Diff: command — unreadable input exits 2") {
     std::ostringstream os;
     const int rc = pptctl::cmd::diff_to(fixture("nope.pptx"), fixture("minimal.pptx"), os, {});
     CHECK(rc == 2);
+}
+
+// ── op seams (scaffold for #70 / #72 / #73) ───────────────────────────────────
+
+namespace pptctl::cmd {
+std::optional<DiffReport> diff_report(const std::string& a,
+                                      const std::string& b,
+                                      const DiffOptions& opts);
+}  // namespace pptctl::cmd
+
+TEST_CASE("Diff: compare_slides — identical slides yield no changes") {
+    pptctl::Slide a;
+    pptctl::Slide b;
+    REQUIRE(a.parse(text_slide("same")));
+    REQUIRE(b.parse(text_slide("same")));
+    const auto changes = pptctl::compare_slides(a, b, {});
+    CHECK(changes.empty());
+}
+
+TEST_CASE("Diff: diff_report — changed pairs carry a (possibly empty) change set") {
+    const auto r =
+        pptctl::cmd::diff_report(fixture("three_slides.pptx"), fixture("three_slides.pptx"), {});
+    REQUIRE(r);
+    CHECK(r->identical());
+    for (const auto& s : r->slides) {
+        CHECK(s.changes.empty());
+    }
+}
+
+TEST_CASE("Diff: diff_report — unreadable input yields nullopt") {
+    CHECK_FALSE(pptctl::cmd::diff_report(fixture("nope.pptx"), fixture("minimal.pptx"), {}));
 }

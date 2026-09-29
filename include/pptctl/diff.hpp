@@ -38,12 +38,41 @@ struct SlideSummary {
 
 enum class SlideStatus : std::uint8_t { Unchanged, Changed, Added, Removed };
 
+// ── nested ops inside a changed slide ─────────────────────────────────────────
+//
+// Each op family lives in its own source file (src/lib/diff_<family>.cpp) and
+// its own test file (tests/test_diff_<family>.cpp), and is computed by
+// compare_slides() once per matched pair. Keep the families independent: a
+// text op never reaches into shape geometry, and vice versa.
+
+// Text-level change within a matched shape (or the notes). Owned by #70.
+struct TextChange {};
+
+// Structural change to a shape: added, removed, moved, resized, recolored.
+// Owned by #72.
+struct ShapeChange {};
+
+// Picture media change: added, removed, replaced, re-linked, alt-text.
+// Owned by #73.
+struct PictureChange {};
+
+struct SlideChanges {
+    std::vector<TextChange> text;
+    std::vector<ShapeChange> shapes;
+    std::vector<PictureChange> pictures;
+
+    [[nodiscard]] bool empty() const noexcept {
+        return text.empty() && shapes.empty() && pictures.empty();
+    }
+};
+
 struct SlideDiff {
     SlideStatus status = SlideStatus::Unchanged;
     std::size_t a_index = 0;  // 1-based in A; 0 when Added
     std::size_t b_index = 0;  // 1-based in B; 0 when Removed
     bool moved = false;       // matched slide whose order relative to its peers changed
     double similarity = 1.0;  // 1 for exact matches; best-match score otherwise
+    SlideChanges changes;     // filled for Changed slides; empty otherwise
 };
 
 struct DiffReport {
@@ -65,5 +94,10 @@ struct DiffOptions {
 [[nodiscard]] DiffReport match_slides(const std::vector<SlideSummary>& a,
                                       const std::vector<SlideSummary>& b,
                                       const DiffOptions& opts);
+
+// Compute the nested ops for one matched pair. Runs each op family in turn;
+// the command layer calls this in a second pass that re-loads only the pairs
+// match_slides() reported as Changed, so unchanged slides are parsed once.
+[[nodiscard]] SlideChanges compare_slides(const Slide& a, const Slide& b, const DiffOptions& opts);
 
 }  // namespace pptctl

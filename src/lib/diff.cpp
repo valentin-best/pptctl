@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "diff_internal.hpp"
+
 namespace pptctl {
 
 namespace {
@@ -390,6 +392,14 @@ DiffReport match_slides(const std::vector<SlideSummary>& a,
         report.slides.insert(pos, d);
     }
     return report;
+}
+
+SlideChanges compare_slides(const Slide& a, const Slide& b, const DiffOptions& opts) {
+    SlideChanges out;
+    detail::diff_text(a, b, opts, out.text);
+    detail::diff_shapes(a, b, opts, out.shapes);
+    detail::diff_pictures(a, b, opts, out.pictures);
+    return out;
 }
 
 }  // namespace pptctl
