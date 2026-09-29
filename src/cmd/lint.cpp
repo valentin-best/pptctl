@@ -25,35 +25,91 @@ namespace pptctl::cmd {
 namespace {
 
 // ── canvas overflow rule ──────────────────────────────────────────────────────
+//
+// A shape's a:off/a:ext are expressed in its parent's coordinate space: the
+// slide for top-level shapes, the group's child space (a:chOff/a:chExt) for
+// group children. The group's own off/ext say where that child space lands in
+// *its* parent's space, so checking a child against the canvas means mapping
+// it through every enclosing group first (#59).
+
+// slide = translate + scale * child, per axis.
+struct Transform {
+    double sx = 1.0;
+    double sy = 1.0;
+    double tx = 0.0;
+    double ty = 0.0;
+};
+
+struct Box {
+    double x;
+    double y;
+    double w;
+    double h;
+};
+
+Box map_box(const Transform& t, const Geometry& g) noexcept {
+    return {t.tx + t.sx * static_cast<double>(g.off_x),
+            t.ty + t.sy * static_cast<double>(g.off_y),
+            t.sx * static_cast<double>(g.ext_cx),
+            t.sy * static_cast<double>(g.ext_cy)};
+}
+
+// The transform that maps a group's children into slide space, given the
+// transform that maps the group itself. A group without a child space, or
+// with a degenerate (zero) one — seen in the wild — falls back to the
+// parent's transform: children are then judged on their raw coordinates.
+// Flips and rotations are ignored: a mirrored child stays inside its group's
+// box, which is all this rule cares about.
+Transform child_transform(const Transform& parent, const Geometry& group) noexcept {
+    const auto& cs = group.child_space;
+    if (!cs || cs->ext_cx <= 0 || cs->ext_cy <= 0) {
+        return parent;
+    }
+    const Box b = map_box(parent, group);
+    Transform t;
+    t.sx = b.w / static_cast<double>(cs->ext_cx);
+    t.sy = b.h / static_cast<double>(cs->ext_cy);
+    t.tx = b.x - t.sx * static_cast<double>(cs->off_x);
+    t.ty = b.y - t.sy * static_cast<double>(cs->off_y);
+    return t;
+}
+
+// Half an EMU of slack absorbs floating-point noise from non-integer group
+// scales; nothing smaller than one EMU is representable in the file anyway.
+constexpr double kOverflowSlack = 0.5;
+
+bool overflows(const Box& b, const CanvasSize& canvas) noexcept {
+    const auto w = static_cast<double>(canvas.width_emu);
+    const auto h = static_cast<double>(canvas.height_emu);
+    return b.x < -kOverflowSlack || b.y < -kOverflowSlack || b.w < 0.0 || b.h < 0.0 ||
+           b.x + b.w > w + kOverflowSlack || b.y + b.h > h + kOverflowSlack;
+}
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void check_overflow_shape(const Shape& shape,
                           const CanvasSize& canvas,
+                          const Transform& to_slide,
                           std::size_t slide_idx,
                           std::vector<Diagnostic>& out) {
+    Transform for_children = to_slide;
     if (shape.geometry) {
-        const auto& g = *shape.geometry;
-        // Subtraction instead of addition avoids signed int64 overflow UB.
-        const bool off = g.off_x < 0 || g.off_y < 0 || g.ext_cx < 0 || g.ext_cy < 0 ||
-                         (canvas.width_emu - g.off_x) < g.ext_cx ||
-                         (canvas.height_emu - g.off_y) < g.ext_cy;
-        if (off) {
+        if (overflows(map_box(to_slide, *shape.geometry), canvas)) {
             out.push_back({"overflow",
                            Severity::Warning,
                            slide_idx,
                            shape.name,
                            std::format("shape \"{}\" extends past slide boundary", shape.name)});
         }
+        for_children = child_transform(to_slide, *shape.geometry);
     }
     for (const auto& child : shape.children) {
-        check_overflow_shape(child, canvas, slide_idx, out);
+        check_overflow_shape(child, canvas, for_children, slide_idx, out);
     }
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 void rule_overflow(const Slide& slide, const CanvasSize& canvas, std::vector<Diagnostic>& out) {
     for (const auto& shape : slide.shapes()) {
-        check_overflow_shape(shape, canvas, slide.index(), out);
+        check_overflow_shape(shape, canvas, Transform{}, slide.index(), out);
     }
 }
 

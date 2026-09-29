@@ -91,12 +91,23 @@ struct Table {
     std::vector<TableRow> rows;  // a:tr, in document order
 };
 
+// A group's child coordinate space (a:chOff / a:chExt). Children of the group
+// express their own a:off/a:ext in this space; the group's off/ext say where
+// that space lands in the parent's space. EMU.
+struct ChildSpace {
+    Emu off_x = 0;
+    Emu off_y = 0;
+    Emu ext_cx = 0;
+    Emu ext_cy = 0;
+};
+
 // Present only when the shape carries an a:xfrm. EMU, the native OOXML unit.
 struct Geometry {
     Emu off_x = 0;
     Emu off_y = 0;
     Emu ext_cx = 0;
     Emu ext_cy = 0;
+    std::optional<ChildSpace> child_space;  // groups only; nullopt when chOff/chExt absent
 };
 
 // A picture's blip reference and the media part it resolves to. Present only on

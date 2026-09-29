@@ -831,3 +831,63 @@ TEST_CASE("Slide: loads tables from tables_deck.pptx") {
     CHECK(t2->rows[0].cells[0].text() == "Annual Summary");
     CHECK(t2->rows[0].cells[1].merged);
 }
+
+// ── group child space (#59) ───────────────────────────────────────────────────
+
+TEST_CASE("Slide: group geometry captures chOff/chExt as child_space") {
+    const char* xml = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 1"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm flipH="1">
+        <a:off x="435427" y="5043713"/><a:ext cx="8305815" cy="1651001"/>
+        <a:chOff x="98612" y="5007574"/><a:chExt cx="6346007" cy="1926789"/>
+      </a:xfrm></p:grpSpPr>
+      <p:sp>
+        <p:nvSpPr><p:cNvPr id="3" name="Child"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+        <p:spPr><a:xfrm><a:off x="98612" y="5007574"/><a:ext cx="6346007" cy="1926789"/></a:xfrm></p:spPr>
+      </p:sp>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    REQUIRE(slide.shapes().size() == 1);
+    const auto& grp = slide.shapes()[0];
+    REQUIRE(grp.geometry.has_value());
+    CHECK(grp.geometry->off_x == 435427);
+    CHECK(grp.geometry->ext_cx == 8305815);
+    REQUIRE(grp.geometry->child_space.has_value());
+    CHECK(grp.geometry->child_space->off_x == 98612);
+    CHECK(grp.geometry->child_space->off_y == 5007574);
+    CHECK(grp.geometry->child_space->ext_cx == 6346007);
+    CHECK(grp.geometry->child_space->ext_cy == 1926789);
+
+    REQUIRE(grp.children.size() == 1);
+    REQUIRE(grp.children[0].geometry.has_value());
+    CHECK_FALSE(grp.children[0].geometry->child_space.has_value());
+}
+
+TEST_CASE("Slide: group xfrm without chOff/chExt leaves child_space empty") {
+    const char* xml = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:grpSp>
+      <p:nvGrpSpPr><p:cNvPr id="2" name="Group 1"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+      <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></a:xfrm></p:grpSpPr>
+    </p:grpSp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    REQUIRE(slide.shapes().size() == 1);
+    REQUIRE(slide.shapes()[0].geometry.has_value());
+    CHECK_FALSE(slide.shapes()[0].geometry->child_space.has_value());
+}
