@@ -17,6 +17,11 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- `diff` text ops (#70): within each changed slide, shapes are matched (id,
+  name, then placeholder) and their paragraphs and the speaker notes aligned
+  by LCS, reporting inserted / deleted / changed paragraphs and run
+  reformatting (bold, italic, underline, size, fonts). Whitespace-only and
+  field-run (`a:fld`) churn is ignored unless `strict_text` is set.
 
 ## [0.3.0] — 2026-09-29
 
