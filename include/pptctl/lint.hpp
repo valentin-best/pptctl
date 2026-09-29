@@ -40,4 +40,10 @@ struct RegisteredRule {
     LintRule fn;
 };
 
+// Output / exit-code behaviour of the lint subcommand.
+struct LintOptions {
+    bool json = false;    // machine-readable JSON instead of compiler-style lines
+    bool strict = false;  // exit 2 when any diagnostic is emitted
+};
+
 }  // namespace pptctl

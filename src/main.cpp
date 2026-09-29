@@ -5,6 +5,7 @@
 
 #include <CLI/CLI.hpp>
 #include <ostream>
+#include <pptctl/lint.hpp>
 #include <pptctl/print.hpp>
 #include <string>
 
@@ -16,8 +17,8 @@ namespace pptctl::cmd {
 int info(const std::string& path, bool json);
 int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
-int lint(const std::string& path);
-int lint_to(const std::string& path, std::ostream& os);
+int lint(const std::string& path, const LintOptions& opts);
+int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
 
 }  // namespace pptctl::cmd
 
@@ -60,9 +61,12 @@ int main(int argc, char** argv) {
 
     // --- lint ----------------------------------------------------------------
     std::string lint_path;
+    pptctl::LintOptions lint_opts;
     auto* lint_cmd = app.add_subcommand("lint", "Static analysis for .pptx files");
     lint_cmd->add_option("file", lint_path, "path to .pptx")->required()->check(CLI::ExistingFile);
-    lint_cmd->callback([&]() { std::exit(pptctl::cmd::lint(lint_path)); });
+    lint_cmd->add_flag("--json", lint_opts.json, "emit machine-readable JSON");
+    lint_cmd->add_flag("--strict", lint_opts.strict, "exit 2 if any diagnostic is reported");
+    lint_cmd->callback([&]() { std::exit(pptctl::cmd::lint(lint_path, lint_opts)); });
 
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`

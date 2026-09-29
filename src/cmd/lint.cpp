@@ -6,6 +6,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
@@ -330,18 +331,73 @@ std::string_view severity_label(Severity s) noexcept {
     return s == Severity::Error ? "error" : "warning";
 }
 
-void emit_diagnostics(std::ostream& os,
-                      const std::string& path,
-                      const std::vector<Diagnostic>& diagnostics) {
+// Deck-level diagnostics carry slide_index 0, so an ascending stable sort puts
+// them first and keeps each slide's rule order intact.
+void sort_diagnostics(std::vector<Diagnostic>& diagnostics) {
+    std::stable_sort(diagnostics.begin(), diagnostics.end(), [](const auto& a, const auto& b) {
+        return a.slide_index < b.slide_index;
+    });
+}
+
+struct Counts {
+    std::size_t warnings = 0;
+    std::size_t errors = 0;
+};
+
+Counts count(const std::vector<Diagnostic>& diagnostics) noexcept {
+    Counts c;
     for (const auto& d : diagnostics) {
-        println_to(os,
-                   "{}:{}: {}[{}]: {}",
-                   path,
-                   d.slide_index,
-                   severity_label(d.severity),
-                   d.rule_id,
-                   d.message);
+        (d.severity == Severity::Error ? c.errors : c.warnings) += 1;
     }
+    return c;
+}
+
+std::string plural(std::size_t n, std::string_view noun) {
+    return std::format("{} {}{}", n, noun, n == 1 ? "" : "s");
+}
+
+// Compiler-style `file:slide: severity[rule]: message`, deck-level lines
+// without the slide field, then a one-line summary.
+void emit_human(std::ostream& os, const std::string& path, const std::vector<Diagnostic>& sorted) {
+    for (const auto& d : sorted) {
+        const std::string loc =
+            d.slide_index == 0 ? path : std::format("{}:{}", path, d.slide_index);
+        println_to(os, "{}: {}[{}]: {}", loc, severity_label(d.severity), d.rule_id, d.message);
+    }
+    if (sorted.empty()) {
+        println_to(os, "{}: no issues found", path);
+        return;
+    }
+    const Counts c = count(sorted);
+    std::string summary;
+    if (c.warnings > 0 || c.errors == 0) {
+        summary = plural(c.warnings, "warning");
+    }
+    if (c.errors > 0) {
+        summary += (summary.empty() ? "" : ", ") + plural(c.errors, "error");
+    }
+    println_to(os, "{}: {}", path, summary);
+}
+
+// Machine-readable document; shape documented in docs/lint-schema.md.
+void emit_json(std::ostream& os, const std::string& path, const std::vector<Diagnostic>& sorted) {
+    nlohmann::json out;
+    out["schema_version"] = 1;
+    out["file"] = path;
+    auto diags = nlohmann::json::array();
+    for (const auto& d : sorted) {
+        nlohmann::json j;
+        j["rule"] = d.rule_id;
+        j["severity"] = severity_label(d.severity);
+        j["slide"] = d.slide_index == 0 ? nlohmann::json(nullptr) : nlohmann::json(d.slide_index);
+        j["shape"] = d.shape_name.empty() ? nlohmann::json(nullptr) : nlohmann::json(d.shape_name);
+        j["message"] = d.message;
+        diags.push_back(std::move(j));
+    }
+    out["diagnostics"] = std::move(diags);
+    const Counts c = count(sorted);
+    out["summary"] = {{"warnings", c.warnings}, {"errors", c.errors}};
+    os << out.dump(2) << '\n';
 }
 
 }  // namespace
@@ -422,7 +478,23 @@ std::vector<Diagnostic> check_img_bloat(const Slide& slide, const ImageProbe& pr
     return out;
 }
 
-int lint_to(const std::string& path, std::ostream& os) {
+// Sort, render and choose the exit code for a finished diagnostic stream:
+// 0 normally, 2 under --strict when anything was reported. (1 is reserved for
+// "could not read the deck", matching info/extract.)
+int report(const std::string& path,
+           std::vector<Diagnostic> diagnostics,
+           const LintOptions& opts,
+           std::ostream& os) {
+    sort_diagnostics(diagnostics);
+    if (opts.json) {
+        emit_json(os, path, diagnostics);
+    } else {
+        emit_human(os, path, diagnostics);
+    }
+    return (opts.strict && !diagnostics.empty()) ? 2 : 0;
+}
+
+int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) {
     Package pkg;
     if (!pkg.open(path)) {
         eprintln("error: cannot open '{}'", path);
@@ -489,12 +561,11 @@ int lint_to(const std::string& path, std::ostream& os) {
     const auto ctype_diags = check_ctype(part_ctypes);
     diagnostics.insert(diagnostics.end(), ctype_diags.begin(), ctype_diags.end());
 
-    emit_diagnostics(os, path, diagnostics);
-    return 0;
+    return report(path, std::move(diagnostics), opts, os);
 }
 
-int lint(const std::string& path) {
-    return lint_to(path, std::cout);
+int lint(const std::string& path, const LintOptions& opts) {
+    return lint_to(path, std::cout, opts);
 }
 
 std::vector<Diagnostic> lint_slide(const Slide& slide, const CanvasSize& canvas) {
