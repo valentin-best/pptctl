@@ -1,0 +1,7 @@
+--- <path>
++++ <path>
+@@ slide 1 (removed) @@
+@@ slide 1 (added) @@
+@@ slide 2 (added) @@
+@@ slide 3 (added) @@
+4 slides: 3 added, 1 removed, 0 moved, 0 changed

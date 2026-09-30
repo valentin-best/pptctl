@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
+#include <span>
 #include <string>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -262,4 +263,48 @@ TEST_CASE("Package: part_size is nullopt for a missing part") {
 TEST_CASE("Package: part_size is nullopt when no package is open") {
     pptctl::Package pkg;
     CHECK_FALSE(pkg.part_size("ppt/media/image1.png").has_value());
+}
+
+TEST_CASE("Package: fnv1a64 matches the reference vectors") {
+    // https://datatracker.ietf.org/doc/draft-eastlake-fnv/ test vectors.
+    CHECK(pptctl::fnv1a64({}) == 0xcbf29ce484222325ULL);
+    const std::string a = "a";
+    CHECK(pptctl::fnv1a64(std::as_bytes(std::span(a))) == 0xaf63dc4c8601ec8cULL);
+    const std::string foobar = "foobar";
+    CHECK(pptctl::fnv1a64(std::as_bytes(std::span(foobar))) == 0x85944171f73967e8ULL);
+}
+
+TEST_CASE("Package: part_hash is the fnv1a64 of the part bytes, cached per package") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+
+    const auto h = pkg.part_hash("ppt/media/image1.png");
+    REQUIRE(h.has_value());
+    CHECK(*h == pptctl::fnv1a64(pkg.read_part("ppt/media/image1.png")));
+    CHECK(pkg.part_hash("ppt/media/image1.png") == h);  // second call: cache hit
+    CHECK(pkg.part_hash("ppt/media/image2.png") != h);
+    CHECK_FALSE(pkg.part_hash("does/not/exist.png").has_value());
+
+    pptctl::Package closed;
+    CHECK_FALSE(closed.part_hash("ppt/media/image1.png").has_value());
+}
+
+TEST_CASE("Package: read_part_prefix returns at most the requested leading bytes") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+
+    const auto full = pkg.read_part("ppt/media/image1.png");
+    REQUIRE(full.size() == 120);
+
+    const auto head = pkg.read_part_prefix("ppt/media/image1.png", 16);
+    REQUIRE(head.size() == 16);
+    CHECK(std::equal(head.begin(), head.end(), full.begin()));
+
+    // Asking for more than the part holds yields the whole part.
+    const auto all = pkg.read_part_prefix("ppt/media/image1.png", 4096);
+    CHECK(all == full);
+
+    CHECK(pkg.read_part_prefix("does/not/exist.png", 16).empty());
+    pptctl::Package closed;
+    CHECK(closed.read_part_prefix("ppt/media/image1.png", 16).empty());
 }

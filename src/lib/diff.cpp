@@ -12,9 +12,22 @@
 #include <utility>
 #include <vector>
 
+#include "diff_internal.hpp"
+
 namespace pptctl {
 
 namespace {
+
+// What identifies a picture's image for comparison: the media content hash
+// when the slide was loaded from a package, so the same bytes match across
+// decks whatever part name they sit under and an image swap alone marks the
+// slide changed; else the resolved part; else the rId (parse-only slides).
+std::string picture_identity(const Picture& p) {
+    if (p.media_hash) {
+        return std::format("{:016x}", *p.media_hash);
+    }
+    return p.target.empty() ? p.rel_id : p.target;
+}
 
 // ── fingerprint ───────────────────────────────────────────────────────────────
 //
@@ -96,9 +109,15 @@ void feed_shape(Fnv1a& h, const Shape& s) {
     } else {
         h.feed(std::string_view{"nogeom"});
     }
+    if (s.fill) {
+        h.feed(s.fill->kind);
+        h.feed(s.fill->color);
+    } else {
+        h.feed(std::string_view{"nofill"});
+    }
     feed_paragraphs(h, s.paragraphs);
     if (s.picture) {
-        h.feed(s.picture->target.empty() ? s.picture->rel_id : s.picture->target);
+        h.feed(picture_identity(*s.picture));
         h.feed(s.picture->linked);
         h.feed(s.picture->alt_text);
         h.feed(s.picture->title);
@@ -172,7 +191,7 @@ void tokenize_paragraphs(const std::vector<Paragraph>& paras, std::vector<std::s
 void tokenize_shape(const Shape& s, std::vector<std::string>& out) {
     tokenize_paragraphs(s.paragraphs, out);
     if (s.picture) {
-        out.push_back("pic:" + (s.picture->target.empty() ? s.picture->rel_id : s.picture->target));
+        out.push_back("pic:" + picture_identity(*s.picture));
     }
     if (s.table) {
         for (const auto& row : s.table->rows) {
@@ -390,6 +409,14 @@ DiffReport match_slides(const std::vector<SlideSummary>& a,
         report.slides.insert(pos, d);
     }
     return report;
+}
+
+SlideChanges compare_slides(const Slide& a, const Slide& b, const DiffOptions& opts) {
+    SlideChanges out;
+    detail::diff_text(a, b, opts, out.text);
+    detail::diff_shapes(a, b, opts, out.shapes);
+    detail::diff_pictures(a, b, opts, out.pictures);
+    return out;
 }
 
 }  // namespace pptctl

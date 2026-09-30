@@ -11,11 +11,18 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace pptctl {
+
+// FNV-1a 64-bit hash of a byte range. The package layer's content identity
+// for parts: two decks may store the same image under different part names
+// (or different images under the same name), so anything that compares media
+// across packages keys on this rather than on the name.
+[[nodiscard]] std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept;
 
 // A single OOXML relationship, as declared in a part's `_rels/*.rels` file.
 struct Relationship {
@@ -69,6 +76,17 @@ class Package {
     // decompressing it. Returns nullopt if the part doesn't exist or no
     // package is open.
     [[nodiscard]] std::optional<std::uint64_t> part_size(std::string_view name) const;
+
+    // At most the first `max_bytes` bytes of a part, decompressing only that
+    // much. For header probing (image dimensions) of parts that may be
+    // megabytes. Empty if the part doesn't exist.
+    [[nodiscard]] std::vector<std::byte> read_part_prefix(std::string_view name,
+                                                          std::size_t max_bytes) const;
+
+    // fnv1a64 of a part's bytes, computed on first request and cached for the
+    // package's lifetime, so media shared by many slides is hashed once.
+    // Returns nullopt if the part doesn't exist.
+    [[nodiscard]] std::optional<std::uint64_t> part_hash(std::string_view name) const;
 
  private:
     struct Impl;

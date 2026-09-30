@@ -2,9 +2,13 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
 #define PPTCTL_FIXTURES_DIR "tests/fixtures"
@@ -890,4 +894,98 @@ TEST_CASE("Slide: group xfrm without chOff/chExt leaves child_space empty") {
     REQUIRE(slide.shapes().size() == 1);
     REQUIRE(slide.shapes()[0].geometry.has_value());
     CHECK_FALSE(slide.shapes()[0].geometry->child_space.has_value());
+}
+
+TEST_CASE("Slide: load hashes each embedded picture's media bytes and probes its size") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    pptctl::Presentation pres(pkg);
+    REQUIRE(pres.load());
+
+    std::vector<std::uint64_t> hashes;
+    for (const auto& part : pres.slide_parts()) {
+        pptctl::Slide slide;
+        REQUIRE(slide.load(pkg, part));
+        for (const auto& s : slide.shapes()) {
+            if (!s.picture) {
+                continue;
+            }
+            REQUIRE(s.picture->media_hash.has_value());
+            REQUIRE(s.picture->dimensions.has_value());
+            CHECK(s.picture->dimensions->width == 64 + hashes.size());
+            CHECK(s.picture->dimensions->height == 48 + hashes.size());
+            // The hash is the FNV-1a 64 of the part bytes, so it can be
+            // recomputed from the package alone.
+            const auto bytes = pkg.read_part(s.picture->target);
+            CHECK(*s.picture->media_hash == pptctl::fnv1a64(bytes));
+            hashes.push_back(*s.picture->media_hash);
+        }
+    }
+    // 12 distinct PNGs -> 12 distinct hashes.
+    REQUIRE(hashes.size() == 12);
+    std::sort(hashes.begin(), hashes.end());
+    CHECK(std::unique(hashes.begin(), hashes.end()) == hashes.end());
+}
+
+TEST_CASE("Slide: parse alone leaves media_hash and dimensions unset") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(kEmbeddedPicture));
+    REQUIRE(slide.shapes().at(0).picture.has_value());
+    CHECK_FALSE(slide.shapes()[0].picture->media_hash.has_value());
+    CHECK_FALSE(slide.shapes()[0].picture->dimensions.has_value());
+}
+
+// ── solid fills (#72) ─────────────────────────────────────────────────────────
+
+TEST_CASE("Slide: parses solid fills (srgb, scheme, none) and leaves inherited fills empty") {
+    const char* xml = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Srgb"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1" cy="1"/></a:xfrm>
+        <a:solidFill><a:srgbClr val="ff8800"/></a:solidFill></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="3" name="Scheme"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:solidFill><a:schemeClr val="accent1"><a:lumMod val="75000"/></a:schemeClr></a:solidFill></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="4" name="None"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:noFill/></p:spPr>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="5" name="Inherited"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+    </p:sp>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="6" name="Gradient"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="000000"/></a:gs></a:gsLst></a:gradFill></p:spPr>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    REQUIRE(slide.shapes().size() == 5);
+
+    const auto& srgb = slide.shapes()[0];
+    REQUIRE(srgb.fill.has_value());
+    CHECK(srgb.fill->kind == "solid");
+    CHECK(srgb.fill->color == "FF8800");  // hex is normalized to upper case
+
+    const auto& scheme = slide.shapes()[1];
+    REQUIRE(scheme.fill.has_value());
+    CHECK(scheme.fill->kind == "solid");
+    CHECK(scheme.fill->color == "accent1");
+
+    const auto& none = slide.shapes()[2];
+    REQUIRE(none.fill.has_value());
+    CHECK(none.fill->kind == "none");
+    CHECK(none.fill->color.empty());
+
+    CHECK_FALSE(slide.shapes()[3].fill.has_value());
+    CHECK_FALSE(slide.shapes()[4].fill.has_value());  // gradients are not modelled
 }

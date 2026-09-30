@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <pptctl/image.hpp>  // for ImageDimensions
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>  // for Emu
 #include <string>
@@ -112,18 +113,20 @@ struct Geometry {
 
 // A picture's blip reference and the media part it resolves to. Present only on
 // shapes with kind == Picture. parse() fills rel_id/linked/alt_text from the
-// slide XML; Slide::load() fills target/content_type/size_bytes via the
-// package's relationship graph (left empty/nullopt for linked or unresolved
-// images).
+// slide XML; Slide::load() fills target/content_type/size_bytes/media_hash/
+// dimensions via the package's relationship graph (left empty/nullopt for
+// linked or unresolved images).
 struct Picture {
-    std::string rel_id;                       // a:blip@r:embed, or @r:link when linked
-    bool linked = false;                      // from r:link (external) rather than r:embed
-    std::string target;                       // resolved media part; empty if linked/unresolved
-    std::string content_type;                 // e.g. "image/png"; empty if unknown
-    std::optional<std::uint64_t> size_bytes;  // uncompressed media size; nullopt if unknown
-    std::optional<std::string> alt_text;      // p:cNvPr@descr
-    std::optional<std::string> title;         // p:cNvPr@title
-    bool decorative = false;                  // adec:decorative marker in cNvPr extLst
+    std::string rel_id;                         // a:blip@r:embed, or @r:link when linked
+    bool linked = false;                        // from r:link (external) rather than r:embed
+    std::string target;                         // resolved media part; empty if linked/unresolved
+    std::string content_type;                   // e.g. "image/png"; empty if unknown
+    std::optional<std::uint64_t> size_bytes;    // uncompressed media size; nullopt if unknown
+    std::optional<std::uint64_t> media_hash;    // fnv1a64 of the media bytes; nullopt if unresolved
+    std::optional<ImageDimensions> dimensions;  // pixel size when the media is a readable PNG/JPEG
+    std::optional<std::string> alt_text;        // p:cNvPr@descr
+    std::optional<std::string> title;           // p:cNvPr@title
+    bool decorative = false;                    // adec:decorative marker in cNvPr extLst
 };
 
 // One data series from a chart part. parse() captures rel_id; Slide::load()
@@ -145,6 +148,18 @@ struct Chart {
     std::vector<ChartSeries> series;
 };
 
+// A shape's own fill from p:spPr (or p:grpSpPr). Present only when the shape
+// declares one explicitly; absent means "inherited" from the style, layout or
+// master. Deliberately minimal: only a:solidFill and a:noFill are modelled —
+// gradients, patterns and picture fills are left absent.
+struct Fill {
+    std::string kind;   // "solid" (a:solidFill) or "none" (a:noFill)
+    std::string color;  // solid: a:srgbClr@val as upper-case hex ("FF0000") or the
+                        // a:schemeClr@val name ("accent1"); empty for "none"
+
+    [[nodiscard]] bool operator==(const Fill&) const = default;
+};
+
 struct Shape {
     ShapeKind kind = ShapeKind::Other;
     std::string id;                               // p:cNvPr@id
@@ -152,6 +167,7 @@ struct Shape {
     std::optional<std::string> placeholder_type;  // p:nvPr/p:ph@type
     std::optional<int> placeholder_idx;           // p:nvPr/p:ph@idx
     std::optional<Geometry> geometry;
+    std::optional<Fill> fill;           // explicit solid/no fill; nullopt when inherited
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
     std::optional<Picture> picture;     // populated only when kind == Picture

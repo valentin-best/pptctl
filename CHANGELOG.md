@@ -17,6 +17,32 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- Picture diff (#73): pictures on a matched slide pair are paired by shape id
+  (then name, groups walked) and reported as added, removed, replaced,
+  re-linked (embed ↔ link) or alt-text changed. Media identity is a content
+  hash, not a part name: the same image under a different `ppt/media/` name
+  is not a change, and an image swap alone marks the slide changed. Each side
+  carries size and, for PNG/JPEG, pixel dimensions. `Picture` gains
+  `media_hash` and `dimensions`; `Package` gains a per-package hash cache
+  (`part_hash`) and a header-only `read_part_prefix`. Rendering lands with #71.
+- `diff` output (#71): `--format unified` (default; file header, one
+  `@@ slide A -> B (…) @@` hunk per slide that is not simply unchanged,
+  summary line, colour on a TTY with `--color`/`--no-color` and `NO_COLOR`,
+  nothing at all for identical decks), `--format json` with a versioned
+  schema (`docs/diff-schema.md`; unchanged slides included, null indices for
+  added/removed), `--format html` as one self-contained page, and `--quiet`
+  for exit-code-only use.
+- `diff` shape-level ops (#72): shapes matched by id, name, then placeholder
+  type/idx (recursing into groups) and reported as added, removed, moved,
+  resized, kind-changed or recolored, with EMU deltas and old/new geometry;
+  sub-pixel jitter is ignored (`geometry_tolerance_emu`, default 9525 = 1 px
+  at 96 DPI). The slide model gains a minimal `Shape::fill` (solid
+  `a:srgbClr`/`a:schemeClr`, or `a:noFill`) so recolors are detectable.
+- `diff` text ops (#70): within each changed slide, shapes are matched (id,
+  name, then placeholder) and their paragraphs and the speaker notes aligned
+  by LCS, reporting inserted / deleted / changed paragraphs and run
+  reformatting (bold, italic, underline, size, fonts). Whitespace-only and
+  field-run (`a:fld`) churn is ignored unless `strict_text` is set.
 
 ## [0.3.0] — 2026-09-29
 

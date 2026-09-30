@@ -1,6 +1,8 @@
 // pptctl/slide.cpp — parses a slide's shape tree into a content model.
 
+#include <cstddef>
 #include <format>
+#include <pptctl/image.hpp>
 #include <pptctl/slide.hpp>
 #include <pugixml.hpp>
 #include <string_view>
@@ -132,11 +134,53 @@ std::optional<Geometry> parse_geometry(pugi::xml_node shape_el) {
     return g;
 }
 
+// The shape's own solid/no fill from p:spPr (or p:grpSpPr for groups). Only
+// a:solidFill and a:noFill are modelled; anything else (gradient, pattern,
+// blip) or no fill element at all yields nullopt, i.e. "inherited".
+std::optional<Fill> parse_fill(pugi::xml_node shape_el) {
+    pugi::xml_node props = shape_el.child("p:spPr");
+    if (!props) {
+        props = shape_el.child("p:grpSpPr");
+    }
+    if (!props) {
+        return std::nullopt;
+    }
+    if (props.child("a:noFill")) {
+        return Fill{"none", ""};
+    }
+    auto solid = props.child("a:solidFill");
+    if (!solid) {
+        return std::nullopt;
+    }
+    if (auto srgb = solid.child("a:srgbClr")) {
+        // Producers disagree on hex case; normalize so a re-save isn't a recolor.
+        std::string hex = srgb.attribute("val").as_string("");
+        for (char& c : hex) {
+            if (c >= 'a' && c <= 'f') {
+                c = static_cast<char>(c - ('a' - 'A'));
+            }
+        }
+        return Fill{"solid", std::move(hex)};
+    }
+    if (auto scheme = solid.child("a:schemeClr")) {
+        return Fill{"solid", scheme.attribute("val").as_string("")};
+    }
+    // Other colour choices (a:sysClr, a:prstClr, a:hslClr, a:scrgbClr): rare on
+    // shapes; report as solid with the raw value so a change is still visible.
+    for (auto clr : solid.children()) {
+        if (auto val = clr.attribute("val")) {
+            return Fill{"solid", val.as_string("")};
+        }
+    }
+    return Fill{"solid", ""};
+}
+
 void set_identity(pugi::xml_node shape_el, Shape& shape) {
     auto cnvpr = nv_cnvpr(shape_el);
     shape.id = cnvpr.attribute("id").as_string("");
     shape.name = cnvpr.attribute("name").as_string("");
     shape.geometry = parse_geometry(shape_el);
+    shape.fill = parse_fill(shape_el);
 }
 
 ShapeKind graphic_frame_kind(pugi::xml_node gf) {
@@ -292,10 +336,16 @@ void parse_sp_tree(pugi::xml_node tree, std::vector<Shape>& out) {
 }
 
 // Resolves each embedded picture's blip rId to its media part via the package's
-// relationship graph, recursing into group children. Linked (external) and
-// unresolved pictures are left as parsed.
+// relationship graph, recursing into group children, and identifies the media
+// by content: a hash (cached by the package, so shared media costs one read
+// per deck) and, for PNG/JPEG, the pixel size from the part's first bytes.
+// Linked (external) and unresolved pictures are left as parsed.
 // NOLINTNEXTLINE(misc-no-recursion)
 void resolve_pictures(const Package& pkg, std::string_view part_name, std::vector<Shape>& shapes) {
+    // A PNG's IHDR is in the first 33 bytes; a JPEG's SOF sits behind its APP
+    // segments (EXIF, ICC), which are each at most 64 KiB. Anything past that
+    // is a pathological header and simply reports no dimensions.
+    constexpr std::size_t kHeaderBytes = 65'536;
     for (auto& shape : shapes) {
         if (shape.picture && !shape.picture->linked && !shape.picture->rel_id.empty()) {
             Picture& pic = *shape.picture;
@@ -303,6 +353,9 @@ void resolve_pictures(const Package& pkg, std::string_view part_name, std::vecto
             if (!pic.target.empty()) {
                 pic.content_type = pkg.content_type(pic.target);
                 pic.size_bytes = pkg.part_size(pic.target);
+                pic.media_hash = pkg.part_hash(pic.target);
+                pic.dimensions =
+                    probe_image_dimensions(pkg.read_part_prefix(pic.target, kHeaderBytes));
             }
         }
         if (!shape.children.empty()) {
