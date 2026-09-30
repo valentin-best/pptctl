@@ -681,3 +681,33 @@ TEST_CASE("Diff: self-diff of every fixture in tests/fixtures is empty") {
     }
     CHECK(decks >= 17);  // 10 pre-existing fixtures + diff_base and its 6 variants
 }
+
+// ── #87: sub-tolerance jitter must not produce a "changed" slide with no ops ──
+
+TEST_CASE("Diff: command — a 1 EMU nudge is reported as unchanged, exit 0") {
+    // diff_shape_edit nudges one text box by 1 EMU on slide 2 alongside the
+    // real edits on slide 4; slide 2 must come out Unchanged, not an empty hunk.
+    const auto r =
+        pptctl::cmd::diff_report(fixture("diff_base.pptx"), fixture("diff_shape_edit.pptx"), {});
+    REQUIRE(r);
+    REQUIRE(r->slides.size() == 6);
+    CHECK(r->slides[1].status == pptctl::SlideStatus::Unchanged);
+    CHECK(r->slides[1].changes.empty());
+    CHECK(r->slides[3].status == pptctl::SlideStatus::Changed);
+    CHECK_FALSE(r->slides[3].changes.empty());
+}
+
+TEST_CASE("Diff: command — decks that differ only by sub-tolerance jitter are identical") {
+    // Build the check from the shape-edit pair with the tolerance raised so
+    // the real edits vanish too: every pair then has nothing to report and
+    // the whole report must say identical (exit 0), not "changed" x2.
+    pptctl::DiffOptions opts;
+    opts.geometry_tolerance_emu = 914400 * 10;  // 10 in: swallows the 0.5 in move/resize
+    const auto r =
+        pptctl::cmd::diff_report(fixture("diff_base.pptx"), fixture("diff_shape_edit.pptx"), opts);
+    REQUIRE(r);
+    // The recolor on slide 4 is still a real change, so not identical...
+    CHECK_FALSE(r->identical());
+    // ...but slide 2 (jitter only) is unchanged.
+    CHECK(r->slides[1].status == pptctl::SlideStatus::Unchanged);
+}

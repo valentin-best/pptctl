@@ -493,6 +493,13 @@ std::optional<DiffReport> diff_report(const std::string& a,
         sa.set_index(s.a_index);
         sb.set_index(s.b_index);
         s.changes = compare_slides(sa, sb, opts);
+        // The fingerprint is exact, the op families apply tolerances (geometry
+        // jitter, whitespace, field runs). A pair that differs only below those
+        // tolerances has nothing to report and is unchanged as far as the user
+        // is concerned (#87); `similarity` keeps the best-match score.
+        if (s.changes.empty()) {
+            s.status = SlideStatus::Unchanged;
+        }
     }
     return report;
 }

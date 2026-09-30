@@ -67,6 +67,10 @@ Phase 4: `pptctl diff`, in progress.
   HTML output of every pair checked in under `tests/golden/`, an
   identical-pair test, and a self-diff regression net over every fixture.
 
+### Fixed
+
+- `diff`: a matched slide whose only differences fall below the op tolerances (sub-pixel geometry jitter, whitespace, field runs) is now reported as unchanged instead of a `changed` slide with an empty hunk and exit code 1 (#87).
+
 ## [0.3.0] — 2026-09-29
 
 Phase 3: `pptctl lint`, static analysis for `.pptx` files.
