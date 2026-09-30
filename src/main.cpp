@@ -29,7 +29,7 @@ int diff(const std::string& a,
 
 namespace {
 
-constexpr auto kVersion = "0.3.0";
+constexpr auto kVersion = "0.4.0";
 
 pptctl::FontTarget parse_font_target(const std::string& s) {
     if (s == "windows") {
