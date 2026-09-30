@@ -1,0 +1,86 @@
+{
+  "a": "<path>",
+  "b": "<path>",
+  "schema_version": 1,
+  "slides": [
+    {
+      "a_index": 1,
+      "b_index": 1,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 2,
+      "b_index": 2,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 3,
+      "b_index": 3,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 4,
+      "b_index": null,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 0.0,
+      "status": "removed"
+    },
+    {
+      "a_index": 5,
+      "b_index": 4,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 6,
+      "b_index": 5,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    }
+  ],
+  "summary": {
+    "added": 0,
+    "changed": 0,
+    "moved": 0,
+    "removed": 1,
+    "unchanged": 5
+  }
+}

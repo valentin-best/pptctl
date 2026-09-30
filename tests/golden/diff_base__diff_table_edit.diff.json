@@ -1,0 +1,127 @@
+{
+  "a": "<path>",
+  "b": "<path>",
+  "schema_version": 1,
+  "slides": [
+    {
+      "a_index": 1,
+      "b_index": 1,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 2,
+      "b_index": 2,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 3,
+      "b_index": 3,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 4,
+      "b_index": 4,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 5,
+      "b_index": 5,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 6,
+      "b_index": 6,
+      "changes": {
+        "pictures": [],
+        "shapes": [
+          {
+            "delta": {
+              "cx_emu": 0,
+              "cx_in": 0.0,
+              "cy_emu": 457200,
+              "cy_in": 0.5,
+              "x_emu": 0,
+              "x_in": 0.0,
+              "y_emu": 0,
+              "y_in": 0.0
+            },
+            "group_path": [],
+            "id": "2",
+            "kind": "table",
+            "name": "Table 1",
+            "new_fill": null,
+            "new_geometry": {
+              "cx_emu": 5486400,
+              "cx_in": 6.0,
+              "cy_emu": 1828800,
+              "cy_in": 2.0,
+              "x_emu": 914400,
+              "x_in": 1.0,
+              "y_emu": 914400,
+              "y_in": 1.0
+            },
+            "old_fill": null,
+            "old_geometry": {
+              "cx_emu": 5486400,
+              "cx_in": 6.0,
+              "cy_emu": 1371600,
+              "cy_in": 1.5,
+              "x_emu": 914400,
+              "x_in": 1.0,
+              "y_emu": 914400,
+              "y_in": 1.0
+            },
+            "old_kind": null,
+            "op": "resized"
+          }
+        ],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 0.7619047619047619,
+      "status": "changed"
+    }
+  ],
+  "summary": {
+    "added": 0,
+    "changed": 1,
+    "moved": 0,
+    "removed": 0,
+    "unchanged": 5
+  }
+}

@@ -42,12 +42,24 @@ for fixture in "${LINT_FIXTURES[@]}"; do
     echo "wrote $outfile"
 done
 
-# Diff goldens: one <a>__<b>.diff.{txt,json,html} per pair, for one differing
-# pair and one self-diff. `diff` exits 1 when the decks differ, so only 2
-# (error) aborts. Input paths are normalized in each format the same way the
-# test does: `---`/`+++` header lines, the `a`/`b` JSON fields, and the
-# `<code class="path">` elements.
-DIFF_PAIRS=("minimal three_slides" "three_slides three_slides")
+# Diff goldens: one <a>__<b>.diff.{txt,json,html} per pair. Besides one
+# real-PowerPoint pair and one self-diff, diff_base.pptx is diffed against each
+# of its one-edit variants (#75; built by build_diff_deck in
+# ../fixtures/generate_fixtures.py) and against itself, so every op family has
+# a pinned rendering in every format:
+#   diff_text_edit     word changed, bullet added, bullet deleted, run bolded, notes
+#   diff_reorder       slides 2 and 4 swapped (moved, no nested ops)
+#   diff_slide_added   one slide added at position 3
+#   diff_slide_removed slide 4 removed
+#   diff_shape_edit    rectangle moved + resized + recolored; a 1 EMU nudge elsewhere
+#   diff_table_edit    table cell edited, row added (table ops land with #74)
+# `diff` exits 1 when the decks differ, so only 2 (error) aborts. Input paths
+# are normalized in each format the same way the test does: `---`/`+++` header
+# lines, the `a`/`b` JSON fields, and the `<code class="path">` elements.
+DIFF_PAIRS=("minimal three_slides" "three_slides three_slides"
+            "diff_base diff_base" "diff_base diff_text_edit" "diff_base diff_reorder"
+            "diff_base diff_slide_added" "diff_base diff_slide_removed"
+            "diff_base diff_shape_edit" "diff_base diff_table_edit")
 
 for pair in "${DIFF_PAIRS[@]}"; do
     read -r a b <<< "$pair"
@@ -58,7 +70,7 @@ for pair in "${DIFF_PAIRS[@]}"; do
         esac
         outfile="$GOLDEN/${a}__${b}.diff.${ext}"
         rc=0
-        "$BIN" diff --format "$fmt" "$FIXTURES/${a}.pptx" "$FIXTURES/${b}.pptx" > "$outfile" || rc=$?
+        "$BIN" diff --no-color --format "$fmt" "$FIXTURES/${a}.pptx" "$FIXTURES/${b}.pptx" > "$outfile" || rc=$?
         if [[ $rc -gt 1 ]]; then
             echo "error: diff exited $rc for $a vs $b" >&2
             exit 1

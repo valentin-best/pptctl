@@ -1,0 +1,5 @@
+--- <path>
++++ <path>
+@@ slide 6 -> 6 (changed 0.76) @@
+  shape "Table 1" resized by (+0.00 in, +0.50 in) to 6.00 x 2.00 in
+6 slides: 0 added, 0 removed, 0 moved, 1 changed

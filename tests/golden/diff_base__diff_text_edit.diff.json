@@ -1,0 +1,144 @@
+{
+  "a": "<path>",
+  "b": "<path>",
+  "schema_version": 1,
+  "slides": [
+    {
+      "a_index": 1,
+      "b_index": 1,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 2,
+      "b_index": 2,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": [
+          {
+            "a_paragraph": 2,
+            "b_paragraph": 2,
+            "formatting": null,
+            "kind": "changed",
+            "new_text": "Review of this quarter",
+            "notes": false,
+            "old_text": "Review of last quarter",
+            "shape": "Content Placeholder 2",
+            "shape_id": "3"
+          },
+          {
+            "a_paragraph": null,
+            "b_paragraph": 5,
+            "formatting": null,
+            "kind": "inserted",
+            "new_text": "Closing remarks",
+            "notes": false,
+            "old_text": null,
+            "shape": "Content Placeholder 2",
+            "shape_id": "3"
+          }
+        ]
+      },
+      "moved": false,
+      "similarity": 0.8947368421052632,
+      "status": "changed"
+    },
+    {
+      "a_index": 3,
+      "b_index": 3,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": [
+          {
+            "a_paragraph": 1,
+            "b_paragraph": 1,
+            "formatting": "\"Revenue up twelve percent\": bold on",
+            "kind": "reformatted",
+            "new_text": "Revenue up twelve percent",
+            "notes": false,
+            "old_text": "Revenue up twelve percent",
+            "shape": "Content Placeholder 2",
+            "shape_id": "3"
+          },
+          {
+            "a_paragraph": 3,
+            "b_paragraph": null,
+            "formatting": null,
+            "kind": "deleted",
+            "new_text": null,
+            "notes": false,
+            "old_text": "Two new hires",
+            "shape": "Content Placeholder 2",
+            "shape_id": "3"
+          }
+        ]
+      },
+      "moved": false,
+      "similarity": 0.8235294117647058,
+      "status": "changed"
+    },
+    {
+      "a_index": 4,
+      "b_index": 4,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    },
+    {
+      "a_index": 5,
+      "b_index": 5,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": [
+          {
+            "a_paragraph": 1,
+            "b_paragraph": 1,
+            "formatting": null,
+            "kind": "changed",
+            "new_text": "Remember to pause for discussion.",
+            "notes": true,
+            "old_text": "Remember to pause for questions.",
+            "shape": "",
+            "shape_id": ""
+          }
+        ]
+      },
+      "moved": false,
+      "similarity": 0.9230769230769231,
+      "status": "changed"
+    },
+    {
+      "a_index": 6,
+      "b_index": 6,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 1.0,
+      "status": "unchanged"
+    }
+  ],
+  "summary": {
+    "added": 0,
+    "changed": 3,
+    "moved": 0,
+    "removed": 0,
+    "unchanged": 3
+  }
+}

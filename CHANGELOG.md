@@ -48,6 +48,11 @@ Phase 4: `pptctl diff`, in progress.
   by LCS, reporting inserted / deleted / changed paragraphs and run
   reformatting (bold, italic, underline, size, fonts). Whitespace-only and
   field-run (`a:fld`) churn is ignored unless `strict_text` is set.
+- `diff` golden fixture pairs (#75): `diff_base.pptx` plus six one-edit
+  variants (text edit, reorder, slide added, slide removed, shape edit, table
+  edit) from a single generator builder, with the expected unified, JSON and
+  HTML output of every pair checked in under `tests/golden/`, an
+  identical-pair test, and a self-diff regression net over every fixture.
 
 ## [0.3.0] — 2026-09-29
 

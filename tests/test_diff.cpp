@@ -1,8 +1,11 @@
-// Tests for the diff engine: slide fingerprints, similarity, matching.
+// Tests for the diff engine: slide fingerprints, similarity, matching, the
+// renderers, and the golden fixture pairs.
 
 #include <doctest/doctest.h>
 
 #include <cctype>
+#include <filesystem>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -586,4 +589,82 @@ TEST_CASE("Diff: command — unified end to end shows picture ops for the image-
     CHECK(rc == 1);
     CHECK(os.str().find("replaced") != std::string::npos);
     CHECK(os.str().find("alt text") != std::string::npos);
+}
+
+// ── golden fixture pairs (#75) ────────────────────────────────────────────────
+//
+// diff_base.pptx and its six one-edit variants (build_diff_deck in
+// tests/fixtures/generate_fixtures.py) pin what every renderer says about each
+// edit family, as tests/golden/diff_base__<variant>.diff.{txt,json,html}; the
+// self-pair pins the empty report. Each golden must show exactly the edit the
+// variant makes and nothing else, so a spurious op here is an engine finding.
+// Regenerate after an intentional output change:
+//   ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
+
+namespace {
+
+struct GoldenFormat {
+    const char* format;
+    const char* ext;
+};
+
+constexpr GoldenFormat kGoldenFormats[] = {{"unified", "txt"}, {"json", "json"}, {"html", "html"}};
+
+// diff_base.pptx against <variant>.pptx in every format.
+void check_diff_pair_goldens(const char* variant) {
+    const std::string b = std::string(variant) + ".pptx";
+    for (const auto& [format, ext] : kGoldenFormats) {
+        const std::string golden = std::format("diff_base__{}.diff.{}", variant, ext);
+        CAPTURE(golden);
+        check_diff_golden("diff_base.pptx", b.c_str(), format, golden.c_str());
+    }
+}
+
+}  // namespace
+
+TEST_CASE("golden: diff_base__diff_base.diff.*") {
+    check_diff_pair_goldens("diff_base");
+}
+TEST_CASE("golden: diff_base__diff_text_edit.diff.*") {
+    check_diff_pair_goldens("diff_text_edit");
+}
+TEST_CASE("golden: diff_base__diff_reorder.diff.*") {
+    check_diff_pair_goldens("diff_reorder");
+}
+TEST_CASE("golden: diff_base__diff_slide_added.diff.*") {
+    check_diff_pair_goldens("diff_slide_added");
+}
+TEST_CASE("golden: diff_base__diff_slide_removed.diff.*") {
+    check_diff_pair_goldens("diff_slide_removed");
+}
+TEST_CASE("golden: diff_base__diff_shape_edit.diff.*") {
+    check_diff_pair_goldens("diff_shape_edit");
+}
+TEST_CASE("golden: diff_base__diff_table_edit.diff.*") {
+    check_diff_pair_goldens("diff_table_edit");
+}
+
+TEST_CASE("golden: the identical pair prints an empty unified report and exits 0") {
+    std::string out;
+    CHECK(run_diff("diff_base.pptx", "diff_base.pptx", out, {.format = "unified"}) == 0);
+    CHECK(out.empty());
+    CHECK(read_golden("diff_base__diff_base.diff.txt").empty());
+}
+
+// Cheap regression net: no fixture, however exotic, may differ from itself.
+TEST_CASE("Diff: self-diff of every fixture in tests/fixtures is empty") {
+    std::size_t decks = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(PPTCTL_FIXTURES_DIR)) {
+        if (entry.path().extension() != ".pptx") {
+            continue;
+        }
+        ++decks;
+        const std::string path = entry.path().string();
+        CAPTURE(path);
+        std::ostringstream os;
+        const int rc = pptctl::cmd::diff_to(path, path, os, {}, {.format = "unified"});
+        CHECK(rc == 0);
+        CHECK(os.str().empty());
+    }
+    CHECK(decks >= 17);  // 10 pre-existing fixtures + diff_base and its 6 variants
 }
