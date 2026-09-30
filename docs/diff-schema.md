@@ -73,10 +73,64 @@ pair of decks and `pptctl` version.
 | `pictures` | `array<PictureChange>` | Picture media ops: added, removed, replaced, re-linked, alt-text. |
 
 All three arrays are always present (empty for slides that are not
-`changed`). Their per-op keys are defined by the issues that populate them —
-`text` by #70, `shapes` by #72, `pictures` by #73 — and are documented here
-as each lands. Until then every array is empty. Adding a new op kind is an
-additive change.
+`changed`). Every key of an op is always present; a key that does not apply
+to that op is `null`. Adding a new op kind or key is an additive change.
+
+### TextChange
+
+| Field | Type | Description |
+|---|---|---|
+| `kind` | `string` | `inserted`, `deleted`, `changed` or `reformatted`. |
+| `shape` | `string` | `p:cNvPr@name` of the shape in B; `""` for the notes. |
+| `shape_id` | `string` | `p:cNvPr@id` of the shape in B; `""` for the notes. |
+| `notes` | `boolean` | `true` when the change is in the speaker notes. |
+| `a_paragraph` | `integer \| null` | 1-based paragraph index in A; `null` when `inserted`. |
+| `b_paragraph` | `integer \| null` | 1-based paragraph index in B; `null` when `deleted`. |
+| `old_text` | `string \| null` | A paragraph text; `null` when `inserted`. |
+| `new_text` | `string \| null` | B paragraph text; `null` when `deleted`. |
+| `formatting` | `string \| null` | `reformatted` only: what changed, e.g. `"world": bold on, size 18pt -> 24pt`. |
+
+Whitespace-only differences and field runs (`a:fld`) are ignored unless
+`--strict-text` is given.
+
+### ShapeChange
+
+| Field | Type | Description |
+|---|---|---|
+| `op` | `string` | `added`, `removed`, `moved`, `resized`, `kind_changed` or `recolored`. One shape can yield several ops. |
+| `id` | `string` | `p:cNvPr@id`, from B (from A when `removed`). |
+| `name` | `string` | `p:cNvPr@name`, same side as `id`. |
+| `kind` | `string` | Shape kind in B (in A when `removed`); the new kind for `kind_changed`. |
+| `group_path` | `array<string>` | Names of enclosing groups, outermost first. |
+| `old_kind` | `string \| null` | `kind_changed` only. |
+| `old_geometry` | `Geometry \| null` | A side; `null` when `added` or A has no `a:xfrm`. |
+| `new_geometry` | `Geometry \| null` | B side; `null` when `removed` or B has no `a:xfrm`. |
+| `delta` | `Geometry \| null` | `moved` / `resized`: new minus old. |
+| `old_fill` | `Fill \| null` | A side; `null` when inherited. |
+| `new_fill` | `Fill \| null` | B side; `null` when inherited. |
+
+`Geometry` carries EMU as integers (`x_emu`, `y_emu`, `cx_emu`, `cy_emu`)
+alongside inches as doubles (`x_in`, `y_in`, `cx_in`, `cy_in`). `Fill` is
+`{ "kind": "solid" | "none", "color": "<RRGGBB or scheme name>" }`. Moves and
+resizes at or below `--geometry-tolerance` EMU (default `9525`, one pixel at
+96 DPI) are not reported.
+
+### PictureChange
+
+| Field | Type | Description |
+|---|---|---|
+| `op` | `string` | `added`, `removed`, `replaced`, `relinked` or `alt_text_changed`. |
+| `shape_id` | `string` | `p:cNvPr@id`, from B when the shape exists there, else A. |
+| `shape_name` | `string` | `p:cNvPr@name`, same side as `shape_id`. |
+| `before` | `Picture \| null` | A side; `null` when `added`. |
+| `after` | `Picture \| null` | B side; `null` when `removed`. |
+
+`Picture` has `rel_id`, `linked`, `target`, `content_type`, `size_bytes`,
+`media_hash` (16 hex digits, FNV-1a 64 of the media bytes; `null` for linked
+or unresolved images), `width`, `height` (pixels when the header could be
+probed, else `null`), `alt_text`, `title`, `decorative`. Two pictures are
+the same media when their `media_hash` values are equal, regardless of the
+part name.
 
 ---
 

@@ -203,16 +203,35 @@ bool want_color(const DiffOutputOptions& out, const std::ostream& os) {
     return no_color == nullptr || *no_color == '\0';
 }
 
-// Nested ops of one changed slide, as hunk body lines. Text ops are the
-// `+`/`-` lines; shape and picture ops are one-line summaries.
-void render_changes_unified([[maybe_unused]] const SlideChanges& changes,
-                            [[maybe_unused]] std::ostream& os,
-                            [[maybe_unused]] const Palette& p) {
-    // TODO(#70/#72/#73): once each family declares describe(), emit one line
-    // per op here, e.g.
-    //   for (const auto& t : changes.text)     { os << p.green << '+' ... }
-    //   for (const auto& s : changes.shapes)   { os << "  " << describe(s) << '\n'; }
-    //   for (const auto& c : changes.pictures) { os << "  " << describe(c) << '\n'; }
+// Nested ops of one changed slide, as hunk body lines. Text ops come first
+// as `-`/`+` lines so a hunk reads like a text diff; reformatting is a `~`
+// line; shape and picture ops follow as indented one-line summaries.
+void render_changes_unified(const SlideChanges& changes, std::ostream& os, const Palette& p) {
+    for (const auto& t : changes.text) {
+        const std::string where =
+            t.notes ? std::string{"notes"} : std::format("shape \"{}\"", t.shape);
+        switch (t.kind) {
+            case TextChangeKind::Inserted:
+                os << std::format("{}+{}{}\n", p.green, t.new_text, p.reset);
+                break;
+            case TextChangeKind::Deleted:
+                os << std::format("{}-{}{}\n", p.red, t.old_text, p.reset);
+                break;
+            case TextChangeKind::Changed:
+                os << std::format("{}-{}{}\n", p.red, t.old_text, p.reset);
+                os << std::format("{}+{}{}\n", p.green, t.new_text, p.reset);
+                break;
+            case TextChangeKind::Reformatted:
+                os << std::format("~{}: {}\n", where, t.formatting);
+                break;
+        }
+    }
+    for (const auto& sc : changes.shapes) {
+        os << "  " << describe(sc) << '\n';
+    }
+    for (const auto& pc : changes.pictures) {
+        os << "  " << describe(pc) << '\n';
+    }
 }
 
 void render_unified(const DiffReport& report,
@@ -255,15 +274,20 @@ nlohmann::json index_or_null(std::size_t i) {
 }
 
 // Nested ops of one slide as the `changes` object of docs/diff-schema.md.
-nlohmann::json changes_to_json([[maybe_unused]] const SlideChanges& changes) {
+nlohmann::json changes_to_json(const SlideChanges& changes) {
     nlohmann::json j;
     j["text"] = nlohmann::json::array();
     j["shapes"] = nlohmann::json::array();
     j["pictures"] = nlohmann::json::array();
-    // TODO(#70/#72/#73): once each family declares to_json(), fill the arrays:
-    //   for (const auto& t : changes.text)     { j["text"].push_back(to_json(t)); }
-    //   for (const auto& s : changes.shapes)   { j["shapes"].push_back(to_json(s)); }
-    //   for (const auto& c : changes.pictures) { j["pictures"].push_back(to_json(c)); }
+    for (const auto& t : changes.text) {
+        j["text"].push_back(to_json(t));
+    }
+    for (const auto& sc : changes.shapes) {
+        j["shapes"].push_back(to_json(sc));
+    }
+    for (const auto& pc : changes.pictures) {
+        j["pictures"].push_back(to_json(pc));
+    }
     return j;
 }
 
@@ -368,13 +392,16 @@ tr.changed td { background: #fffdf0; }
 )";
 
 // Nested ops of one changed slide as <li> items of its row's op list.
-void render_changes_html([[maybe_unused]] const SlideChanges& changes,
-                         [[maybe_unused]] std::ostream& os) {
-    // TODO(#70/#72/#73): once each family declares describe(), emit one <li>
-    // per op here (html_escape every string), e.g.
-    //   for (const auto& s : changes.shapes) {
-    //       os << "<li>" << html_escape(describe(s)) << "</li>\n";
-    //   }
+void render_changes_html(const SlideChanges& changes, std::ostream& os) {
+    for (const auto& t : changes.text) {
+        os << "<li class=\"text\">" << html_escape(describe(t)) << "</li>\n";
+    }
+    for (const auto& sc : changes.shapes) {
+        os << "<li class=\"shape\">" << html_escape(describe(sc)) << "</li>\n";
+    }
+    for (const auto& pc : changes.pictures) {
+        os << "<li class=\"picture\">" << html_escape(describe(pc)) << "</li>\n";
+    }
 }
 
 void render_html(const DiffReport& report,
@@ -450,6 +477,12 @@ std::optional<DiffReport> diff_report(const std::string& a,
     return report;
 }
 
+void render(const DiffReport& report,
+            const std::string& a,
+            const std::string& b,
+            std::ostream& os,
+            const DiffOutputOptions& out);
+
 int diff_to(const std::string& a,
             const std::string& b,
             std::ostream& os,
@@ -465,19 +498,34 @@ int diff_to(const std::string& a,
         return 2;
     }
     if (!out.quiet) {
-        switch (*format) {
-            case Format::Unified:
-                render_unified(*report, a, b, os, want_color(out, os) ? kAnsi : kPlain);
-                break;
-            case Format::Json:
-                render_json(*report, a, b, os);
-                break;
-            case Format::Html:
-                render_html(*report, a, b, os);
-                break;
-        }
+        render(*report, a, b, os, out);
     }
     return report->identical() ? 0 : 1;
+}
+
+// Render an already-computed report in the requested format. Exposed so tests
+// can drive the renderers with hand-built reports. An unknown format renders
+// nothing (diff_to rejects it before getting here).
+void render(const DiffReport& report,
+            const std::string& a,
+            const std::string& b,
+            std::ostream& os,
+            const DiffOutputOptions& out) {
+    const auto format = parse_format(out.format);
+    if (!format) {
+        return;
+    }
+    switch (*format) {
+        case Format::Unified:
+            render_unified(report, a, b, os, want_color(out, os) ? kAnsi : kPlain);
+            break;
+        case Format::Json:
+            render_json(report, a, b, os);
+            break;
+        case Format::Html:
+            render_html(report, a, b, os);
+            break;
+    }
 }
 
 int diff(const std::string& a,

@@ -25,6 +25,11 @@ Phase 4: `pptctl diff`, in progress.
   carries size and, for PNG/JPEG, pixel dimensions. `Picture` gains
   `media_hash` and `dimensions`; `Package` gains a per-package hash cache
   (`part_hash`) and a header-only `read_part_prefix`. Rendering lands with #71.
+- `diff` renders nested ops (#70/#72/#73 wiring): unified hunks now carry
+  `-`/`+` lines for text edits, `~` lines for run reformatting and one-line
+  summaries for shape and picture ops; JSON `changes` arrays are populated
+  (per-op keys in `docs/diff-schema.md`); HTML lists every op. New flags
+  `--strict-text` and `--geometry-tolerance`.
 - `diff` output (#71): `--format unified` (default; file header, one
   `@@ slide A -> B (…) @@` hunk per slide that is not simply unchanged,
   summary line, colour on a TTY with `--color`/`--no-color` and `NO_COLOR`,

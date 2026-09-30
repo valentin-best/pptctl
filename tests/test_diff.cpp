@@ -459,3 +459,131 @@ TEST_CASE("golden: three_slides__three_slides.diff.html") {
     check_diff_golden(
         "three_slides.pptx", "three_slides.pptx", "html", "three_slides__three_slides.diff.html");
 }
+
+// ── nested-op rendering (renderer wiring after #70/#72/#73) ──────────────────
+
+namespace pptctl::cmd {
+void render(const DiffReport& report,
+            const std::string& a,
+            const std::string& b,
+            std::ostream& os,
+            const DiffOutputOptions& out);
+}  // namespace pptctl::cmd
+
+namespace {
+
+// One changed slide carrying one op of every family, for renderer tests.
+pptctl::DiffReport sample_report() {
+    pptctl::DiffReport r;
+    pptctl::SlideDiff s;
+    s.status = pptctl::SlideStatus::Changed;
+    s.a_index = 2;
+    s.b_index = 2;
+    s.similarity = 0.8;
+
+    pptctl::TextChange changed;
+    changed.kind = pptctl::TextChangeKind::Changed;
+    changed.shape = "Title 1";
+    changed.a_paragraph = 1;
+    changed.b_paragraph = 1;
+    changed.old_text = "Hello <old>";
+    changed.new_text = "World";
+    s.changes.text.push_back(changed);
+
+    pptctl::TextChange inserted;
+    inserted.kind = pptctl::TextChangeKind::Inserted;
+    inserted.shape = "Content 2";
+    inserted.b_paragraph = 3;
+    inserted.new_text = "New bullet";
+    s.changes.text.push_back(inserted);
+
+    pptctl::TextChange deleted;
+    deleted.kind = pptctl::TextChangeKind::Deleted;
+    deleted.shape = "Content 2";
+    deleted.a_paragraph = 2;
+    deleted.old_text = "Gone";
+    s.changes.text.push_back(deleted);
+
+    pptctl::TextChange reformatted;
+    reformatted.kind = pptctl::TextChangeKind::Reformatted;
+    reformatted.shape = "Content 2";
+    reformatted.a_paragraph = 1;
+    reformatted.b_paragraph = 1;
+    reformatted.old_text = "Same";
+    reformatted.new_text = "Same";
+    reformatted.formatting = "\"Same\": bold on";
+    s.changes.text.push_back(reformatted);
+
+    pptctl::ShapeChange removed;
+    removed.op = pptctl::ShapeOp::Removed;
+    removed.name = "Box 7";
+    s.changes.shapes.push_back(removed);
+
+    pptctl::PictureChange pic;
+    pic.op = pptctl::PictureOp::Added;
+    pic.shape_name = "Picture 9";
+    s.changes.pictures.push_back(pic);
+
+    r.slides.push_back(s);
+    return r;
+}
+
+std::string render_as(const char* format) {
+    std::ostringstream os;
+    pptctl::DiffOutputOptions out;
+    out.format = format;
+    out.color = false;
+    pptctl::cmd::render(sample_report(), "a.pptx", "b.pptx", os, out);
+    return os.str();
+}
+
+}  // namespace
+
+TEST_CASE("Diff: render — unified shows text ops as -/+ lines and other ops as summaries") {
+    const std::string u = render_as("unified");
+    CHECK(u.find("-Hello <old>\n") != std::string::npos);
+    CHECK(u.find("+World\n") != std::string::npos);
+    CHECK(u.find("+New bullet\n") != std::string::npos);
+    CHECK(u.find("-Gone\n") != std::string::npos);
+    CHECK(u.find("bold on") != std::string::npos);
+    CHECK(u.find(pptctl::describe(sample_report().slides[0].changes.shapes[0])) !=
+          std::string::npos);
+    CHECK(u.find(pptctl::describe(sample_report().slides[0].changes.pictures[0])) !=
+          std::string::npos);
+    // Text lines come first, then structure, so a hunk reads like a text diff.
+    CHECK(u.find("+World") < u.find("Box 7"));
+}
+
+TEST_CASE("Diff: render — json fills the three changes arrays via to_json") {
+    const auto j = nlohmann::json::parse(render_as("json"));
+    const auto& c = j["slides"][0]["changes"];
+    REQUIRE(c["text"].size() == 4);
+    CHECK(c["text"][0]["kind"] == "changed");
+    CHECK(c["text"][0]["new_text"] == "World");
+    REQUIRE(c["shapes"].size() == 1);
+    CHECK(c["shapes"][0]["op"] == "removed");
+    REQUIRE(c["pictures"].size() == 1);
+    CHECK(c["pictures"][0]["op"] == "added");
+}
+
+TEST_CASE("Diff: render — html lists every op, escaped") {
+    const std::string h = render_as("html");
+    std::size_t items = 0;
+    for (std::size_t pos = h.find("<li"); pos != std::string::npos; pos = h.find("<li", pos + 1)) {
+        ++items;
+    }
+    CHECK(items == 6);
+    CHECK(h.find("Hello &lt;old&gt;") != std::string::npos);
+    CHECK(h.find("Hello <old>") == std::string::npos);
+}
+
+TEST_CASE("Diff: command — unified end to end shows picture ops for the image-swap fixture") {
+    std::ostringstream os;
+    pptctl::DiffOutputOptions out;
+    out.color = false;
+    const int rc = pptctl::cmd::diff_to(
+        fixture("images_deck.pptx"), fixture("images_deck_v2.pptx"), os, {}, out);
+    CHECK(rc == 1);
+    CHECK(os.str().find("replaced") != std::string::npos);
+    CHECK(os.str().find("alt text") != std::string::npos);
+}
