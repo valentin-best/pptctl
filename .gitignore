@@ -69,3 +69,6 @@ tests/real_world/
 
 # Python bytecode from the fixture generator
 __pycache__/
+
+# Claude Code agent worktrees
+.claude/worktrees/
