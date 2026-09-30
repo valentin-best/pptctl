@@ -36,6 +36,8 @@ Generates, next to this script:
   - diff_shape_edit.pptx    diff_base with the rectangle moved, resized and recolored,
                             and a text box nudged by 1 EMU (below the tolerance).
   - diff_table_edit.pptx    diff_base with one table cell edited and one row added.
+  - charts_deck_v2.pptx     charts_deck.pptx with one value changed, one series added
+                            and one chart title changed.
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -236,6 +238,49 @@ def build_images_deck_v2(path: Path) -> None:
         if i == 8:
             pic._element.nvPicPr.cNvPr.set("descr", "Slide 9 picture, described")
     _set_core_props(prs, "pptctl images fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def build_charts_deck_v2(path: Path) -> None:
+    """charts_deck.pptx with three chart edits, for the chart diff (#74):
+      slide 1   Revenue Q2 200 -> 220, and a third series "Profit" added
+      slide 2   the pie chart's title changed
+    Chart types, shape ids/names, geometry and categories are unchanged, so
+    the only ops a diff should report are chart ops."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+
+    s1 = prs.slides.add_slide(blank)
+    cd1 = ChartData()
+    cd1.categories = ["Q1", "Q2", "Q3"]
+    cd1.add_series("Revenue", (100, 220, 150))
+    cd1.add_series("Cost", (80, 120, 90))
+    cd1.add_series("Profit", (20, 100, 60))
+    chart1 = s1.shapes.add_chart(
+        XL_CHART_TYPE.BAR_CLUSTERED,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd1,
+    ).chart
+    chart1.has_title = True
+    chart1.chart_title.text_frame.text = "Revenue vs Cost"
+
+    s2 = prs.slides.add_slide(blank)
+    cd2 = ChartData()
+    cd2.categories = ["Alpha", "Beta", "Gamma"]
+    cd2.add_series("Share", (30, 50, 20))
+    chart2 = s2.shapes.add_chart(
+        XL_CHART_TYPE.PIE,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd2,
+    ).chart
+    chart2.has_title = True
+    chart2.chart_title.text_frame.text = "Market Share 2025"
+
+    _set_core_props(prs, "pptctl charts fixture")
     prs.save(str(path))
     _normalize_zip(path)
 
@@ -728,6 +773,7 @@ _FIXTURES: list[tuple[str, list[object]]] = [
         (f"diff_{v}.pptx", [functools.partial(build_diff_deck, variant=v)])
         for v in _DIFF_VARIANTS
     ],
+    ("charts_deck_v2.pptx", [build_charts_deck_v2]),
 ]
 
 

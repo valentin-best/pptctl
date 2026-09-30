@@ -4,7 +4,7 @@
 //
 // Three renderers over one DiffReport (#71): unified (terminal, the default),
 // json (docs/diff-schema.md) and html (self-contained page). The nested op
-// families (text/shape/picture) reach each renderer through exactly one
+// families (text/shape/picture/table/chart) reach each renderer through one
 // function — render_changes_unified / changes_to_json / render_changes_html —
 // so wiring a new op family is a few lines per format.
 
@@ -232,6 +232,12 @@ void render_changes_unified(const SlideChanges& changes, std::ostream& os, const
     for (const auto& pc : changes.pictures) {
         os << "  " << describe(pc) << '\n';
     }
+    for (const auto& tc : changes.tables) {
+        os << "  " << describe(tc) << '\n';
+    }
+    for (const auto& cc : changes.charts) {
+        os << "  " << describe(cc) << '\n';
+    }
 }
 
 void render_unified(const DiffReport& report,
@@ -279,6 +285,8 @@ nlohmann::json changes_to_json(const SlideChanges& changes) {
     j["text"] = nlohmann::json::array();
     j["shapes"] = nlohmann::json::array();
     j["pictures"] = nlohmann::json::array();
+    j["tables"] = nlohmann::json::array();
+    j["charts"] = nlohmann::json::array();
     for (const auto& t : changes.text) {
         j["text"].push_back(to_json(t));
     }
@@ -287,6 +295,12 @@ nlohmann::json changes_to_json(const SlideChanges& changes) {
     }
     for (const auto& pc : changes.pictures) {
         j["pictures"].push_back(to_json(pc));
+    }
+    for (const auto& tc : changes.tables) {
+        j["tables"].push_back(to_json(tc));
+    }
+    for (const auto& cc : changes.charts) {
+        j["charts"].push_back(to_json(cc));
     }
     return j;
 }
@@ -401,6 +415,12 @@ void render_changes_html(const SlideChanges& changes, std::ostream& os) {
     }
     for (const auto& pc : changes.pictures) {
         os << "<li class=\"picture\">" << html_escape(describe(pc)) << "</li>\n";
+    }
+    for (const auto& tc : changes.tables) {
+        os << "<li class=\"table\">" << html_escape(describe(tc)) << "</li>\n";
+    }
+    for (const auto& cc : changes.charts) {
+        os << "<li class=\"chart\">" << html_escape(describe(cc)) << "</li>\n";
     }
 }
 

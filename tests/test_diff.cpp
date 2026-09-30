@@ -284,10 +284,23 @@ std::string read_golden(const char* name) {
 // once each: the `---`/`+++` header lines, the `a`/`b` JSON fields, and the
 // `<code class="path">` elements. Same rewrite as generate_golden.sh.
 std::string normalize_paths(const std::string& s) {
-    static const std::regex kUnified(R"re(^(---|\+\+\+) .*$)re", std::regex::multiline);
+    // Unified headers are rewritten line by line: std::regex::multiline is
+    // missing from MSVC's standard library, so no `^`/`$` anchoring here.
+    std::string out;
+    std::istringstream in(s);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.starts_with("--- ") || line.starts_with("+++ ")) {
+            line = line.substr(0, 3) + " <path>";
+        }
+        out += line;
+        out += '\n';
+    }
+    if (!s.empty() && s.back() != '\n') {
+        out.pop_back();
+    }
     static const std::regex kJson(R"re("(a|b)": "[^"]*")re");
     static const std::regex kHtml(R"re(<code class="path">[^<]*</code>)re");
-    std::string out = std::regex_replace(s, kUnified, "$1 <path>");
     out = std::regex_replace(out, kJson, R"re("$1": "<path>")re");
     out = std::regex_replace(out, kHtml, R"re(<code class="path">&lt;path&gt;</code>)re");
     return out;
