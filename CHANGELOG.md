@@ -5,9 +5,9 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
-## [Unreleased]
+## [0.4.0] — 2026-09-30
 
-Phase 4: `pptctl diff`, in progress.
+Phase 4: `pptctl diff`, semantic diff between two decks.
 
 ### Added
 
@@ -150,6 +150,7 @@ Phase 1: `pptctl info`, quick metadata.
   MSVC 2022, plus a clang-tidy job; pre-commit hook running clang-format and
   clang-tidy.
 
+[0.4.0]: https://github.com/valentin-best/pptctl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/valentin-best/pptctl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/valentin-best/pptctl/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/valentin-best/pptctl/releases/tag/v0.1.0

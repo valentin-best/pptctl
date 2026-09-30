@@ -70,16 +70,16 @@ Exit criteria: lint catches at least one real issue in 50% of real-world decks f
 
 **Ship moment:** v0.3.0. This is the moment for a "static analysis for your slide decks" post.
 
-## Phase 4 — `pptctl diff` (weeks 11–14)
+## Phase 4 — `pptctl diff` (weeks 11–14) ✅
 
 Goal: the feature no OSS tool does well.
 
-- [ ] Per-slide identity: hash + best-match heuristic for reordered slides.
-- [ ] Text-level diff within slides.
-- [ ] Shape-level diff (moved, resized, recolored).
-- [ ] Picture diff (added, removed, replaced; not pixel-diff).
-- [ ] Output formats: unified-text (for terminal), JSON (for tools), HTML (for review).
-- [ ] Git integration: `git config diff.pptx.textconv "pptctl diff --unified"` example in docs.
+- [x] Per-slide identity: hash + best-match heuristic for reordered slides.
+- [x] Text-level diff within slides.
+- [x] Shape-level diff (moved, resized, recolored).
+- [x] Picture diff (added, removed, replaced; not pixel-diff).
+- [x] Output formats: unified-text (for terminal), JSON (for tools), HTML (for review).
+- [x] Git integration: `git config diff.pptx.textconv "pptctl diff --unified"` example in docs.
 
 Exit criteria: diffing two real-world decks where you made known small edits produces a diff that *matches* what you changed.
 
