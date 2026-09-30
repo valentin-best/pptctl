@@ -57,17 +57,6 @@ std::string dir_of(std::string_view part) {
     return std::string(part.substr(0, slash + 1));
 }
 
-// The `_rels/*.rels` path that declares relationships for `part`.
-// An empty part denotes the package root → "_rels/.rels".
-std::string rels_path_for(std::string_view part) {
-    const auto slash = part.find_last_of('/');
-    const std::string dir =
-        (slash == std::string_view::npos) ? "" : std::string(part.substr(0, slash + 1));
-    const std::string name =
-        (slash == std::string_view::npos) ? std::string(part) : std::string(part.substr(slash + 1));
-    return dir + "_rels/" + name + ".rels";
-}
-
 // Collapse "." and ".." segments in a slash-separated path.
 std::string normalize_path(std::string_view path) {
     std::vector<std::string_view> stack;
@@ -109,6 +98,27 @@ std::string resolve_target(std::string_view base_dir, std::string_view target) {
         return normalize_path(target.substr(1));
     }
     return normalize_path(std::string(base_dir) + std::string(target));
+}
+
+// Parse an XML part keeping its declaration, so re-serializing preserves it.
+bool load_xml(pugi::xml_document& doc, std::span<const std::byte> xml) {
+    return static_cast<bool>(doc.load_buffer(xml.data(),
+                                             xml.size(),
+                                             pugi::parse_default | pugi::parse_declaration,
+                                             pugi::encoding_utf8));
+}
+
+// Serialize without indentation or added newlines, the way Office writes parts.
+std::vector<std::byte> save_xml(const pugi::xml_document& doc) {
+    struct BytesWriter : pugi::xml_writer {
+        std::vector<std::byte> out;
+        void write(const void* data, std::size_t size) override {
+            const auto* p = static_cast<const std::byte*>(data);
+            out.insert(out.end(), p, p + size);
+        }
+    } writer;
+    doc.save(writer, "", pugi::format_raw, pugi::encoding_utf8);
+    return std::move(writer.out);
 }
 
 // RAII wrapper over a minizip-ng writer: closed and deleted on scope exit.
@@ -159,6 +169,75 @@ bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
 }
 
 }  // namespace
+
+std::string rels_part_for(std::string_view part) {
+    const auto slash = part.find_last_of('/');
+    const std::string dir =
+        (slash == std::string_view::npos) ? "" : std::string(part.substr(0, slash + 1));
+    const std::string name =
+        (slash == std::string_view::npos) ? std::string(part) : std::string(part.substr(slash + 1));
+    return dir + "_rels/" + name + ".rels";
+}
+
+std::vector<std::byte> rewrite_content_types(
+    std::span<const std::byte> xml,
+    const std::set<std::string>& removed_parts,
+    const std::map<std::string, std::string>& added_overrides) {
+    pugi::xml_document doc;
+    if (!load_xml(doc, xml)) {
+        return {};
+    }
+    auto types = doc.child("Types");
+    const auto absolute = [](std::string_view part) { return "/" + std::string(part); };
+
+    std::set<std::string> drop;
+    for (const auto& part : removed_parts) {
+        drop.insert(absolute(part));
+    }
+    for (const auto& [part, ct] : added_overrides) {
+        (void)ct;
+        drop.insert(absolute(part));  // an existing Override is replaced by the new one
+    }
+    for (auto node = types.child("Override"); node;) {
+        auto next = node.next_sibling("Override");
+        if (drop.contains(node.attribute("PartName").as_string(""))) {
+            types.remove_child(node);
+        }
+        node = next;
+    }
+    for (const auto& [part, ct] : added_overrides) {
+        auto node = types.append_child("Override");
+        node.append_attribute("PartName") = absolute(part).c_str();
+        node.append_attribute("ContentType") = ct.c_str();
+    }
+    return save_xml(doc);
+}
+
+std::vector<std::byte> rewrite_rels(std::span<const std::byte> xml,
+                                    std::string_view source_part,
+                                    const std::set<std::string>& removed_parts) {
+    pugi::xml_document doc;
+    if (!load_xml(doc, xml)) {
+        return {};
+    }
+    std::string source(source_part);
+    if (!source.empty() && source.front() == '/') {
+        source.erase(source.begin());
+    }
+    const std::string base = dir_of(source);
+    auto rels = doc.child("Relationships");
+    for (auto node = rels.child("Relationship"); node;) {
+        auto next = node.next_sibling("Relationship");
+        const bool external =
+            std::string_view(node.attribute("TargetMode").as_string("")) == "External";
+        if (!external &&
+            removed_parts.contains(resolve_target(base, node.attribute("Target").as_string("")))) {
+            rels.remove_child(node);
+        }
+        node = next;
+    }
+    return save_xml(doc);
+}
 
 std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept {
     constexpr std::uint64_t kOffset = 14695981039346656037ULL;
@@ -352,7 +431,7 @@ std::vector<Relationship> Package::relationships(std::string_view source_part) c
     }
 
     std::vector<Relationship> rels;
-    const auto bytes = read_part(rels_path_for(key));
+    const auto bytes = read_part(rels_part_for(key));
     pugi::xml_document doc;
     if (!bytes.empty() &&
         doc.load_buffer(bytes.data(), bytes.size(), pugi::parse_default, pugi::encoding_utf8)) {

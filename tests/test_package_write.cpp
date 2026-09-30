@@ -183,3 +183,146 @@ TEST_CASE("Package::write: in-place write replaces the file and the package refl
     }
     CHECK(files == 1);
 }
+
+// ---------------------------------------------------------------------------
+// Helpers: rels_part_for, rewrite_content_types, rewrite_rels
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::size_t count_of(std::string_view haystack, std::string_view needle) {
+    std::size_t n = 0;
+    for (auto pos = haystack.find(needle); pos != std::string_view::npos;
+         pos = haystack.find(needle, pos + needle.size())) {
+        ++n;
+    }
+    return n;
+}
+
+}  // namespace
+
+TEST_CASE("rels_part_for maps a part to its _rels/*.rels sibling") {
+    CHECK(pptctl::rels_part_for("ppt/slides/slide1.xml") == "ppt/slides/_rels/slide1.xml.rels");
+    CHECK(pptctl::rels_part_for("ppt/presentation.xml") == "ppt/_rels/presentation.xml.rels");
+    CHECK(pptctl::rels_part_for("") == "_rels/.rels");
+}
+
+TEST_CASE("rewrite_content_types drops the Override of a removed part and keeps the rest") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    const auto original = pkg.read_part("[Content_Types].xml");
+    const auto before = to_string(original);
+    REQUIRE(before.find("PartName=\"/ppt/slides/slide3.xml\"") != std::string::npos);
+
+    const auto out =
+        to_string(pptctl::rewrite_content_types(original, {"ppt/slides/slide3.xml"}, {}));
+    CHECK(out.find("PartName=\"/ppt/slides/slide3.xml\"") == std::string::npos);
+    CHECK(out.find("PartName=\"/ppt/slides/slide2.xml\"") != std::string::npos);
+    CHECK(count_of(out, "<Override ") == count_of(before, "<Override ") - 1);
+    CHECK(count_of(out, "<Default ") == count_of(before, "<Default "));
+    CHECK(out.find("Extension=\"jpeg\"") != std::string::npos);
+    CHECK(out.rfind("<?xml", 0) == 0);
+    CHECK(out.find("standalone=\"yes\"") != std::string::npos);
+    CHECK(out.find("xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"") !=
+          std::string::npos);
+}
+
+TEST_CASE("rewrite_content_types adds an Override for a new part, replacing any existing one") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    const auto original = pkg.read_part("[Content_Types].xml");
+
+    const auto out = to_string(
+        pptctl::rewrite_content_types(original,
+                                      {},
+                                      {{"ppt/media/new.bin", "application/x-test"},
+                                       {"ppt/slides/slide1.xml", "application/x-replaced"}}));
+    CHECK(out.find(
+              "<Override PartName=\"/ppt/media/new.bin\" ContentType=\"application/x-test\"/>") !=
+          std::string::npos);
+    CHECK(count_of(out, "PartName=\"/ppt/slides/slide1.xml\"") == 1);
+    CHECK(out.find("PartName=\"/ppt/slides/slide1.xml\" ContentType=\"application/x-replaced\"") !=
+          std::string::npos);
+}
+
+TEST_CASE("rewrite_content_types is a no-op for an empty change set") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    const auto original = pkg.read_part("[Content_Types].xml");
+    const auto out = to_string(pptctl::rewrite_content_types(original, {}, {}));
+    CHECK(count_of(out, "<Override ") == count_of(to_string(original), "<Override "));
+    CHECK(count_of(out, "<Default ") == count_of(to_string(original), "<Default "));
+}
+
+TEST_CASE("rewrite_rels drops relationships whose target was removed and keeps other ids") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    const auto original = pkg.read_part("ppt/_rels/presentation.xml.rels");
+    const auto before = to_string(original);
+    REQUIRE(before.find("Target=\"slides/slide3.xml\"") != std::string::npos);
+
+    const auto out = to_string(
+        pptctl::rewrite_rels(original, "ppt/presentation.xml", {"ppt/slides/slide3.xml"}));
+    CHECK(out.find("Target=\"slides/slide3.xml\"") == std::string::npos);
+    CHECK(out.find("Target=\"slides/slide2.xml\"") != std::string::npos);
+    CHECK(out.find("Target=\"slideMasters/slideMaster1.xml\"") != std::string::npos);
+    CHECK(count_of(out, "<Relationship ") == count_of(before, "<Relationship ") - 1);
+    // Surviving ids are untouched (no renumbering).
+    CHECK(out.find("Id=\"rId1\"") != std::string::npos);
+    CHECK(out.find("Id=\"rId8\"") != std::string::npos);
+    CHECK(out.rfind("<?xml", 0) == 0);
+    CHECK(out.find("xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"") !=
+          std::string::npos);
+}
+
+TEST_CASE("rewrite_rels resolves ../ targets against the source part's directory") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("images_deck.pptx")));
+    const auto original = pkg.read_part("ppt/slides/_rels/slide1.xml.rels");
+    REQUIRE(to_string(original).find("Target=\"../media/image1.png\"") != std::string::npos);
+
+    const auto out = to_string(
+        pptctl::rewrite_rels(original, "ppt/slides/slide1.xml", {"ppt/media/image1.png"}));
+    CHECK(out.find("media/image1.png") == std::string::npos);
+    CHECK(out.find("Target=\"../slideLayouts/slideLayout7.xml\"") != std::string::npos);
+}
+
+TEST_CASE("rewrite_rels never drops external relationships") {
+    const std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        "<Relationship Id=\"rId1\" Type=\"t\" Target=\"https://example.com/x\" "
+        "TargetMode=\"External\"/>"
+        "<Relationship Id=\"rId2\" Type=\"t\" Target=\"media/x\"/>"
+        "</Relationships>";
+    const auto out = to_string(pptctl::rewrite_rels(
+        to_bytes(xml), "ppt/slides/slide1.xml", {"https://example.com/x", "ppt/slides/media/x"}));
+    CHECK(out.find("Id=\"rId1\"") != std::string::npos);
+    CHECK(out.find("Id=\"rId2\"") == std::string::npos);
+}
+
+TEST_CASE("Package::write end-to-end: removing a media part with its rels and content types") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("images_deck.pptx")));
+    const std::string image = src.resolve("ppt/slides/slide1.xml", "rId2");
+    REQUIRE(image == "ppt/media/image1.png");
+    const std::string slide_rels = pptctl::rels_part_for("ppt/slides/slide1.xml");
+
+    pptctl::PartChanges changes;
+    changes.removed.insert(image);
+    changes.replaced[slide_rels] =
+        pptctl::rewrite_rels(src.read_part(slide_rels), "ppt/slides/slide1.xml", changes.removed);
+    changes.replaced["[Content_Types].xml"] =
+        pptctl::rewrite_content_types(src.read_part("[Content_Types].xml"), changes.removed, {});
+    const auto out = (dir.path / "out.pptx").string();
+    REQUIRE(src.write(out, changes));
+
+    pptctl::Package dst;
+    REQUIRE(dst.open(out));
+    CHECK_FALSE(has(dst.part_names(), image));
+    CHECK(dst.resolve("ppt/slides/slide1.xml", "rId2").empty());
+    CHECK(dst.resolve("ppt/slides/slide1.xml", "rId1") == "ppt/slideLayouts/slideLayout7.xml");
+    CHECK(dst.content_type("ppt/slides/slide1.xml") == src.content_type("ppt/slides/slide1.xml"));
+    CHECK(dst.part_names().front() == "[Content_Types].xml");
+}
