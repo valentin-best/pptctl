@@ -161,7 +161,9 @@ Exit codes follow `git diff` and are the same in every format and under
 
 ## Example
 
-`minimal.pptx` (one slide) against `three_slides.pptx` (three slides):
+`minimal.pptx` (one slide with no shapes) against `three_slides.pptx` (three
+slides). The empty slide shares no tokens with any slide of B, so it falls
+below the match threshold and is reported as removed rather than changed:
 
 ```json
 {
@@ -171,6 +173,18 @@ Exit codes follow `git diff` and are the same in every format and under
   "slides": [
     {
       "a_index": 1,
+      "b_index": null,
+      "changes": {
+        "pictures": [],
+        "shapes": [],
+        "text": []
+      },
+      "moved": false,
+      "similarity": 0.0,
+      "status": "removed"
+    },
+    {
+      "a_index": null,
       "b_index": 1,
       "changes": {
         "pictures": [],
@@ -178,8 +192,8 @@ Exit codes follow `git diff` and are the same in every format and under
         "text": []
       },
       "moved": false,
-      "similarity": 1.0,
-      "status": "unchanged"
+      "similarity": 0.0,
+      "status": "added"
     },
     {
       "a_index": null,
@@ -207,13 +221,52 @@ Exit codes follow `git diff` and are the same in every format and under
     }
   ],
   "summary": {
-    "added": 2,
+    "added": 3,
     "changed": 0,
     "moved": 0,
-    "removed": 0,
-    "unchanged": 1
+    "removed": 1,
+    "unchanged": 0
   }
 }
+```
+
+A `changed` slide carries its ops in `changes`; for example the picture swap
+on slide 3 of `images_deck.pptx` → `images_deck_v2.pptx`:
+
+```json
+"pictures": [
+  {
+    "after": {
+      "alt_text": "image.png",
+      "content_type": "image/png",
+      "decorative": false,
+      "height": 50,
+      "linked": false,
+      "media_hash": "8e908a3b0998d099",
+      "rel_id": "rId2",
+      "size_bytes": 121,
+      "target": "ppt/media/picture3.png",
+      "title": null,
+      "width": 66
+    },
+    "before": {
+      "alt_text": "image.png",
+      "content_type": "image/png",
+      "decorative": false,
+      "height": 50,
+      "linked": false,
+      "media_hash": "6cc98783258111e6",
+      "rel_id": "rId2",
+      "size_bytes": 127,
+      "target": "ppt/media/image3.png",
+      "title": null,
+      "width": 66
+    },
+    "op": "replaced",
+    "shape_id": "3",
+    "shape_name": "Picture 2"
+  }
+]
 ```
 
 Keys are emitted in sorted order (as shown) because the serializer uses an

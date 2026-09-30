@@ -17,6 +17,11 @@ Phase 4: `pptctl diff`, in progress.
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- `diff` docs (#76): README section (matching, formats, flags, exit codes),
+  `docs/git-integration.md` with two tested git recipes (`diff.pptx.textconv`
+  via `pptctl extract --format txt`, and an external diff driver
+  `scripts/git-pptx-diff.sh` for the full semantic diff), and a corrected
+  example in `docs/diff-schema.md`.
 - Picture diff (#73): pictures on a matched slide pair are paired by shape id
   (then name, groups walked) and reported as added, removed, replaced,
   re-linked (embed ↔ link) or alt-text changed. Media identity is a content
