@@ -166,13 +166,133 @@ struct PictureChange {
 // media_hash is a 16-digit hex string (a uint64 is not JSON-safe).
 [[nodiscard]] nlohmann::json to_json(const PictureChange& change);
 
+// Table change: cell text, rows/columns added or removed, merge changes.
+// Owned by #74.
+//
+// Table shapes are paired across the two slides by shape id, then by shape
+// name (groups walked). Rows of a matched pair are aligned by LCS over their
+// cell text so an inserted row does not turn every row below it into changed
+// cells; column counts are compared first and only the common prefix of
+// columns is compared cell by cell. Cell text is compared at paragraph-join
+// level (TableCell::text()) with whitespace collapsed and field runs dropped
+// unless DiffOptions::strict_text is set. Indices are 1-based.
+enum class TableOp : std::uint8_t {
+    CellChanged,     // text of one cell differs
+    RowsAdded,       // rows only in B (`indices` are B row numbers)
+    RowsRemoved,     // rows only in A (`indices` are A row numbers)
+    ColumnsAdded,    // B has more columns (`indices` are B column numbers)
+    ColumnsRemoved,  // A has more columns (`indices` are A column numbers)
+    MergeChanged,    // gridSpan/rowSpan or covered flag of one cell differs
+};
+
+// The merge state of one cell: how many grid cells it spans and whether it is
+// itself covered by a neighbour's span.
+struct TableMerge {
+    int col_span = 1;
+    int row_span = 1;
+    bool covered = false;
+
+    [[nodiscard]] bool operator==(const TableMerge&) const = default;
+};
+
+struct TableChange {
+    TableOp op = TableOp::CellChanged;
+    std::string shape_id;                 // p:cNvPr@id of the B table
+    std::string shape_name;               // p:cNvPr@name of the B table
+    std::size_t a_row = 0;                // CellChanged/MergeChanged: 1-based row in A
+    std::size_t b_row = 0;                // CellChanged/MergeChanged: 1-based row in B
+    std::size_t col = 0;                  // CellChanged/MergeChanged: 1-based column
+    std::vector<std::size_t> indices;     // Rows*/Columns*: the affected 1-based indices
+    std::string old_text;                 // CellChanged: A cell text (paragraphs joined by '\n')
+    std::string new_text;                 // CellChanged: B cell text
+    std::optional<TableMerge> old_merge;  // MergeChanged: A side
+    std::optional<TableMerge> new_merge;  // MergeChanged: B side
+};
+
+// Stable snake_case label: "cell_changed", "rows_added", "rows_removed",
+// "columns_added", "columns_removed", "merge_changed".
+[[nodiscard]] std::string_view to_string(TableOp op) noexcept;
+
+// One human-readable line, e.g.
+//   table "Table 1": cell (2,2) changed: "100" -> "120"
+//   table "Table 1": 1 row added (row 3)
+//   table "Table 1": cell (1,1) merge changed: 1x1 -> 2x1
+[[nodiscard]] std::string describe(const TableChange& change);
+
+// Every key always present, null when not applicable: op, shape_id,
+// shape_name, a_row, b_row, col, indices, old_text, new_text, old_merge,
+// new_merge. A merge is {"col_span", "row_span", "covered"}.
+[[nodiscard]] nlohmann::json to_json(const TableChange& change);
+
+// Chart change: type, title, series added/removed, per-series categories and
+// values. Owned by #74.
+//
+// Chart shapes are paired by shape id, then by shape name (groups walked).
+// Series are matched by name when every series on both sides has a distinct,
+// non-empty name, otherwise by position. Values compare exactly (both sides
+// come from the same XML text form). At most kChartValueOpsPerSeries
+// ValuesChanged ops are emitted per series; the rest collapse into one
+// MoreValuesChanged op carrying the count. Chart data is only available on
+// slides loaded from a package (Slide::load), so parse-only slides never yield
+// chart ops. Indices are 1-based.
+enum class ChartOp : std::uint8_t {
+    TypeChanged,        // chart_type differs ("bar" -> "line")
+    TitleChanged,       // title text differs (or appeared/disappeared)
+    SeriesAdded,        // series only in B
+    SeriesRemoved,      // series only in A
+    CategoriesChanged,  // a matched series' category labels differ
+    ValuesChanged,      // one point of a matched series differs
+    MoreValuesChanged,  // `more` further points of the series differ (cap reached)
+};
+
+constexpr std::size_t kChartValueOpsPerSeries = 50;
+
+struct ChartChange {
+    ChartOp op = ChartOp::TypeChanged;
+    std::string shape_id;                  // p:cNvPr@id of the B chart
+    std::string shape_name;                // p:cNvPr@name of the B chart
+    std::string series;                    // series name; "" for chart-level ops
+    std::size_t series_index = 0;          // 1-based in B (in A when SeriesRemoved); 0 chart-level
+    std::size_t point = 0;                 // ValuesChanged: 1-based point index
+    std::string category;                  // ValuesChanged: label of the point when known
+    std::optional<double> old_value;       // ValuesChanged: A value; nullopt when the point is new
+    std::optional<double> new_value;       // ValuesChanged: B value; nullopt when the point is gone
+    std::string old_type;                  // TypeChanged
+    std::string new_type;                  // TypeChanged
+    std::optional<std::string> old_title;  // TitleChanged; nullopt when A had none
+    std::optional<std::string> new_title;  // TitleChanged; nullopt when B has none
+    std::vector<std::string> old_categories;  // CategoriesChanged
+    std::vector<std::string> new_categories;  // CategoriesChanged
+    std::size_t more = 0;                     // MoreValuesChanged: points not listed
+};
+
+// Stable snake_case label: "type_changed", "title_changed", "series_added",
+// "series_removed", "categories_changed", "values_changed",
+// "more_values_changed".
+[[nodiscard]] std::string_view to_string(ChartOp op) noexcept;
+
+// One human-readable line, e.g.
+//   chart "Chart 1": type changed: bar -> line
+//   chart "Chart 1": series "Revenue" point 2 (Q2) changed: 200 -> 220
+//   chart "Chart 1": series "Profit" added (3 points)
+[[nodiscard]] std::string describe(const ChartChange& change);
+
+// Every key always present, null when not applicable: op, shape_id,
+// shape_name, series, series_index, point, category, old_value, new_value,
+// old_type, new_type, old_title, new_title, old_categories, new_categories,
+// more.
+[[nodiscard]] nlohmann::json to_json(const ChartChange& change);
+
 struct SlideChanges {
     std::vector<TextChange> text;
     std::vector<ShapeChange> shapes;
     std::vector<PictureChange> pictures;
+    std::vector<TableChange> tables;
+    std::vector<ChartChange> charts;
 
     [[nodiscard]] bool empty() const noexcept {
-        return text.empty() && shapes.empty() && pictures.empty();
+        return text.empty() && shapes.empty() && pictures.empty() && tables.empty() &&
+               charts.empty();
     }
 };
 

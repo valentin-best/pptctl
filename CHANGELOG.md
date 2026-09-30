@@ -11,6 +11,14 @@ Phase 4: `pptctl diff`, in progress.
 
 ### Added
 
+- Table and chart diff (#74): tables on a matched slide pair are paired by
+  shape id (then name) and reported as cell changed, rows/columns added or
+  removed, or merge changed; rows are aligned by their cell text so an
+  inserted row is one op, not a cascade of changed cells. Charts are paired
+  the same way and reported as type changed, title changed, series
+  added/removed, categories changed, or one values-changed op per differing
+  point (old and new value; capped at 50 per series). Both families render
+  in unified, JSON (`tables` / `charts` arrays) and HTML output.
 - `diff` subcommand scaffold (#69): slide-level report — added, removed,
   moved, changed — from a fingerprint match (exact reorders are cheap) with a
   best-match fallback for edited slides (`--match-threshold`, default 0.5).
