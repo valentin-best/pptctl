@@ -7,8 +7,10 @@
       "a_index": 1,
       "b_index": 1,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,
@@ -19,8 +21,10 @@
       "a_index": 2,
       "b_index": 2,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": [
           {
             "a_paragraph": 2,
@@ -54,8 +58,10 @@
       "a_index": 3,
       "b_index": 3,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": [
           {
             "a_paragraph": 1,
@@ -89,8 +95,10 @@
       "a_index": 4,
       "b_index": 4,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,
@@ -101,8 +109,10 @@
       "a_index": 5,
       "b_index": 5,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": [
           {
             "a_paragraph": 1,
@@ -125,8 +135,10 @@
       "a_index": 6,
       "b_index": 6,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,
