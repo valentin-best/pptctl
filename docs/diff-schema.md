@@ -71,8 +71,10 @@ pair of decks and `pptctl` version.
 | `text` | `array<TextChange>` | Text-level ops within matched shapes and the notes. |
 | `shapes` | `array<ShapeChange>` | Structural shape ops: added, removed, moved, resized, restyled. |
 | `pictures` | `array<PictureChange>` | Picture media ops: added, removed, replaced, re-linked, alt-text. |
+| `tables` | `array<TableChange>` | Table ops: cell text, rows/columns added or removed, merge changes. |
+| `charts` | `array<ChartChange>` | Chart ops: type, title, series added/removed, categories, values. |
 
-All three arrays are always present (empty for slides that are not
+All five arrays are always present (empty for slides that are not
 `changed`). Every key of an op is always present; a key that does not apply
 to that op is `null`. Adding a new op kind or key is an additive change.
 
@@ -132,6 +134,56 @@ probed, else `null`), `alt_text`, `title`, `decorative`. Two pictures are
 the same media when their `media_hash` values are equal, regardless of the
 part name.
 
+### TableChange
+
+| Field | Type | Description |
+|---|---|---|
+| `op` | `string` | `cell_changed`, `rows_added`, `rows_removed`, `columns_added`, `columns_removed` or `merge_changed`. |
+| `shape_id` | `string` | `p:cNvPr@id` of the table in B. |
+| `shape_name` | `string` | `p:cNvPr@name` of the table in B. |
+| `a_row` | `integer \| null` | `cell_changed` / `merge_changed`: 1-based row in A. |
+| `b_row` | `integer \| null` | `cell_changed` / `merge_changed`: 1-based row in B. |
+| `col` | `integer \| null` | `cell_changed` / `merge_changed`: 1-based column. |
+| `indices` | `array<integer> \| null` | `rows_*` / `columns_*`: the affected 1-based indices (B side when added, A side when removed). |
+| `old_text` | `string \| null` | `cell_changed`: A cell text, paragraphs joined by `\n`. |
+| `new_text` | `string \| null` | `cell_changed`: B cell text. |
+| `old_merge` | `Merge \| null` | `merge_changed`: A side. |
+| `new_merge` | `Merge \| null` | `merge_changed`: B side. |
+
+`Merge` is `{ "col_span", "row_span", "covered" }` (`gridSpan`, `rowSpan`,
+and whether the cell is covered by a neighbour's `hMerge` / `vMerge`).
+Tables are paired by shape id, then name. Column counts are compared first
+and only the common prefix of columns is compared cell by cell; rows are
+aligned by their cell text, so an inserted row is one `rows_added` op and
+does not turn the rows below it into changed cells. Cell text follows the
+same whitespace and field-run rules as `TextChange` (`--strict-text`).
+
+### ChartChange
+
+| Field | Type | Description |
+|---|---|---|
+| `op` | `string` | `type_changed`, `title_changed`, `series_added`, `series_removed`, `categories_changed`, `values_changed` or `more_values_changed`. |
+| `shape_id` | `string` | `p:cNvPr@id` of the chart in B. |
+| `shape_name` | `string` | `p:cNvPr@name` of the chart in B. |
+| `series` | `string \| null` | Series name for series-level ops; `null` for `type_changed` / `title_changed`. |
+| `series_index` | `integer \| null` | 1-based series position in B (in A for `series_removed`). |
+| `point` | `integer \| null` | `values_changed`: 1-based point index. |
+| `category` | `string \| null` | `values_changed`: the point's category label (`""` when the series has none). |
+| `old_value` | `number \| null` | `values_changed`: A value; `null` when the point only exists in B. |
+| `new_value` | `number \| null` | `values_changed`: B value; `null` when the point only exists in A. |
+| `old_type` | `string \| null` | `type_changed`: A chart type (`bar`, `line`, `pie`, `bar+line`, …). |
+| `new_type` | `string \| null` | `type_changed`: B chart type. |
+| `old_title` | `string \| null` | `title_changed`: A title; `null` when A had none. |
+| `new_title` | `string \| null` | `title_changed`: B title; `null` when B has none. |
+| `old_categories` | `array<string> \| null` | `categories_changed`: A labels. |
+| `new_categories` | `array<string> \| null` | `categories_changed`: B labels. |
+| `more` | `integer \| null` | `more_values_changed`: further differing points of the series not listed. |
+
+Charts are paired by shape id, then name. Series are matched by name when
+every series on both sides has a distinct, non-empty name, otherwise by
+position. Values compare exactly. At most 50 `values_changed` ops are
+emitted per series; the remainder collapse into one `more_values_changed`.
+
 ---
 
 ## Summary
@@ -187,8 +239,10 @@ below the match threshold and is reported as removed rather than changed:
       "a_index": null,
       "b_index": 1,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,
@@ -199,8 +253,10 @@ below the match threshold and is reported as removed rather than changed:
       "a_index": null,
       "b_index": 2,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,
@@ -211,8 +267,10 @@ below the match threshold and is reported as removed rather than changed:
       "a_index": null,
       "b_index": 3,
       "changes": {
+        "charts": [],
         "pictures": [],
         "shapes": [],
+        "tables": [],
         "text": []
       },
       "moved": false,

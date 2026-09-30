@@ -26,6 +26,18 @@ Generates, next to this script:
   - notes_and_masters.pptx  4 slides with speaker notes, plus a 2nd slide master.
   - tables_deck.pptx        2 slides: a plain 2×2 table and a merged-cell table.
   - charts_deck.pptx        2 slides: a clustered-bar chart and a pie chart.
+  - diff_base.pptx          6 slides for the diff goldens (#75): title, two bullet
+                            slides, a solid-filled rectangle, speaker notes, a 3x3 table.
+  - diff_text_edit.pptx     diff_base with one word changed, one bullet added, one
+                            bullet deleted, one run made bold and the notes edited.
+  - diff_reorder.pptx       diff_base with slides 2 and 4 swapped.
+  - diff_slide_added.pptx   diff_base with a new slide inserted at position 3.
+  - diff_slide_removed.pptx diff_base with slide 4 removed.
+  - diff_shape_edit.pptx    diff_base with the rectangle moved, resized and recolored,
+                            and a text box nudged by 1 EMU (below the tolerance).
+  - diff_table_edit.pptx    diff_base with one table cell edited and one row added.
+  - charts_deck_v2.pptx     charts_deck.pptx with one value changed, one series added
+                            and one chart title changed.
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -43,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import functools
 import io
 import re
 import struct
@@ -53,6 +66,8 @@ import zlib
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE
 from pptx.util import Emu, Inches, Pt
 
 HERE = Path(__file__).resolve().parent
@@ -227,6 +242,49 @@ def build_images_deck_v2(path: Path) -> None:
     _normalize_zip(path)
 
 
+def build_charts_deck_v2(path: Path) -> None:
+    """charts_deck.pptx with three chart edits, for the chart diff (#74):
+      slide 1   Revenue Q2 200 -> 220, and a third series "Profit" added
+      slide 2   the pie chart's title changed
+    Chart types, shape ids/names, geometry and categories are unchanged, so
+    the only ops a diff should report are chart ops."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+
+    s1 = prs.slides.add_slide(blank)
+    cd1 = ChartData()
+    cd1.categories = ["Q1", "Q2", "Q3"]
+    cd1.add_series("Revenue", (100, 220, 150))
+    cd1.add_series("Cost", (80, 120, 90))
+    cd1.add_series("Profit", (20, 100, 60))
+    chart1 = s1.shapes.add_chart(
+        XL_CHART_TYPE.BAR_CLUSTERED,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd1,
+    ).chart
+    chart1.has_title = True
+    chart1.chart_title.text_frame.text = "Revenue vs Cost"
+
+    s2 = prs.slides.add_slide(blank)
+    cd2 = ChartData()
+    cd2.categories = ["Alpha", "Beta", "Gamma"]
+    cd2.add_series("Share", (30, 50, 20))
+    chart2 = s2.shapes.add_chart(
+        XL_CHART_TYPE.PIE,
+        Inches(1), Inches(1), Inches(6), Inches(4),
+        cd2,
+    ).chart
+    chart2.has_title = True
+    chart2.chart_title.text_frame.text = "Market Share 2025"
+
+    _set_core_props(prs, "pptctl charts fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
 def rename_media_parts(path: Path) -> None:
     """Rename ppt/media/imageN.png -> ppt/media/pictureN.png and rewrite every
     relationship target that points at one. [Content_Types].xml maps media by
@@ -248,6 +306,164 @@ def rename_media_parts(path: Path) -> None:
         parts[n] = rels.encode("utf-8")
 
     _write_zip(path, parts)
+
+
+_DIFF_VARIANTS = (
+    "text_edit",
+    "reorder",
+    "slide_added",
+    "slide_removed",
+    "shape_edit",
+    "table_edit",
+)
+
+
+def build_diff_deck(path: Path, variant: str | None = None) -> None:
+    """The diff golden pairs (#75): one base deck and six one-change variants,
+    all from this one builder so everything the variant does not touch is the
+    same content byte-for-byte (slide part names shift when a slide is skipped
+    or appended, which the diff must not care about).
+
+    diff_base.pptx, 6 slides:
+      1  title slide                                   "Quarterly review"
+      2  Title and Content, 4 bullets + a source text box at explicit geometry
+      3  Title and Content, 3 bullets
+      4  blank, a rectangle with a solid #4472C4 fill at (1, 1) in, 3 x 2 in
+      5  Title and Content, 2 bullets, with speaker notes
+      6  blank, a 3x3 table
+
+    Variants (exactly one edit family each):
+      text_edit      slide 2: "last" -> "this" in bullet 2, a 5th bullet added;
+                     slide 3: bullet 1 made bold, bullet 3 deleted;
+                     slide 5: one word of the notes changed
+      reorder        slides 2 and 4 swapped in the sldIdLst, nothing else
+      slide_added    a new bullet slide inserted at position 3
+      slide_removed  slide 4 (the rectangle) skipped
+      shape_edit     slide 4: rectangle moved by +0.5 in on both axes, resized to
+                     4 x 2.5 in, recolored to #ED7D31; slide 2: the source text
+                     box nudged right by exactly 1 EMU, which is far below the
+                     default geometry tolerance (1 px) and must not be reported
+      table_edit     slide 6: cell (2, 3) "20" -> "25", a 4th row added
+    """
+    if variant is not None and variant not in _DIFF_VARIANTS:
+        raise ValueError(f"unknown diff variant {variant!r}")
+
+    prs = Presentation()
+    title_layout = prs.slide_layouts[0]
+    content_layout = prs.slide_layouts[1]
+    blank = prs.slide_layouts[6]
+
+    # 1. Title slide.
+    s = prs.slides.add_slide(title_layout)
+    s.shapes.title.text = "Quarterly review"
+    s.placeholders[1].text = "pptctl diff fixture"
+
+    # 2. Agenda: 4 bullets and a source line in a text box with explicit geometry.
+    agenda = [
+        "Welcome and introductions",
+        "Review of last quarter",
+        "Roadmap for next quarter",
+        "Questions and answers",
+    ]
+    if variant == "text_edit":
+        agenda[1] = "Review of this quarter"
+        agenda.append("Closing remarks")
+    s = prs.slides.add_slide(content_layout)
+    s.shapes.title.text = "Agenda"
+    _fill_bullets(s.placeholders[1].text_frame, agenda)
+    source_left = Inches(0.5) + (1 if variant == "shape_edit" else 0)
+    box = s.shapes.add_textbox(Emu(source_left), Inches(6.6), Inches(9), Inches(0.5))
+    box.text_frame.text = "Source: internal reporting"
+
+    # 3. Results: 3 bullets.
+    results = ["Revenue up twelve percent", "Costs flat", "Two new hires"]
+    if variant == "text_edit":
+        results.pop()  # "Two new hires" deleted
+    s = prs.slides.add_slide(content_layout)
+    s.shapes.title.text = "Results"
+    _fill_bullets(s.placeholders[1].text_frame, results)
+    if variant == "text_edit":
+        s.placeholders[1].text_frame.paragraphs[0].runs[0].font.bold = True
+
+    # 4. A rectangle with an explicit solid fill and known geometry.
+    if variant != "slide_removed":
+        s = prs.slides.add_slide(blank)
+        if variant == "shape_edit":
+            geom = (Inches(1.5), Inches(1.5), Inches(4), Inches(2.5))
+            color = RGBColor(0xED, 0x7D, 0x31)
+        else:
+            geom = (Inches(1), Inches(1), Inches(3), Inches(2))
+            color = RGBColor(0x44, 0x72, 0xC4)
+        rect = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, *geom)
+        rect.fill.solid()
+        rect.fill.fore_color.rgb = color
+        rect.text_frame.text = "Key figure"
+
+    # 5. Timeline with speaker notes.
+    s = prs.slides.add_slide(content_layout)
+    s.shapes.title.text = "Timeline"
+    _fill_bullets(s.placeholders[1].text_frame, ["Kick-off in May", "Launch in September"])
+    notes = "Remember to pause for questions."
+    if variant == "text_edit":
+        notes = "Remember to pause for discussion."
+    s.notes_slide.notes_text_frame.text = notes
+
+    # 6. A 3x3 table (4 rows in table_edit).
+    grid = [
+        ["Region", "Q1", "Q2"],
+        ["North", "10", "20"],
+        ["South", "30", "40"],
+    ]
+    if variant == "table_edit":
+        grid[1][2] = "25"
+        grid.append(["East", "50", "60"])
+    s = prs.slides.add_slide(blank)
+    table = s.shapes.add_table(
+        len(grid), 3, Inches(1), Inches(1), Inches(6), Inches(0.5) * len(grid)
+    ).table
+    for r, row in enumerate(grid):
+        for c, text in enumerate(row):
+            table.cell(r, c).text = text
+
+    # 7. Only slide_added: a new slide, then moved to position 3.
+    if variant == "slide_added":
+        s = prs.slides.add_slide(content_layout)
+        s.shapes.title.text = "Budget"
+        _fill_bullets(s.placeholders[1].text_frame, ["Headcount unchanged", "Tooling plus five"])
+        _move_slide(prs, 6, 2)
+
+    if variant == "reorder":
+        _swap_slides(prs, 1, 3)
+
+    _set_core_props(prs, "pptctl diff fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def _fill_bullets(text_frame, lines: list[str]) -> None:
+    """One paragraph per line, replacing the placeholder's empty paragraph."""
+    text_frame.text = lines[0]
+    for line in lines[1:]:
+        text_frame.add_paragraph().text = line
+
+
+def _move_slide(prs: Presentation, src: int, dst: int) -> None:
+    """Move the slide at 0-based position src to position dst by reordering
+    the p:sldIdLst entries; slide parts keep their names."""
+    lst = prs.slides._sldIdLst
+    el = list(lst)[src]
+    lst.remove(el)
+    lst.insert(dst, el)
+
+
+def _swap_slides(prs: Presentation, i: int, j: int) -> None:
+    """Swap the 0-based positions i < j in the p:sldIdLst."""
+    lst = prs.slides._sldIdLst
+    ids = list(lst)
+    lst.remove(ids[i])
+    lst.remove(ids[j])
+    lst.insert(i, ids[j])
+    lst.insert(j, ids[i])
 
 
 def build_bloat_deck(path: Path) -> None:
@@ -552,6 +768,12 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),
     ("tables_deck.pptx", [build_tables_deck]),
     ("charts_deck.pptx", [build_charts_deck]),
+    ("diff_base.pptx", [build_diff_deck]),
+    *[
+        (f"diff_{v}.pptx", [functools.partial(build_diff_deck, variant=v)])
+        for v in _DIFF_VARIANTS
+    ],
+    ("charts_deck_v2.pptx", [build_charts_deck_v2]),
 ]
 
 

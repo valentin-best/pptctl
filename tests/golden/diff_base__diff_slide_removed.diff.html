@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pptctl diff</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 2rem auto;
+       max-width: 72rem; padding: 0 1rem; color: #1f2328; background: #fff; }
+h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; }
+.files { color: #57606a; margin: 0 0 .5rem; }
+.summary { margin: 0 0 1.5rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: .4rem .6rem; border-top: 1px solid #d0d7de; }
+th { font-weight: 600; color: #57606a; border-top: 0; }
+td.idx { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8em;
+         font-weight: 600; }
+.badge.unchanged { background: #eaeef2; color: #57606a; }
+.badge.changed { background: #fff8c5; color: #7d4e00; }
+.badge.added { background: #dafbe1; color: #1a7f37; }
+.badge.removed { background: #ffebe9; color: #cf222e; }
+.moved { color: #8250df; font-size: .85em; margin-left: .4rem; }
+.similarity { color: #57606a; font-size: .85em; margin-left: .4rem; }
+ul.ops { margin: 0; padding-left: 1.2rem; }
+ul.ops li.add { color: #1a7f37; }
+ul.ops li.del { color: #cf222e; }
+tr.added td { background: #f0fff4; }
+tr.removed td { background: #fff5f5; }
+tr.changed td { background: #fffdf0; }
+@media (prefers-color-scheme: dark) {
+  body { color: #e6edf3; background: #0d1117; }
+  th, td { border-color: #30363d; }
+  th, .files, .similarity { color: #8b949e; }
+  .badge.unchanged { background: #21262d; color: #8b949e; }
+  .badge.changed { background: #3b2e00; color: #e3b341; }
+  .badge.added { background: #0f2e18; color: #3fb950; }
+  .badge.removed { background: #3d1418; color: #ff7b72; }
+  tr.added td { background: #0f1f14; }
+  tr.removed td { background: #23151a; }
+  tr.changed td { background: #1f1c0c; }
+}
+</style>
+</head>
+<body>
+<h1>pptctl diff</h1>
+<p class="files"><code class="path">&lt;path&gt;</code> &rarr; <code class="path">&lt;path&gt;</code></p>
+<p class="summary">6 slides: 0 added, 1 removed, 0 moved, 0 changed</p>
+<table>
+<thead><tr><th>A</th><th>B</th><th>Status</th><th>Changes</th></tr></thead>
+<tbody>
+<tr class="unchanged"><td class="idx">1</td><td class="idx">1</td><td><span class="badge unchanged">unchanged</span></td><td></td></tr>
+<tr class="unchanged"><td class="idx">2</td><td class="idx">2</td><td><span class="badge unchanged">unchanged</span></td><td></td></tr>
+<tr class="unchanged"><td class="idx">3</td><td class="idx">3</td><td><span class="badge unchanged">unchanged</span></td><td></td></tr>
+<tr class="removed"><td class="idx">4</td><td class="idx"></td><td><span class="badge removed">removed</span></td><td></td></tr>
+<tr class="unchanged"><td class="idx">5</td><td class="idx">4</td><td><span class="badge unchanged">unchanged</span></td><td></td></tr>
+<tr class="unchanged"><td class="idx">6</td><td class="idx">5</td><td><span class="badge unchanged">unchanged</span></td><td></td></tr>
+</tbody>
+</table>
+</body>
+</html>

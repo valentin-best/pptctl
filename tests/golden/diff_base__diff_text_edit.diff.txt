@@ -1,0 +1,13 @@
+--- <path>
++++ <path>
+@@ slide 2 -> 2 (changed 0.89) @@
+-Review of last quarter
++Review of this quarter
++Closing remarks
+@@ slide 3 -> 3 (changed 0.82) @@
+~shape "Content Placeholder 2": "Revenue up twelve percent": bold on
+-Two new hires
+@@ slide 5 -> 5 (changed 0.92) @@
+-Remember to pause for questions.
++Remember to pause for discussion.
+6 slides: 0 added, 0 removed, 0 moved, 3 changed
