@@ -26,4 +26,22 @@ void diff_pictures(const Slide& a,
                    const DiffOptions& opts,
                    std::vector<PictureChange>& out);
 
+// #74 — table diff (cells, rows/columns added or removed, merges).
+void diff_tables(const Slide& a,
+                 const Slide& b,
+                 const DiffOptions& opts,
+                 std::vector<TableChange>& out);
+
+// #74 — chart diff (type, title, series, categories, values).
+void diff_charts(const Slide& a,
+                 const Slide& b,
+                 const DiffOptions& opts,
+                 std::vector<ChartChange>& out);
+
+// #74 — the chart comparison for one matched pair of chart shapes. Exposed
+// for tests: chart data is only filled by Slide::load(), so hand-built Shapes
+// are the only way to unit-test the comparison without a package. Either side
+// without chart data yields nothing.
+void diff_chart_pair(const Shape& a, const Shape& b, std::vector<ChartChange>& out);
+
 }  // namespace pptctl::detail

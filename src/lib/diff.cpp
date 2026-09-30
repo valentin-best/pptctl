@@ -416,6 +416,8 @@ SlideChanges compare_slides(const Slide& a, const Slide& b, const DiffOptions& o
     detail::diff_text(a, b, opts, out.text);
     detail::diff_shapes(a, b, opts, out.shapes);
     detail::diff_pictures(a, b, opts, out.pictures);
+    detail::diff_tables(a, b, opts, out.tables);
+    detail::diff_charts(a, b, opts, out.charts);
     return out;
 }
 

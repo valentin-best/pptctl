@@ -1,8 +1,11 @@
-// Tests for the diff engine: slide fingerprints, similarity, matching.
+// Tests for the diff engine: slide fingerprints, similarity, matching, the
+// renderers, and the golden fixture pairs.
 
 #include <doctest/doctest.h>
 
 #include <cctype>
+#include <filesystem>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -281,10 +284,23 @@ std::string read_golden(const char* name) {
 // once each: the `---`/`+++` header lines, the `a`/`b` JSON fields, and the
 // `<code class="path">` elements. Same rewrite as generate_golden.sh.
 std::string normalize_paths(const std::string& s) {
-    static const std::regex kUnified(R"re(^(---|\+\+\+) .*$)re", std::regex::multiline);
+    // Unified headers are rewritten line by line: std::regex::multiline is
+    // missing from MSVC's standard library, so no `^`/`$` anchoring here.
+    std::string out;
+    std::istringstream in(s);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.starts_with("--- ") || line.starts_with("+++ ")) {
+            line = line.substr(0, 3) + " <path>";
+        }
+        out += line;
+        out += '\n';
+    }
+    if (!s.empty() && s.back() != '\n') {
+        out.pop_back();
+    }
     static const std::regex kJson(R"re("(a|b)": "[^"]*")re");
     static const std::regex kHtml(R"re(<code class="path">[^<]*</code>)re");
-    std::string out = std::regex_replace(s, kUnified, "$1 <path>");
     out = std::regex_replace(out, kJson, R"re("$1": "<path>")re");
     out = std::regex_replace(out, kHtml, R"re(<code class="path">&lt;path&gt;</code>)re");
     return out;
@@ -458,4 +474,210 @@ TEST_CASE("golden: three_slides__three_slides.diff.json") {
 TEST_CASE("golden: three_slides__three_slides.diff.html") {
     check_diff_golden(
         "three_slides.pptx", "three_slides.pptx", "html", "three_slides__three_slides.diff.html");
+}
+
+// ── nested-op rendering (renderer wiring after #70/#72/#73) ──────────────────
+
+namespace pptctl::cmd {
+void render(const DiffReport& report,
+            const std::string& a,
+            const std::string& b,
+            std::ostream& os,
+            const DiffOutputOptions& out);
+}  // namespace pptctl::cmd
+
+namespace {
+
+// One changed slide carrying one op of every family, for renderer tests.
+pptctl::DiffReport sample_report() {
+    pptctl::DiffReport r;
+    pptctl::SlideDiff s;
+    s.status = pptctl::SlideStatus::Changed;
+    s.a_index = 2;
+    s.b_index = 2;
+    s.similarity = 0.8;
+
+    pptctl::TextChange changed;
+    changed.kind = pptctl::TextChangeKind::Changed;
+    changed.shape = "Title 1";
+    changed.a_paragraph = 1;
+    changed.b_paragraph = 1;
+    changed.old_text = "Hello <old>";
+    changed.new_text = "World";
+    s.changes.text.push_back(changed);
+
+    pptctl::TextChange inserted;
+    inserted.kind = pptctl::TextChangeKind::Inserted;
+    inserted.shape = "Content 2";
+    inserted.b_paragraph = 3;
+    inserted.new_text = "New bullet";
+    s.changes.text.push_back(inserted);
+
+    pptctl::TextChange deleted;
+    deleted.kind = pptctl::TextChangeKind::Deleted;
+    deleted.shape = "Content 2";
+    deleted.a_paragraph = 2;
+    deleted.old_text = "Gone";
+    s.changes.text.push_back(deleted);
+
+    pptctl::TextChange reformatted;
+    reformatted.kind = pptctl::TextChangeKind::Reformatted;
+    reformatted.shape = "Content 2";
+    reformatted.a_paragraph = 1;
+    reformatted.b_paragraph = 1;
+    reformatted.old_text = "Same";
+    reformatted.new_text = "Same";
+    reformatted.formatting = "\"Same\": bold on";
+    s.changes.text.push_back(reformatted);
+
+    pptctl::ShapeChange removed;
+    removed.op = pptctl::ShapeOp::Removed;
+    removed.name = "Box 7";
+    s.changes.shapes.push_back(removed);
+
+    pptctl::PictureChange pic;
+    pic.op = pptctl::PictureOp::Added;
+    pic.shape_name = "Picture 9";
+    s.changes.pictures.push_back(pic);
+
+    r.slides.push_back(s);
+    return r;
+}
+
+std::string render_as(const char* format) {
+    std::ostringstream os;
+    pptctl::DiffOutputOptions out;
+    out.format = format;
+    out.color = false;
+    pptctl::cmd::render(sample_report(), "a.pptx", "b.pptx", os, out);
+    return os.str();
+}
+
+}  // namespace
+
+TEST_CASE("Diff: render — unified shows text ops as -/+ lines and other ops as summaries") {
+    const std::string u = render_as("unified");
+    CHECK(u.find("-Hello <old>\n") != std::string::npos);
+    CHECK(u.find("+World\n") != std::string::npos);
+    CHECK(u.find("+New bullet\n") != std::string::npos);
+    CHECK(u.find("-Gone\n") != std::string::npos);
+    CHECK(u.find("bold on") != std::string::npos);
+    CHECK(u.find(pptctl::describe(sample_report().slides[0].changes.shapes[0])) !=
+          std::string::npos);
+    CHECK(u.find(pptctl::describe(sample_report().slides[0].changes.pictures[0])) !=
+          std::string::npos);
+    // Text lines come first, then structure, so a hunk reads like a text diff.
+    CHECK(u.find("+World") < u.find("Box 7"));
+}
+
+TEST_CASE("Diff: render — json fills the three changes arrays via to_json") {
+    const auto j = nlohmann::json::parse(render_as("json"));
+    const auto& c = j["slides"][0]["changes"];
+    REQUIRE(c["text"].size() == 4);
+    CHECK(c["text"][0]["kind"] == "changed");
+    CHECK(c["text"][0]["new_text"] == "World");
+    REQUIRE(c["shapes"].size() == 1);
+    CHECK(c["shapes"][0]["op"] == "removed");
+    REQUIRE(c["pictures"].size() == 1);
+    CHECK(c["pictures"][0]["op"] == "added");
+}
+
+TEST_CASE("Diff: render — html lists every op, escaped") {
+    const std::string h = render_as("html");
+    std::size_t items = 0;
+    for (std::size_t pos = h.find("<li"); pos != std::string::npos; pos = h.find("<li", pos + 1)) {
+        ++items;
+    }
+    CHECK(items == 6);
+    CHECK(h.find("Hello &lt;old&gt;") != std::string::npos);
+    CHECK(h.find("Hello <old>") == std::string::npos);
+}
+
+TEST_CASE("Diff: command — unified end to end shows picture ops for the image-swap fixture") {
+    std::ostringstream os;
+    pptctl::DiffOutputOptions out;
+    out.color = false;
+    const int rc = pptctl::cmd::diff_to(
+        fixture("images_deck.pptx"), fixture("images_deck_v2.pptx"), os, {}, out);
+    CHECK(rc == 1);
+    CHECK(os.str().find("replaced") != std::string::npos);
+    CHECK(os.str().find("alt text") != std::string::npos);
+}
+
+// ── golden fixture pairs (#75) ────────────────────────────────────────────────
+//
+// diff_base.pptx and its six one-edit variants (build_diff_deck in
+// tests/fixtures/generate_fixtures.py) pin what every renderer says about each
+// edit family, as tests/golden/diff_base__<variant>.diff.{txt,json,html}; the
+// self-pair pins the empty report. Each golden must show exactly the edit the
+// variant makes and nothing else, so a spurious op here is an engine finding.
+// Regenerate after an intentional output change:
+//   ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
+
+namespace {
+
+struct GoldenFormat {
+    const char* format;
+    const char* ext;
+};
+
+constexpr GoldenFormat kGoldenFormats[] = {{"unified", "txt"}, {"json", "json"}, {"html", "html"}};
+
+// diff_base.pptx against <variant>.pptx in every format.
+void check_diff_pair_goldens(const char* variant) {
+    const std::string b = std::string(variant) + ".pptx";
+    for (const auto& [format, ext] : kGoldenFormats) {
+        const std::string golden = std::format("diff_base__{}.diff.{}", variant, ext);
+        CAPTURE(golden);
+        check_diff_golden("diff_base.pptx", b.c_str(), format, golden.c_str());
+    }
+}
+
+}  // namespace
+
+TEST_CASE("golden: diff_base__diff_base.diff.*") {
+    check_diff_pair_goldens("diff_base");
+}
+TEST_CASE("golden: diff_base__diff_text_edit.diff.*") {
+    check_diff_pair_goldens("diff_text_edit");
+}
+TEST_CASE("golden: diff_base__diff_reorder.diff.*") {
+    check_diff_pair_goldens("diff_reorder");
+}
+TEST_CASE("golden: diff_base__diff_slide_added.diff.*") {
+    check_diff_pair_goldens("diff_slide_added");
+}
+TEST_CASE("golden: diff_base__diff_slide_removed.diff.*") {
+    check_diff_pair_goldens("diff_slide_removed");
+}
+TEST_CASE("golden: diff_base__diff_shape_edit.diff.*") {
+    check_diff_pair_goldens("diff_shape_edit");
+}
+TEST_CASE("golden: diff_base__diff_table_edit.diff.*") {
+    check_diff_pair_goldens("diff_table_edit");
+}
+
+TEST_CASE("golden: the identical pair prints an empty unified report and exits 0") {
+    std::string out;
+    CHECK(run_diff("diff_base.pptx", "diff_base.pptx", out, {.format = "unified"}) == 0);
+    CHECK(out.empty());
+    CHECK(read_golden("diff_base__diff_base.diff.txt").empty());
+}
+
+// Cheap regression net: no fixture, however exotic, may differ from itself.
+TEST_CASE("Diff: self-diff of every fixture in tests/fixtures is empty") {
+    std::size_t decks = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(PPTCTL_FIXTURES_DIR)) {
+        if (entry.path().extension() != ".pptx") {
+            continue;
+        }
+        ++decks;
+        const std::string path = entry.path().string();
+        CAPTURE(path);
+        std::ostringstream os;
+        const int rc = pptctl::cmd::diff_to(path, path, os, {}, {.format = "unified"});
+        CHECK(rc == 0);
+        CHECK(os.str().empty());
+    }
+    CHECK(decks >= 17);  // 10 pre-existing fixtures + diff_base and its 6 variants
 }

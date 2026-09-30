@@ -2,7 +2,7 @@
 
 > A fast CLI for `.pptx` files. Inspect, lint, diff, optimize, merge, extract.
 
-**Status:** early development, v0.3.0. `info`, `extract` and `lint` work; the others are stubs.
+**Status:** early development, v0.3.0. `info`, `extract` and `lint` work; `diff` works and is still growing (v0.4.0 in progress); the others are stubs.
 
 ```
 $ pptctl info deck.pptx
@@ -52,9 +52,63 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
 | `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat; `--json`, `--strict` | ✅ Implemented |
 | `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
-| `diff` | Semantic diff: slides added/removed/moved/changed, text and shape ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | 🚧 In progress (slide-level) |
+| `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented (v0.4.0 in progress: tables, charts, real-world validation) |
 | `merge` | Merge decks while preserving images, themes, and slide masters | Planned |
 | `fill` | Template-fill from a `.pptx` template + JSON data | Planned |
+
+## `pptctl diff`
+
+Semantic diff between two decks. Slides are matched by content, not by position: an identical slide is found again after a reorder and reported as moved, an edited slide is paired with its most similar counterpart, and only what is left over is reported as added or removed. Inside each changed slide the diff lists text ops (paragraphs inserted, deleted, changed, reformatted), shape ops (added, removed, moved, resized, recolored) and picture ops (added, removed, replaced, re-linked, alt text changed).
+
+```
+$ pptctl diff deck.pptx deck-v2.pptx
+--- deck.pptx
++++ deck-v2.pptx
+@@ slide 3 -> 1 (moved) @@
+@@ slide 2 -> 3 (changed 0.50) @@
+-Slide 2
++Slide 2: revised title
++New subtitle
+@@ slide 4 (added) @@
+4 slides: 1 added, 0 removed, 1 moved, 1 changed
+```
+
+One `@@` hunk per slide that is not simply unchanged; the number after `changed` is the similarity that paired the two slides. Text edits are `-`/`+` lines, run reformatting is a `~` line, and shape and picture ops are indented one-liners:
+
+```
+$ pptctl diff images.pptx images-v2.pptx
+--- images.pptx
++++ images-v2.pptx
+@@ slide 3 -> 3 (changed 0.67) @@
+  picture "Picture 2" replaced (image3.png 127 B 66x50 -> picture3.png 121 B 66x50)
+@@ slide 5 -> 5 (changed 0.80) @@
+  shape "Picture 2" (picture) removed
+  picture "Picture 2" removed (image5.png 128 B 68x52)
+@@ slide 7 -> 7 (changed 0.86) @@
+  shape "Picture 3" (picture) added at (5.00 in, 1.50 in), 4.00 x 3.00 in
+  picture "Picture 3" added (picture7.png 170 B 96x72)
+…
+12 slides: 0 added, 0 removed, 0 moved, 4 changed
+```
+
+Three formats: `--format unified` (default, shown above; coloured on a TTY, `--color`/`--no-color` to force it, `NO_COLOR` honoured), `--format json` (the full slide mapping including unchanged slides, versioned; see [docs/diff-schema.md](./docs/diff-schema.md)) and `--format html` (one self-contained page to hand to a reviewer). Identical decks print nothing in unified mode.
+
+| Flag | Meaning |
+|---|---|
+| `--match-threshold F` | Minimum similarity (0-1, default 0.5) to pair two edited slides instead of reporting one removed and one added. |
+| `--strict-text` | Also report whitespace-only changes and field-run (`a:fld`) churn, which are ignored by default. |
+| `--geometry-tolerance N` | Ignore shape moves and resizes of at most N EMU (default 9525, one pixel at 96 DPI; 0 reports everything). |
+| `-q`, `--quiet` | Print nothing; exit code only. |
+
+Exit codes follow `git diff`: `0` identical, `1` differences found, `2` error (a file could not be opened or is not a `.pptx`). Handy in CI:
+
+```bash
+pptctl diff -q approved.pptx candidate.pptx || echo "deck changed"
+```
+
+To get these diffs from `git diff` and `git log -p`, see [docs/git-integration.md](./docs/git-integration.md).
+
+Not there yet (Phase 4 is still open): table and chart contents are not compared, and the diff has not been validated on a corpus of real-world decks.
 
 ## Building
 

@@ -138,6 +138,16 @@ int main(int argc, char** argv) {
         ->add_option("--format", diff_out.format, "output format: unified (default), json, html")
         ->capture_default_str()
         ->check(CLI::IsMember({"unified", "json", "html"}));
+    diff_cmd->add_flag("--strict-text",
+                       diff_opts.strict_text,
+                       "also report whitespace-only and field-run (a:fld) text churn");
+    diff_cmd
+        ->add_option("--geometry-tolerance",
+                     diff_opts.geometry_tolerance_emu,
+                     "ignore shape moves/resizes at or below this many EMU (9525 = 1 px at "
+                     "96 DPI; 0 reports every change)")
+        ->check(CLI::NonNegativeNumber)
+        ->capture_default_str();
     diff_cmd->add_flag("-q,--quiet", diff_out.quiet, "print nothing; exit code only");
     auto* diff_color_flag =
         diff_cmd->add_flag("--color", diff_color, "colour unified output even when not a TTY");

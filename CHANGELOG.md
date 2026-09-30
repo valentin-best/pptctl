@@ -11,12 +11,25 @@ Phase 4: `pptctl diff`, in progress.
 
 ### Added
 
+- Table and chart diff (#74): tables on a matched slide pair are paired by
+  shape id (then name) and reported as cell changed, rows/columns added or
+  removed, or merge changed; rows are aligned by their cell text so an
+  inserted row is one op, not a cascade of changed cells. Charts are paired
+  the same way and reported as type changed, title changed, series
+  added/removed, categories changed, or one values-changed op per differing
+  point (old and new value; capped at 50 per series). Both families render
+  in unified, JSON (`tables` / `charts` arrays) and HTML output.
 - `diff` subcommand scaffold (#69): slide-level report — added, removed,
   moved, changed — from a fingerprint match (exact reorders are cheap) with a
   best-match fallback for edited slides (`--match-threshold`, default 0.5).
   Exit codes follow `git diff`: 0 identical, 1 different, 2 error. Shape,
   text and picture detail, and the unified/JSON/HTML renderers, follow in
   later Phase 4 issues.
+- `diff` docs (#76): README section (matching, formats, flags, exit codes),
+  `docs/git-integration.md` with two tested git recipes (`diff.pptx.textconv`
+  via `pptctl extract --format txt`, and an external diff driver
+  `scripts/git-pptx-diff.sh` for the full semantic diff), and a corrected
+  example in `docs/diff-schema.md`.
 - Picture diff (#73): pictures on a matched slide pair are paired by shape id
   (then name, groups walked) and reported as added, removed, replaced,
   re-linked (embed ↔ link) or alt-text changed. Media identity is a content
@@ -25,6 +38,11 @@ Phase 4: `pptctl diff`, in progress.
   carries size and, for PNG/JPEG, pixel dimensions. `Picture` gains
   `media_hash` and `dimensions`; `Package` gains a per-package hash cache
   (`part_hash`) and a header-only `read_part_prefix`. Rendering lands with #71.
+- `diff` renders nested ops (#70/#72/#73 wiring): unified hunks now carry
+  `-`/`+` lines for text edits, `~` lines for run reformatting and one-line
+  summaries for shape and picture ops; JSON `changes` arrays are populated
+  (per-op keys in `docs/diff-schema.md`); HTML lists every op. New flags
+  `--strict-text` and `--geometry-tolerance`.
 - `diff` output (#71): `--format unified` (default; file header, one
   `@@ slide A -> B (…) @@` hunk per slide that is not simply unchanged,
   summary line, colour on a TTY with `--color`/`--no-color` and `NO_COLOR`,
@@ -43,6 +61,11 @@ Phase 4: `pptctl diff`, in progress.
   by LCS, reporting inserted / deleted / changed paragraphs and run
   reformatting (bold, italic, underline, size, fonts). Whitespace-only and
   field-run (`a:fld`) churn is ignored unless `strict_text` is set.
+- `diff` golden fixture pairs (#75): `diff_base.pptx` plus six one-edit
+  variants (text edit, reorder, slide added, slide removed, shape edit, table
+  edit) from a single generator builder, with the expected unified, JSON and
+  HTML output of every pair checked in under `tests/golden/`, an
+  identical-pair test, and a self-diff regression net over every fixture.
 
 ## [0.3.0] — 2026-09-29
 
