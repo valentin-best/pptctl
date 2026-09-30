@@ -151,6 +151,7 @@ enable_testing()
 add_executable(pptctl_tests
     tests/test_main.cpp
     tests/test_package.cpp
+    tests/test_package_write.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

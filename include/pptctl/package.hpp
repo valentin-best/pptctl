@@ -10,7 +10,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -30,6 +32,14 @@ struct Relationship {
     std::string type;       // relationship Type URI
     std::string target;     // resolved internal part name, or the raw URI when external
     bool external = false;  // true when TargetMode="External"
+};
+
+// The edits a mutating command applies when writing a package. Everything not
+// named here is copied through untouched. A `replaced` name that doesn't exist
+// in the source is added as a new part.
+struct PartChanges {
+    std::map<std::string, std::vector<std::byte>> replaced;  // part name -> new bytes
+    std::set<std::string> removed;                           // part names to drop
 };
 
 class Package {
@@ -87,6 +97,18 @@ class Package {
     // package's lifetime, so media shared by many slides is hashed once.
     // Returns nullopt if the part doesn't exist.
     [[nodiscard]] std::optional<std::uint64_t> part_hash(std::string_view name) const;
+
+    // Write the package to `out_path`, applying `changes`. Untouched entries
+    // are copied raw (compressed bytes, no inflate/deflate) in their original
+    // order; replaced parts keep their position and entry metadata; new parts
+    // are appended in name order. The output is written to a temp file next to
+    // the target and renamed over it on success, so a failure never leaves a
+    // half-written .pptx. The target's directory must already exist.
+    //
+    // Writing over the package's own file is allowed: the reader is closed
+    // before the rename and reopened on the new file, so the Package stays
+    // usable and reflects what was written. Returns false on any error.
+    [[nodiscard]] bool write(const std::string& out_path, const PartChanges& changes);
 
  private:
     struct Impl;
