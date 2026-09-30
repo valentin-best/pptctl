@@ -107,7 +107,7 @@ Whitespace-only differences and field runs (`a:fld`) are ignored unless
 | `old_kind` | `string \| null` | `kind_changed` only. |
 | `old_geometry` | `Geometry \| null` | A side; `null` when `added` or A has no `a:xfrm`. |
 | `new_geometry` | `Geometry \| null` | B side; `null` when `removed` or B has no `a:xfrm`. |
-| `delta` | `Geometry \| null` | `moved` / `resized`: new minus old. |
+| `delta` | `Geometry \| null` | `moved` / `resized`: new minus old. `null` when one side inherits its position from the layout placeholder (no `a:xfrm`); the op then carries only the explicit side. |
 | `old_fill` | `Fill \| null` | A side; `null` when inherited. |
 | `new_fill` | `Fill \| null` | B side; `null` when inherited. |
 

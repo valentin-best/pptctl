@@ -29,7 +29,7 @@
       },
       "moved": false,
       "similarity": 1.0,
-      "status": "changed"
+      "status": "unchanged"
     },
     {
       "a_index": 3,
@@ -190,9 +190,9 @@
   ],
   "summary": {
     "added": 0,
-    "changed": 2,
+    "changed": 1,
     "moved": 0,
     "removed": 0,
-    "unchanged": 4
+    "unchanged": 5
   }
 }

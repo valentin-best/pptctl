@@ -989,3 +989,39 @@ TEST_CASE("Slide: parses solid fills (srgb, scheme, none) and leaves inherited f
     CHECK_FALSE(slide.shapes()[3].fill.has_value());
     CHECK_FALSE(slide.shapes()[4].fill.has_value());  // gradients are not modelled
 }
+
+// ── whitespace-only runs (#77 finding) ────────────────────────────────────────
+//
+// PowerPoint routinely stores a space between two differently formatted words
+// as its own run (`<a:t> </a:t>`). pugixml skips whitespace-only text nodes
+// unless told otherwise, which silently glued the words together.
+
+TEST_CASE("Slide: a run whose text is a single space is kept") {
+    const char* xml = R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr/>
+    <p:sp>
+      <p:nvSpPr><p:cNvPr id="2" name="Body"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/><a:lstStyle/>
+        <a:p>
+          <a:r><a:rPr b="1"/><a:t>www.google.com</a:t></a:r>
+          <a:r><a:t> </a:t></a:r>
+          <a:r><a:t>= 74.125.131.26</a:t></a:r>
+        </a:p>
+      </p:txBody>
+    </p:sp>
+  </p:spTree></p:cSld>
+</p:sld>)";
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(xml));
+    REQUIRE(slide.shapes().size() == 1);
+    REQUIRE(slide.shapes()[0].paragraphs.size() == 1);
+    const auto& runs = slide.shapes()[0].paragraphs[0].runs;
+    REQUIRE(runs.size() == 3);
+    CHECK(runs[1].text == " ");
+    CHECK(slide.shapes()[0].paragraphs[0].text() == "www.google.com = 74.125.131.26");
+}

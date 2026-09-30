@@ -449,3 +449,51 @@ TEST_CASE("Diff/shape: to_json — stable snake_case keys, EMU integers plus inc
     CHECK(d["new_geometry"].is_null());
     CHECK(d["old_geometry"]["cy_emu"] == 1);
 }
+
+// ── inherited placeholder geometry (#77 finding) ──────────────────────────────
+//
+// A placeholder without a:xfrm takes its position from the layout. Moving it
+// in PowerPoint writes an explicit a:xfrm on the slide; the reverse (reset to
+// layout) removes it. Neither side can give a delta without resolving the
+// layout, but the change must still be reported, not silently dropped.
+
+namespace {
+std::string inherited_ph(const char* id, const char* name) {
+    return std::string(R"(<p:sp>
+      <p:nvSpPr><p:cNvPr id=")") +
+           id + R"(" name=")" + name +
+           R"("/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
+      <p:spPr/>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+    </p:sp>)";
+}
+}  // namespace
+
+TEST_CASE("Diff/shape: placeholder going from inherited to explicit position is Moved") {
+    const auto a = slide({inherited_ph("2", "Title 1")});
+    const auto b = slide({ph("2", "Title 1", "title", 0, 1316183, 0)});
+    const auto ops = shape_diff(a, b);
+    REQUIRE(ops.size() == 1);
+    CHECK(ops[0].op == pptctl::ShapeOp::Moved);
+    CHECK_FALSE(ops[0].old_geometry.has_value());
+    REQUIRE(ops[0].new_geometry.has_value());
+    CHECK(ops[0].new_geometry->off_x == 1316183);
+    CHECK(ops[0].delta_x == 0);
+    const auto text = pptctl::describe(ops[0]);
+    CHECK(text.find("inherited") != std::string::npos);
+    CHECK(text.find("1.44 in") != std::string::npos);
+    const auto j = pptctl::to_json(ops[0]);
+    CHECK(j["old_geometry"].is_null());
+    CHECK(j["delta"].is_null());
+}
+
+TEST_CASE("Diff/shape: placeholder reset to the layout position is Moved the other way") {
+    const auto a = slide({ph("2", "Title 1", "title", 0, 1316183, 0)});
+    const auto b = slide({inherited_ph("2", "Title 1")});
+    const auto ops = shape_diff(a, b);
+    REQUIRE(ops.size() == 1);
+    CHECK(ops[0].op == pptctl::ShapeOp::Moved);
+    REQUIRE(ops[0].old_geometry.has_value());
+    CHECK_FALSE(ops[0].new_geometry.has_value());
+    CHECK(pptctl::describe(ops[0]).find("inherited") != std::string::npos);
+}

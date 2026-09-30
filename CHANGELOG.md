@@ -66,6 +66,13 @@ Phase 4: `pptctl diff`, in progress.
   edit) from a single generator builder, with the expected unified, JSON and
   HTML output of every pair checked in under `tests/golden/`, an
   identical-pair test, and a self-diff regression net over every fixture.
+- `diff` validated against 15 real-world decks with three known edits each, plus PowerPoint and Keynote round-trips (#77): `scripts/validate_diff.sh` and `docs/phase4-diff-validation.md`.
+
+### Fixed
+
+- `diff`: a matched slide whose only differences fall below the op tolerances (sub-pixel geometry jitter, whitespace, field runs) is now reported as unchanged instead of a `changed` slide with an empty hunk and exit code 1 (#87).
+- Slide parser: a run whose text is only whitespace (`<a:t> </a:t>`, how PowerPoint stores a space between differently formatted words) was dropped, gluing words together in `extract` text and producing false text diffs after a PowerPoint re-save (#77).
+- `diff`: a placeholder moved from its layout-inherited position (no `a:xfrm` on one side) was silently ignored; it is now a `moved` op carrying the explicit side's geometry and a null delta (#77).
 
 ## [0.3.0] — 2026-09-29
 

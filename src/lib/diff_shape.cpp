@@ -157,6 +157,21 @@ std::string describe(const ShapeChange& c) {
         case ShapeOp::Removed:
             return std::format("{} removed", who);
         case ShapeOp::Moved:
+            if (!c.old_geometry && c.new_geometry) {
+                return std::format(
+                    "{} moved from its inherited layout position to ({:.2f} in, "
+                    "{:.2f} in)",
+                    who,
+                    inches(c.new_geometry->off_x),
+                    inches(c.new_geometry->off_y));
+            }
+            if (c.old_geometry && !c.new_geometry) {
+                return std::format(
+                    "{} moved from ({:.2f} in, {:.2f} in) back to its inherited layout position",
+                    who,
+                    inches(c.old_geometry->off_x),
+                    inches(c.old_geometry->off_y));
+            }
             return std::format(
                 "{} moved by ({:+.2f} in, {:+.2f} in)", who, inches(c.delta_x), inches(c.delta_y));
         case ShapeOp::Resized: {
@@ -193,7 +208,8 @@ nlohmann::json to_json(const ShapeChange& c) {
     j["old_kind"] = c.old_kind ? nlohmann::json(kind_label(*c.old_kind)) : nullptr;
     j["old_geometry"] = geometry_json(c.old_geometry);
     j["new_geometry"] = geometry_json(c.new_geometry);
-    if (c.op == ShapeOp::Moved || c.op == ShapeOp::Resized) {
+    // No delta when either side inherits its geometry (nothing to subtract).
+    if ((c.op == ShapeOp::Moved || c.op == ShapeOp::Resized) && c.old_geometry && c.new_geometry) {
         j["delta"] = {{"x_emu", c.delta_x},
                       {"y_emu", c.delta_y},
                       {"cx_emu", c.delta_cx},
@@ -276,6 +292,15 @@ void compare_pair(const Shape& x,
     if (x.kind != y.kind) {
         ShapeChange c = base_change(ShapeOp::KindChanged, y, path);
         c.old_kind = x.kind;
+        c.old_geometry = x.geometry;
+        c.new_geometry = y.geometry;
+        out.push_back(std::move(c));
+    }
+    if (x.geometry.has_value() != y.geometry.has_value()) {
+        // One side inherits its position from the layout placeholder, the
+        // other states it. Without resolving the layout there is no delta,
+        // but the position did change; report it with the known side only.
+        ShapeChange c = base_change(ShapeOp::Moved, y, path);
         c.old_geometry = x.geometry;
         c.new_geometry = y.geometry;
         out.push_back(std::move(c));

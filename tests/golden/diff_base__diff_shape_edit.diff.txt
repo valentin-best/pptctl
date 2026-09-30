@@ -1,8 +1,7 @@
 --- <path>
 +++ <path>
-@@ slide 2 -> 2 (changed 1.00) @@
 @@ slide 4 -> 4 (changed 1.00) @@
   shape "Rectangle 1" moved by (+0.50 in, +0.50 in)
   shape "Rectangle 1" resized by (+1.00 in, +0.50 in) to 4.00 x 2.50 in
   shape "Rectangle 1" recolored from #4472C4 to #ED7D31
-6 slides: 0 added, 0 removed, 0 moved, 2 changed
+6 slides: 0 added, 0 removed, 0 moved, 1 changed

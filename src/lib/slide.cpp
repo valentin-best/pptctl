@@ -33,6 +33,13 @@ std::string Slide::notes_text() const {
 
 namespace {
 
+// pugixml drops whitespace-only text nodes by default, which turns a run that
+// is just a space (`<a:t> </a:t>`, common between differently formatted words)
+// into an empty run. parse_ws_pcdata_single keeps such a node when it is the
+// element's only child, which is exactly the a:t case, without keeping the
+// indentation whitespace between elements.
+constexpr unsigned kParseFlags = pugi::parse_default | pugi::parse_ws_pcdata_single;
+
 // The shape's identifying p:cNvPr lives inside the shape's first child (the
 // nv* container: p:nvSpPr / p:nvPicPr / p:nvGrpSpPr / etc.), regardless of
 // shape kind.
@@ -455,7 +462,7 @@ std::string chart_type_label(std::string_view element_name) {
 
 void load_chart_data(Chart& chart, std::string_view xml) {
     pugi::xml_document doc;
-    if (!doc.load_buffer(xml.data(), xml.size(), pugi::parse_default, pugi::encoding_auto)) {
+    if (!doc.load_buffer(xml.data(), xml.size(), kParseFlags, pugi::encoding_auto)) {
         return;
     }
     auto cs = doc.child("c:chartSpace");
@@ -561,8 +568,7 @@ void parse_notes_body(pugi::xml_node tree, std::vector<Paragraph>& out) {
 bool Slide::parse(std::string_view xml) {
     shapes_.clear();
     pugi::xml_document doc;
-    const auto result =
-        doc.load_buffer(xml.data(), xml.size(), pugi::parse_default, pugi::encoding_utf8);
+    const auto result = doc.load_buffer(xml.data(), xml.size(), kParseFlags, pugi::encoding_utf8);
     if (!result) {
         return false;
     }
@@ -577,8 +583,7 @@ bool Slide::parse(std::string_view xml) {
 bool Slide::parse_notes(std::string_view xml) {
     notes_.clear();
     pugi::xml_document doc;
-    const auto result =
-        doc.load_buffer(xml.data(), xml.size(), pugi::parse_default, pugi::encoding_utf8);
+    const auto result = doc.load_buffer(xml.data(), xml.size(), kParseFlags, pugi::encoding_utf8);
     if (!result) {
         return false;
     }
