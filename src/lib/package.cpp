@@ -10,12 +10,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <limits>
 #include <map>
 #include <optional>
 #include <pptctl/package.hpp>
 #include <pugixml.hpp>
+#include <random>
 #include <set>
 #include <span>
 #include <string>
@@ -102,10 +104,9 @@ std::string resolve_target(std::string_view base_dir, std::string_view target) {
 
 // Parse an XML part keeping its declaration, so re-serializing preserves it.
 bool load_xml(pugi::xml_document& doc, std::span<const std::byte> xml) {
-    return static_cast<bool>(doc.load_buffer(xml.data(),
-                                             xml.size(),
-                                             pugi::parse_default | pugi::parse_declaration,
-                                             pugi::encoding_utf8));
+    constexpr unsigned flags =
+        pugi::parse_default | pugi::parse_declaration | pugi::parse_comments | pugi::parse_pi;
+    return static_cast<bool>(doc.load_buffer(xml.data(), xml.size(), flags, pugi::encoding_utf8));
 }
 
 // Serialize without indentation or added newlines, the way Office writes parts.
@@ -143,7 +144,9 @@ bool write_entry(void* writer, mz_zip_file info, std::span<const std::byte> byte
     }
     info.compression_method = MZ_COMPRESS_METHOD_DEFLATE;
     info.compressed_size = 0;
-    info.uncompressed_size = 0;
+    // The real size up front: minizip's zip64 auto-detection treats an unknown
+    // (0) size as "might be huge" and emits zip64 placeholders in the local header.
+    info.uncompressed_size = static_cast<int64_t>(bytes.size());
     info.crc = 0;
     info.flag &= static_cast<uint16_t>(~MZ_ZIP_FLAG_ENCRYPTED);
     info.extrafield = nullptr;
@@ -188,6 +191,9 @@ std::vector<std::byte> rewrite_content_types(
         return {};
     }
     auto types = doc.child("Types");
+    if (!types) {
+        return {};
+    }
     const auto absolute = [](std::string_view part) { return "/" + std::string(part); };
 
     std::set<std::string> drop;
@@ -226,6 +232,9 @@ std::vector<std::byte> rewrite_rels(std::span<const std::byte> xml,
     }
     const std::string base = dir_of(source);
     auto rels = doc.child("Relationships");
+    if (!rels) {
+        return {};
+    }
     for (auto node = rels.child("Relationship"); node;) {
         auto next = node.next_sibling("Relationship");
         const bool external =
@@ -525,9 +534,10 @@ namespace {
 // walk stopped; callers don't rely on it.
 bool copy_entries(void* reader, void* writer, const PartChanges& changes) {
     std::set<std::string> pending;  // replaced names not yet seen in the source
-    for (const auto& [name, bytes] : changes.replaced) {
-        (void)bytes;
-        pending.insert(name);
+    for (const auto& entry : changes.replaced) {
+        if (!changes.removed.contains(entry.first)) {  // removed wins over replaced
+            pending.insert(entry.first);
+        }
     }
 
     int err = mz_zip_reader_goto_first_entry(reader);
@@ -560,7 +570,7 @@ bool copy_entries(void* reader, void* writer, const PartChanges& changes) {
         info.filename = name.c_str();
         info.filename_size = static_cast<uint16_t>(name.size());
         info.version_madeby = 20;  // MS-DOS host, spec 2.0: what PowerPoint itself writes
-        info.modified_date = static_cast<time_t>(0);
+        info.modified_date = std::time(nullptr);
         if (!write_entry(writer, info, changes.replaced.at(name))) {
             return false;
         }
@@ -575,13 +585,20 @@ bool Package::write(const std::string& out_path, const PartChanges& changes) {
         return false;
     }
     namespace fs = std::filesystem;
-    const fs::path target(out_path);
-    const fs::path dir = target.has_parent_path() ? target.parent_path() : fs::path(".");
     std::error_code ec;
+    fs::path target(out_path);
+    if (fs::is_symlink(target, ec)) {
+        target = fs::weakly_canonical(target, ec);  // replace the file, not the link
+        if (ec) {
+            return false;
+        }
+    }
+    const fs::path dir = target.has_parent_path() ? target.parent_path() : fs::path(".");
     if (!fs::is_directory(dir, ec)) {
         return false;
     }
-    const fs::path temp = target.string() + ".pptctl-tmp";
+    const fs::path temp =
+        target.string() + ".pptctl-" + std::to_string(std::random_device{}()) + ".tmp";
 
     bool ok = false;
     {
@@ -592,6 +609,11 @@ bool Package::write(const std::string& out_path, const PartChanges& changes) {
         mz_zip_writer_set_compress_method(writer.handle, MZ_COMPRESS_METHOD_DEFLATE);
         mz_zip_writer_set_compress_level(writer.handle, MZ_COMPRESS_LEVEL_DEFAULT);
         if (mz_zip_writer_open_file(writer.handle, temp.string().c_str(), 0, 0) == MZ_OK) {
+            // Office writes sizes and crc into the local header, not a trailing
+            // data descriptor; some readers are strict about that.
+            void* zip = nullptr;
+            mz_zip_writer_get_zip_handle(writer.handle, &zip);
+            mz_zip_set_data_descriptor(zip, 0);
             ok = copy_entries(impl_->reader, writer.handle, changes);
             if (mz_zip_writer_close(writer.handle) != MZ_OK) {
                 ok = false;

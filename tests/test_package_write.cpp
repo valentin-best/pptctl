@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <pptctl/package.hpp>
+#include <random>
 #include <set>
 #include <string>
 #include <string_view>
@@ -28,8 +30,10 @@ std::string fixture(const char* name) {
 struct ScratchDir {
     fs::path path;
     ScratchDir() {
-        path = fs::temp_directory_path() / fs::path("pptctl_write_" + std::to_string(counter++));
-        fs::remove_all(path);
+        // Unique per process so concurrent test runs never share a directory.
+        static const std::string run = std::to_string(std::random_device{}());
+        path = fs::temp_directory_path() /
+               fs::path("pptctl_write_" + run + "_" + std::to_string(counter++));
         fs::create_directories(path);
     }
     ~ScratchDir() {
@@ -325,4 +329,200 @@ TEST_CASE("Package::write end-to-end: removing a media part with its rels and co
     CHECK(dst.resolve("ppt/slides/slide1.xml", "rId1") == "ppt/slideLayouts/slideLayout7.xml");
     CHECK(dst.content_type("ppt/slides/slide1.xml") == src.content_type("ppt/slides/slide1.xml"));
     CHECK(dst.part_names().front() == "[Content_Types].xml");
+}
+
+// ---------------------------------------------------------------------------
+// Entry encoding: what we write must look like what Office writes
+// ---------------------------------------------------------------------------
+
+namespace {
+
+std::vector<std::byte> read_file(const fs::path& p) {
+    std::vector<std::byte> out(fs::file_size(p));
+    std::ifstream in(p, std::ios::binary);
+    in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(out.size()));
+    return out;
+}
+
+std::uint32_t le32(const std::vector<std::byte>& b, std::size_t at) {
+    return static_cast<std::uint32_t>(std::to_integer<unsigned>(b[at])) |
+           (static_cast<std::uint32_t>(std::to_integer<unsigned>(b[at + 1])) << 8) |
+           (static_cast<std::uint32_t>(std::to_integer<unsigned>(b[at + 2])) << 16) |
+           (static_cast<std::uint32_t>(std::to_integer<unsigned>(b[at + 3])) << 24);
+}
+std::uint16_t le16(const std::vector<std::byte>& b, std::size_t at) {
+    return static_cast<std::uint16_t>(le32(b, at) & 0xFFFFu);
+}
+
+// Offset of the ZIP record with signature `sig` whose filename (at `name_at`
+// bytes past the signature, length at `name_len_at`) equals `name`.
+std::size_t find_record(const std::vector<std::byte>& zip,
+                        std::uint32_t sig,
+                        std::size_t name_len_at,
+                        std::size_t name_at,
+                        std::string_view name) {
+    for (std::size_t i = 0; i + name_at <= zip.size(); ++i) {
+        if (le32(zip, i) != sig) {
+            continue;
+        }
+        const std::size_t len = le16(zip, i + name_len_at);
+        if (len != name.size() || i + name_at + len > zip.size()) {
+            continue;
+        }
+        std::string got(len, '\0');
+        for (std::size_t k = 0; k < len; ++k) {
+            got[k] = static_cast<char>(zip[i + name_at + k]);
+        }
+        if (got == name) {
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+struct LocalHeader {
+    std::uint16_t flag, method, time, date, extra_len;
+    std::uint32_t crc, compressed, uncompressed;
+};
+LocalHeader local_header(const std::vector<std::byte>& zip, std::string_view name) {
+    const auto at = find_record(zip, 0x04034b50u, 26, 30, name);
+    REQUIRE(at != std::string::npos);
+    return {le16(zip, at + 6),
+            le16(zip, at + 8),
+            le16(zip, at + 10),
+            le16(zip, at + 12),
+            le16(zip, at + 28),
+            le32(zip, at + 14),
+            le32(zip, at + 18),
+            le32(zip, at + 22)};
+}
+std::uint16_t central_extra_len(const std::vector<std::byte>& zip, std::string_view name) {
+    const auto at = find_record(zip, 0x02014b50u, 28, 46, name);
+    REQUIRE(at != std::string::npos);
+    return le16(zip, at + 30);
+}
+
+}  // namespace
+
+TEST_CASE("Package::write: empty changes produce a byte-identical file") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("three_slides.pptx")));
+    const auto out = dir.path / "out.pptx";
+    REQUIRE(src.write(out.string(), pptctl::PartChanges{}));
+    CHECK(read_file(out) == read_file(fixture("three_slides.pptx")));
+}
+
+TEST_CASE(
+    "Package::write: a replaced entry is encoded like the original — no data descriptor, "
+    "no extra fields") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("three_slides.pptx")));
+    const auto out = dir.path / "out.pptx";
+    pptctl::PartChanges changes;
+    changes.replaced["ppt/slides/slide2.xml"] = to_bytes("<p:sld/>");
+    REQUIRE(src.write(out.string(), changes));
+
+    const auto original = read_file(fixture("three_slides.pptx"));
+    const auto written = read_file(out);
+    const auto before = local_header(original, "ppt/slides/slide2.xml");
+    const auto after = local_header(written, "ppt/slides/slide2.xml");
+    CHECK(after.flag == before.flag);  // Office: 0 — sizes and crc live in the local header
+    CHECK((after.flag & 0x0008u) == 0);
+    CHECK(after.method == 8);
+    CHECK(after.extra_len == 0);
+    CHECK(after.uncompressed == 8);
+    CHECK(after.compressed != 0xFFFFFFFFu);
+    CHECK(after.crc != 0);
+    CHECK(after.date == before.date);  // metadata kept from the source entry
+    CHECK(after.time == before.time);
+    CHECK(central_extra_len(written, "ppt/slides/slide2.xml") == 0);
+}
+
+TEST_CASE("Package::write: a new entry has no extra fields and a real timestamp") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("three_slides.pptx")));
+    const auto out = dir.path / "out.pptx";
+    pptctl::PartChanges changes;
+    changes.replaced["ppt/media/new.bin"] = to_bytes("hello");
+    REQUIRE(src.write(out.string(), changes));
+
+    const auto written = read_file(out);
+    const auto hdr = local_header(written, "ppt/media/new.bin");
+    CHECK((hdr.flag & 0x0008u) == 0);
+    CHECK(hdr.extra_len == 0);
+    CHECK(hdr.date != 0);  // DOS date 0 is the invalid 1980-00-00
+    CHECK(central_extra_len(written, "ppt/media/new.bin") == 0);
+}
+
+TEST_CASE("Package::write: a zero-length replaced part round-trips as an empty part") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("three_slides.pptx")));
+    const auto out = dir.path / "out.pptx";
+    pptctl::PartChanges changes;
+    changes.replaced["ppt/slides/slide2.xml"] = {};
+    REQUIRE(src.write(out.string(), changes));
+    pptctl::Package dst;
+    REQUIRE(dst.open(out.string()));
+    CHECK(has(dst.part_names(), "ppt/slides/slide2.xml"));
+    CHECK(dst.part_size("ppt/slides/slide2.xml") == 0);
+    CHECK(dst.read_part("ppt/slides/slide2.xml").empty());
+}
+
+TEST_CASE("Package::write: a name in both replaced and removed is removed") {
+    ScratchDir dir;
+    pptctl::Package src;
+    REQUIRE(src.open(fixture("three_slides.pptx")));
+    const auto out = dir.path / "out.pptx";
+    pptctl::PartChanges changes;
+    changes.replaced["ppt/slides/slide2.xml"] = to_bytes("<p:sld/>");
+    changes.removed.insert("ppt/slides/slide2.xml");
+    REQUIRE(src.write(out.string(), changes));
+    pptctl::Package dst;
+    REQUIRE(dst.open(out.string()));
+    CHECK_FALSE(has(dst.part_names(), "ppt/slides/slide2.xml"));
+    CHECK(dst.part_count() == src.part_count() - 1);
+}
+
+TEST_CASE("Package::write: a symlinked target replaces the file it points to") {
+    ScratchDir dir;
+    const auto real = dir.path / "deck.pptx";
+    const auto link = dir.path / "link.pptx";
+    fs::copy_file(fixture("three_slides.pptx"), real);
+    std::error_code ec;
+    fs::create_symlink(real, link, ec);
+    if (ec) {
+        return;  // symlinks unavailable (e.g. Windows without privilege); nothing to test
+    }
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(link.string()));
+    pptctl::PartChanges changes;
+    changes.removed.insert("ppt/slides/slide3.xml");
+    REQUIRE(pkg.write(link.string(), changes));
+    CHECK(fs::is_symlink(link));
+    CHECK_FALSE(has(pkg.part_names(), "ppt/slides/slide3.xml"));
+    pptctl::Package direct;
+    REQUIRE(direct.open(real.string()));
+    CHECK_FALSE(has(direct.part_names(), "ppt/slides/slide3.xml"));
+}
+
+TEST_CASE("rewrite helpers return empty when the expected root element is missing") {
+    CHECK(pptctl::rewrite_content_types(to_bytes("<Foo/>"), {}, {{"x.xml", "t"}}).empty());
+    CHECK(pptctl::rewrite_rels(to_bytes("<Foo/>"), "ppt/presentation.xml", {"a"}).empty());
+    CHECK(pptctl::rewrite_content_types(to_bytes("not xml <"), {}, {}).empty());
+}
+
+TEST_CASE("rewrite helpers preserve comments and processing instructions") {
+    const std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        "<!-- keep me --><?pi keep?>"
+        "<Relationship Id=\"rId1\" Type=\"t\" Target=\"media/x\"/>"
+        "</Relationships>";
+    const auto out = to_string(pptctl::rewrite_rels(to_bytes(xml), "ppt/slides/slide1.xml", {}));
+    CHECK(out.find("<!-- keep me -->") != std::string::npos);
+    CHECK(out.find("<?pi keep?>") != std::string::npos);
 }
