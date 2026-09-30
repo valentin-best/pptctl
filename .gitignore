@@ -72,3 +72,4 @@ __pycache__/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+tests/real_world/.work-diff/
