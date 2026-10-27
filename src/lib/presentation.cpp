@@ -112,7 +112,7 @@ void parse_color_scheme(pugi::xml_node clr_scheme, ColorScheme& out) {
 
 }  // namespace
 
-Presentation::Presentation(Package& package) : package_(&package) {}
+Presentation::Presentation(const Package& package) : package_(&package) {}
 
 bool Presentation::load() {
     if (!package_ || !package_->is_open()) {

@@ -126,6 +126,12 @@ add_library(pptctl_lib STATIC
     src/lib/diff_picture.cpp
     src/lib/diff_table.cpp
     src/lib/diff_chart.cpp
+    src/lib/optimize.cpp
+    src/lib/optimize_layouts.cpp
+    src/lib/optimize_fonts.cpp
+    src/lib/optimize_crop.cpp
+    src/lib/optimize_images.cpp
+    src/lib/optimize_orphans.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -144,6 +150,7 @@ add_executable(pptctl
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp
+    src/cmd/optimize.cpp
 )
 target_link_libraries(pptctl
     PRIVATE
@@ -169,9 +176,16 @@ add_executable(pptctl_tests
     tests/test_diff_picture.cpp
     tests/test_diff_table.cpp
     tests/test_diff_chart.cpp
+    tests/test_optimize.cpp
+    tests/test_optimize_layouts.cpp
+    tests/test_optimize_fonts.cpp
+    tests/test_optimize_crop.cpp
+    tests/test_optimize_images.cpp
+    tests/test_optimize_orphans.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp
+    src/cmd/optimize.cpp
 )
 target_link_libraries(pptctl_tests
     PRIVATE
