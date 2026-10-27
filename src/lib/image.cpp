@@ -137,4 +137,14 @@ std::optional<ImageDimensions> probe_image_dimensions(Bytes bytes) noexcept {
     return std::nullopt;
 }
 
+ImageFormat sniff_image_format(Bytes bytes) noexcept {
+    if (is_png(bytes)) {
+        return ImageFormat::Png;
+    }
+    if (is_jpeg(bytes)) {
+        return ImageFormat::Jpeg;
+    }
+    return ImageFormat::Unknown;
+}
+
 }  // namespace pptctl
