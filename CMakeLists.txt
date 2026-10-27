@@ -116,6 +116,7 @@ endif()
 # --- internal library: what will eventually become libpptctl -----------------
 add_library(pptctl_lib STATIC
     src/lib/package.cpp
+    src/lib/part_graph.cpp
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
@@ -157,6 +158,7 @@ add_executable(pptctl_tests
     tests/test_main.cpp
     tests/test_package.cpp
     tests/test_package_write.cpp
+    tests/test_part_graph.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp
