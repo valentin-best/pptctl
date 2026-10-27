@@ -151,6 +151,15 @@ set(PNG_STATIC ON CACHE BOOL "" FORCE)
 set(PNG_FRAMEWORK OFF CACHE BOOL "" FORCE)
 set(PNG_TESTS OFF CACHE BOOL "" FORCE)
 set(PNG_TOOLS OFF CACHE BOOL "" FORCE)
+# libpng's stock configuration header (its default feature set) rather than one
+# generated with awk at build time: it then exists right after configure, which
+# the clang-tidy CI job (configure only) needs to parse png.h, and the build
+# needs no awk.
+set(PNG_LIBCONF_HEADER "${FETCHCONTENT_BASE_DIR}/libpng-src/scripts/pnglibconf.h.prebuilt"
+    CACHE FILEPATH "" FORCE)
+# libpng only looks for awk when it generates the header, but a cached AWK from
+# an older configure makes it expect generated sources it no longer writes.
+unset(AWK CACHE)
 FetchContent_Declare(
     libpng
     GIT_REPOSITORY https://github.com/pnggroup/libpng.git
