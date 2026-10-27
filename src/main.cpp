@@ -133,6 +133,23 @@ int main(int argc, char** argv) {
     optimize_cmd->add_flag("--keep-fonts", keep_fonts, "keep embedded fonts");
     optimize_cmd->add_flag("--no-crop", no_crop, "keep cropped-out image regions");
     optimize_cmd->add_flag("--no-images", no_images, "don't recompress or downsample images");
+    optimize_cmd
+        ->add_option("--quality", optimize_opts.jpeg_quality, "JPEG re-encode quality (1-100)")
+        ->check(CLI::Range(1, 100))
+        ->capture_default_str();
+    optimize_cmd
+        ->add_option("--max-scale",
+                     optimize_opts.max_scale,
+                     "keep images at up to this many pixels per 96 DPI canvas pixel at their "
+                     "largest displayed size")
+        ->check(CLI::PositiveNumber)
+        ->capture_default_str();
+    optimize_cmd
+        ->add_option("--max-dpi",
+                     optimize_opts.max_dpi,
+                     "keep images at up to this many pixels per inch displayed (overrides "
+                     "--max-scale)")
+        ->check(CLI::PositiveNumber);
     optimize_cmd->add_flag("--no-orphans", no_orphans, "keep media nothing references");
     optimize_cmd->callback([&]() {
         optimize_opts.layouts = !no_layouts;

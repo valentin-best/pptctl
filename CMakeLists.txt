@@ -208,6 +208,7 @@ add_library(pptctl_lib STATIC
     src/lib/optimize_fonts.cpp
     src/lib/optimize_crop.cpp
     src/lib/optimize_images.cpp
+    src/lib/resample.cpp
     src/lib/optimize_orphans.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
