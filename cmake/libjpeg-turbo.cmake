@@ -89,7 +89,12 @@ if(NOT EXISTS "${_ljt_lib}" OR NOT _ljt_old_stamp STREQUAL _ljt_stamp)
     if(NOT _ljt_result EQUAL 0)
         message(FATAL_ERROR "libjpeg-turbo configure failed:\n${_ljt_out}")
     endif()
-    string(REGEX MATCH "SIMD extensions: [^\n]*" _ljt_simd "${_ljt_out}")
+    # "SIMD extensions: ARM64 ..." when on, or the fallback's warning
+    # ("SIMD extensions disabled: could not find NASM compiler. ...").
+    string(REGEX MATCH "SIMD extensions[^\n]*" _ljt_simd "${_ljt_out}")
+    if(NOT _ljt_simd)
+        set(_ljt_simd "SIMD status not reported")
+    endif()
     file(WRITE "${_ljt_build}/pptctl-simd.txt" "${_ljt_simd}")
     execute_process(
         COMMAND "${CMAKE_COMMAND}" --build "${_ljt_build}" --target install --parallel
