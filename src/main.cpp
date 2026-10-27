@@ -7,6 +7,7 @@
 #include <ostream>
 #include <pptctl/diff.hpp>
 #include <pptctl/lint.hpp>
+#include <pptctl/optimize.hpp>
 #include <pptctl/print.hpp>
 #include <string>
 
@@ -24,6 +25,7 @@ int diff(const std::string& a,
          const std::string& b,
          const DiffOptions& opts,
          const DiffOutputOptions& out);
+int optimize(const std::string& in, const OptimizeOptions& opts, const OptimizeOutputOptions& out);
 
 }  // namespace pptctl::cmd
 
@@ -107,12 +109,40 @@ int main(int argc, char** argv) {
         std::exit(pptctl::cmd::lint(lint_path, lint_opts));
     });
 
-    // --- placeholders for future subcommands ---------------------------------
-    // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
-    // shows the full planned surface area to users.
-    app.add_subcommand("optimize", "Reduce file size (not yet implemented)")->callback([] {
-        std::exit(not_implemented("optimize"));
+    // --- optimize ------------------------------------------------------------
+    std::string optimize_path;
+    pptctl::OptimizeOptions optimize_opts;
+    pptctl::OptimizeOutputOptions optimize_out;
+    bool keep_fonts = false;
+    bool no_layouts = false;
+    bool no_crop = false;
+    bool no_images = false;
+    bool no_orphans = false;
+    auto* optimize_cmd = app.add_subcommand("optimize", "Reduce file size");
+    optimize_cmd->add_option("file", optimize_path, "path to .pptx")
+        ->required()
+        ->check(CLI::ExistingFile);
+    auto* optimize_o =
+        optimize_cmd->add_option("-o,--output", optimize_out.output, "path to write the result");
+    optimize_cmd->add_flag("--in-place", optimize_out.in_place, "overwrite the input file")
+        ->excludes(optimize_o);
+    optimize_cmd->add_flag(
+        "--dry-run", optimize_out.dry_run, "report what would change; write nothing");
+    optimize_cmd->add_flag("--json", optimize_out.json, "emit machine-readable JSON");
+    optimize_cmd->add_flag("--no-layouts", no_layouts, "keep unused slide layouts and masters");
+    optimize_cmd->add_flag("--keep-fonts", keep_fonts, "keep embedded fonts");
+    optimize_cmd->add_flag("--no-crop", no_crop, "keep cropped-out image regions");
+    optimize_cmd->add_flag("--no-images", no_images, "don't recompress or downsample images");
+    optimize_cmd->add_flag("--no-orphans", no_orphans, "keep media nothing references");
+    optimize_cmd->callback([&]() {
+        optimize_opts.layouts = !no_layouts;
+        optimize_opts.fonts = !keep_fonts;
+        optimize_opts.crop = !no_crop;
+        optimize_opts.images = !no_images;
+        optimize_opts.orphans = !no_orphans;
+        std::exit(pptctl::cmd::optimize(optimize_path, optimize_opts, optimize_out));
     });
+
     // --- diff ----------------------------------------------------------------
     std::string diff_a;
     std::string diff_b;
@@ -162,6 +192,9 @@ int main(int argc, char** argv) {
         std::exit(pptctl::cmd::diff(diff_a, diff_b, diff_opts, diff_out));
     });
 
+    // --- placeholders for future subcommands ---------------------------------
+    // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
+    // shows the full planned surface area to users.
     app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")->callback([] {
         std::exit(not_implemented("merge"));
     });

@@ -55,7 +55,7 @@ struct ColorScheme {
 
 class Presentation {
  public:
-    explicit Presentation(Package& package);
+    explicit Presentation(const Package& package);
 
     // Load presentation metadata. Returns false if the package isn't a valid pptx.
     [[nodiscard]] bool load();
@@ -90,7 +90,7 @@ class Presentation {
     }
 
  private:
-    Package* package_;
+    const Package* package_;
     std::size_t slide_count_ = 0;
     std::vector<std::string> slide_parts_;
     CanvasSize canvas_{};
