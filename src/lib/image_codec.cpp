@@ -35,6 +35,14 @@
 #include <unordered_map>
 #include <vector>
 
+// MSVC flags every setjmp in C++ code (C4611, "interaction between '_setjmp'
+// and C++ object destruction is non-portable"). guarded() is built so that no
+// destructor is ever skipped (see above); the warning is disabled for this file
+// only, as it would fire on each guarded() instantiation.
+#ifdef _MSC_VER
+#pragma warning(disable : 4611)
+#endif
+
 namespace pptctl {
 
 namespace {
@@ -69,11 +77,20 @@ std::uint32_t be32(Bytes b, std::size_t i) noexcept {
 
 // ── JPEG ──────────────────────────────────────────────────────────────────────
 
+// MSVC: jmp_buf is 16-byte aligned on x64, so the struct is padded (C4324,
+// informational); expected here.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
 struct JpegErrors {
     jpeg_error_mgr mgr{};  // first member: libjpeg hands back a pointer to it
     std::jmp_buf jump{};
     std::array<char, JMSG_LENGTH_MAX> message{};
 };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 [[noreturn]] void jpeg_on_error(j_common_ptr cinfo) {
     auto* errors = reinterpret_cast<JpegErrors*>(cinfo->err);
