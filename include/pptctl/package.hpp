@@ -10,7 +10,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -30,6 +32,37 @@ struct Relationship {
     std::string type;       // relationship Type URI
     std::string target;     // resolved internal part name, or the raw URI when external
     bool external = false;  // true when TargetMode="External"
+};
+
+// The `_rels/*.rels` part that declares relationships for `part`. An empty
+// part denotes the package root ("_rels/.rels"). Removing a part should also
+// remove this file when it exists.
+[[nodiscard]] std::string rels_part_for(std::string_view part);
+
+// Rewrite `[Content_Types].xml`: drop the Override for every part in
+// `removed_parts`, then set one Override per `added_overrides` entry
+// (part name -> content type), replacing an existing Override for that part.
+// Defaults are untouched. Part names are given without a leading slash, as
+// Package::part_names reports them. The result is meant to be passed back to
+// Package::write as the replaced `[Content_Types].xml`.
+[[nodiscard]] std::vector<std::byte> rewrite_content_types(
+    std::span<const std::byte> xml,
+    const std::set<std::string>& removed_parts,
+    const std::map<std::string, std::string>& added_overrides);
+
+// Rewrite a `.rels` part owned by `source_part`: drop every Relationship
+// whose resolved internal target is in `removed_parts`. Surviving ids are
+// left as they are; external relationships are never dropped.
+[[nodiscard]] std::vector<std::byte> rewrite_rels(std::span<const std::byte> xml,
+                                                  std::string_view source_part,
+                                                  const std::set<std::string>& removed_parts);
+
+// The edits a mutating command applies when writing a package. Everything not
+// named here is copied through untouched. A `replaced` name that doesn't exist
+// in the source is added as a new part. A name in both sets is removed.
+struct PartChanges {
+    std::map<std::string, std::vector<std::byte>> replaced;  // part name -> new bytes
+    std::set<std::string> removed;                           // part names to drop
 };
 
 class Package {
@@ -87,6 +120,19 @@ class Package {
     // package's lifetime, so media shared by many slides is hashed once.
     // Returns nullopt if the part doesn't exist.
     [[nodiscard]] std::optional<std::uint64_t> part_hash(std::string_view name) const;
+
+    // Write the package to `out_path`, applying `changes`. Untouched entries
+    // are copied raw (compressed bytes, no inflate/deflate) in their original
+    // order; replaced parts keep their position and entry metadata; new parts
+    // are appended in name order. The output is written to a temp file next to
+    // the target and renamed over it on success, so a failure never leaves a
+    // half-written .pptx. The target's directory must already exist. A
+    // symlinked target is followed: the file it points to is replaced.
+    //
+    // Writing over the package's own file is allowed: the reader is closed
+    // before the rename and reopened on the new file, so the Package stays
+    // usable and reflects what was written. Returns false on any error.
+    [[nodiscard]] bool write(const std::string& out_path, const PartChanges& changes);
 
  private:
     struct Impl;

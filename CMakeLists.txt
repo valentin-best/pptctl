@@ -74,6 +74,11 @@ set(MZ_LZMA OFF CACHE BOOL "" FORCE)
 set(MZ_ZSTD OFF CACHE BOOL "" FORCE)
 set(MZ_OPENSSL OFF CACHE BOOL "" FORCE)
 set(MZ_LIBBSD OFF CACHE BOOL "" FORCE)
+# No encryption: pptctl never reads or writes encrypted packages, and with crypto
+# on minizip appends a SHA-256 extra field to every entry it deflates — Office
+# never emits one, and the write path must produce entries that look like Office's.
+set(MZ_PKCRYPT OFF CACHE BOOL "" FORCE)
+set(MZ_WZAES OFF CACHE BOOL "" FORCE)
 set(MZ_FETCH_LIBS ON CACHE BOOL "" FORCE)
 # On Windows there's no system zlib, so minizip-ng fetches zlib-ng, whose `zlib`
 # target is an ALIAS. minizip-ng's install() rules then choke on installing an
@@ -151,6 +156,7 @@ enable_testing()
 add_executable(pptctl_tests
     tests/test_main.cpp
     tests/test_package.cpp
+    tests/test_package_write.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

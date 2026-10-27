@@ -10,13 +10,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ctime>
+#include <filesystem>
+#include <limits>
 #include <map>
 #include <optional>
 #include <pptctl/package.hpp>
 #include <pugixml.hpp>
+#include <random>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace pptctl {
@@ -51,17 +57,6 @@ std::string dir_of(std::string_view part) {
         return {};
     }
     return std::string(part.substr(0, slash + 1));
-}
-
-// The `_rels/*.rels` path that declares relationships for `part`.
-// An empty part denotes the package root → "_rels/.rels".
-std::string rels_path_for(std::string_view part) {
-    const auto slash = part.find_last_of('/');
-    const std::string dir =
-        (slash == std::string_view::npos) ? "" : std::string(part.substr(0, slash + 1));
-    const std::string name =
-        (slash == std::string_view::npos) ? std::string(part) : std::string(part.substr(slash + 1));
-    return dir + "_rels/" + name + ".rels";
 }
 
 // Collapse "." and ".." segments in a slash-separated path.
@@ -107,7 +102,151 @@ std::string resolve_target(std::string_view base_dir, std::string_view target) {
     return normalize_path(std::string(base_dir) + std::string(target));
 }
 
+// Parse an XML part keeping its declaration, so re-serializing preserves it.
+bool load_xml(pugi::xml_document& doc, std::span<const std::byte> xml) {
+    constexpr unsigned flags =
+        pugi::parse_default | pugi::parse_declaration | pugi::parse_comments | pugi::parse_pi;
+    return static_cast<bool>(doc.load_buffer(xml.data(), xml.size(), flags, pugi::encoding_utf8));
+}
+
+// Serialize without indentation or added newlines, the way Office writes parts.
+std::vector<std::byte> save_xml(const pugi::xml_document& doc) {
+    struct BytesWriter : pugi::xml_writer {
+        std::vector<std::byte> out;
+        void write(const void* data, std::size_t size) override {
+            const auto* p = static_cast<const std::byte*>(data);
+            out.insert(out.end(), p, p + size);
+        }
+    } writer;
+    doc.save(writer, "", pugi::format_raw, pugi::encoding_utf8);
+    return std::move(writer.out);
+}
+
+// RAII wrapper over a minizip-ng writer: closed and deleted on scope exit.
+struct ZipWriter {
+    void* handle = mz_zip_writer_create();
+
+    ~ZipWriter() {
+        if (handle != nullptr) {
+            mz_zip_writer_close(handle);
+            mz_zip_writer_delete(&handle);
+        }
+    }
+    ZipWriter() = default;
+    ZipWriter(const ZipWriter&) = delete;
+    ZipWriter& operator=(const ZipWriter&) = delete;
+};
+
+// Add one entry with the given metadata and (uncompressed) bytes, deflated.
+bool write_entry(void* writer, mz_zip_file info, std::span<const std::byte> bytes) {
+    if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<int32_t>::max())) {
+        return false;
+    }
+    info.compression_method = MZ_COMPRESS_METHOD_DEFLATE;
+    info.compressed_size = 0;
+    // The real size up front: minizip's zip64 auto-detection treats an unknown
+    // (0) size as "might be huge" and emits zip64 placeholders in the local header.
+    info.uncompressed_size = static_cast<int64_t>(bytes.size());
+    info.crc = 0;
+    info.flag &= static_cast<uint16_t>(~MZ_ZIP_FLAG_ENCRYPTED);
+    info.extrafield = nullptr;
+    info.extrafield_size = 0;
+    // minizip's buffer API takes a non-const pointer but only reads from it.
+    void* buf =
+        const_cast<std::byte*>(bytes.data());  // NOLINT(cppcoreguidelines-pro-type-const-cast)
+    static std::byte empty{};
+    if (bytes.empty()) {
+        buf = &empty;
+    }
+    return mz_zip_writer_add_buffer(writer, buf, static_cast<int32_t>(bytes.size()), &info) ==
+           MZ_OK;
+}
+
+bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
+    std::error_code ec;
+    if (std::filesystem::equivalent(a, b, ec)) {
+        return true;
+    }
+    ec.clear();
+    return std::filesystem::weakly_canonical(a, ec) == std::filesystem::weakly_canonical(b, ec);
+}
+
 }  // namespace
+
+std::string rels_part_for(std::string_view part) {
+    const auto slash = part.find_last_of('/');
+    const std::string dir =
+        (slash == std::string_view::npos) ? "" : std::string(part.substr(0, slash + 1));
+    const std::string name =
+        (slash == std::string_view::npos) ? std::string(part) : std::string(part.substr(slash + 1));
+    return dir + "_rels/" + name + ".rels";
+}
+
+std::vector<std::byte> rewrite_content_types(
+    std::span<const std::byte> xml,
+    const std::set<std::string>& removed_parts,
+    const std::map<std::string, std::string>& added_overrides) {
+    pugi::xml_document doc;
+    if (!load_xml(doc, xml)) {
+        return {};
+    }
+    auto types = doc.child("Types");
+    if (!types) {
+        return {};
+    }
+    const auto absolute = [](std::string_view part) { return "/" + std::string(part); };
+
+    std::set<std::string> drop;
+    for (const auto& part : removed_parts) {
+        drop.insert(absolute(part));
+    }
+    for (const auto& [part, ct] : added_overrides) {
+        (void)ct;
+        drop.insert(absolute(part));  // an existing Override is replaced by the new one
+    }
+    for (auto node = types.child("Override"); node;) {
+        auto next = node.next_sibling("Override");
+        if (drop.contains(node.attribute("PartName").as_string(""))) {
+            types.remove_child(node);
+        }
+        node = next;
+    }
+    for (const auto& [part, ct] : added_overrides) {
+        auto node = types.append_child("Override");
+        node.append_attribute("PartName") = absolute(part).c_str();
+        node.append_attribute("ContentType") = ct.c_str();
+    }
+    return save_xml(doc);
+}
+
+std::vector<std::byte> rewrite_rels(std::span<const std::byte> xml,
+                                    std::string_view source_part,
+                                    const std::set<std::string>& removed_parts) {
+    pugi::xml_document doc;
+    if (!load_xml(doc, xml)) {
+        return {};
+    }
+    std::string source(source_part);
+    if (!source.empty() && source.front() == '/') {
+        source.erase(source.begin());
+    }
+    const std::string base = dir_of(source);
+    auto rels = doc.child("Relationships");
+    if (!rels) {
+        return {};
+    }
+    for (auto node = rels.child("Relationship"); node;) {
+        auto next = node.next_sibling("Relationship");
+        const bool external =
+            std::string_view(node.attribute("TargetMode").as_string("")) == "External";
+        if (!external &&
+            removed_parts.contains(resolve_target(base, node.attribute("Target").as_string("")))) {
+            rels.remove_child(node);
+        }
+        node = next;
+    }
+    return save_xml(doc);
+}
 
 std::uint64_t fnv1a64(std::span<const std::byte> bytes) noexcept {
     constexpr std::uint64_t kOffset = 14695981039346656037ULL;
@@ -301,7 +440,7 @@ std::vector<Relationship> Package::relationships(std::string_view source_part) c
     }
 
     std::vector<Relationship> rels;
-    const auto bytes = read_part(rels_path_for(key));
+    const auto bytes = read_part(rels_part_for(key));
     pugi::xml_document doc;
     if (!bytes.empty() &&
         doc.load_buffer(bytes.data(), bytes.size(), pugi::parse_default, pugi::encoding_utf8)) {
@@ -386,6 +525,124 @@ std::optional<std::uint64_t> Package::part_hash(std::string_view name) const {
     const auto h = fnv1a64(read_part(name));
     impl_->hash_cache.emplace(key, h);
     return h;
+}
+
+namespace {
+
+// Stream every entry of `reader` into `writer`, applying `changes`. Returns
+// false on the first error. The reader's entry cursor is left wherever the
+// walk stopped; callers don't rely on it.
+bool copy_entries(void* reader, void* writer, const PartChanges& changes) {
+    std::set<std::string> pending;  // replaced names not yet seen in the source
+    for (const auto& entry : changes.replaced) {
+        if (!changes.removed.contains(entry.first)) {  // removed wins over replaced
+            pending.insert(entry.first);
+        }
+    }
+
+    int err = mz_zip_reader_goto_first_entry(reader);
+    while (err == MZ_OK) {
+        mz_zip_file* info = nullptr;
+        if (mz_zip_reader_entry_get_info(reader, &info) != MZ_OK || info == nullptr ||
+            info->filename == nullptr) {
+            return false;
+        }
+        const std::string name(info->filename);
+        if (changes.removed.contains(name)) {
+            // dropped
+        } else if (const auto rep = changes.replaced.find(name); rep != changes.replaced.end()) {
+            if (!write_entry(writer, *info, rep->second)) {
+                return false;
+            }
+            pending.erase(name);
+        } else if (mz_zip_writer_copy_from_reader(writer, reader) != MZ_OK) {
+            return false;
+        }
+        err = mz_zip_reader_goto_next_entry(reader);
+    }
+    if (err != MZ_END_OF_LIST) {
+        return false;
+    }
+
+    // Brand-new parts go at the end, in name order.
+    for (const auto& name : pending) {
+        mz_zip_file info{};
+        info.filename = name.c_str();
+        info.filename_size = static_cast<uint16_t>(name.size());
+        info.version_madeby = 20;  // MS-DOS host, spec 2.0: what PowerPoint itself writes
+        info.modified_date = std::time(nullptr);
+        if (!write_entry(writer, info, changes.replaced.at(name))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+bool Package::write(const std::string& out_path, const PartChanges& changes) {
+    if (!impl_->is_open()) {
+        return false;
+    }
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path target(out_path);
+    if (fs::is_symlink(target, ec)) {
+        target = fs::weakly_canonical(target, ec);  // replace the file, not the link
+        if (ec) {
+            return false;
+        }
+    }
+    const fs::path dir = target.has_parent_path() ? target.parent_path() : fs::path(".");
+    if (!fs::is_directory(dir, ec)) {
+        return false;
+    }
+    const fs::path temp =
+        target.string() + ".pptctl-" + std::to_string(std::random_device{}()) + ".tmp";
+
+    bool ok = false;
+    {
+        const ZipWriter writer;
+        if (writer.handle == nullptr) {
+            return false;
+        }
+        mz_zip_writer_set_compress_method(writer.handle, MZ_COMPRESS_METHOD_DEFLATE);
+        mz_zip_writer_set_compress_level(writer.handle, MZ_COMPRESS_LEVEL_DEFAULT);
+        if (mz_zip_writer_open_file(writer.handle, temp.string().c_str(), 0, 0) == MZ_OK) {
+            // Office writes sizes and crc into the local header, not a trailing
+            // data descriptor; some readers are strict about that.
+            void* zip = nullptr;
+            mz_zip_writer_get_zip_handle(writer.handle, &zip);
+            mz_zip_set_data_descriptor(zip, 0);
+            ok = copy_entries(impl_->reader, writer.handle, changes);
+            if (mz_zip_writer_close(writer.handle) != MZ_OK) {
+                ok = false;
+            }
+        }
+    }
+    if (!ok) {
+        fs::remove(temp, ec);
+        return false;
+    }
+
+    const bool in_place = same_file(target, fs::path(impl_->path));
+    if (in_place) {
+        // Windows can't rename over an open file; POSIX can, but reopening
+        // keeps the Package's view consistent with the file everywhere.
+        impl_->close();
+    }
+    fs::rename(temp, target, ec);
+    if (ec) {
+        fs::remove(temp, ec);
+        if (in_place) {
+            (void)open(impl_->path);  // best effort: put the reader back
+        }
+        return false;
+    }
+    if (in_place) {
+        return open(impl_->path);
+    }
+    return true;
 }
 
 }  // namespace pptctl
