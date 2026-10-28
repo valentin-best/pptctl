@@ -619,6 +619,37 @@ TEST_CASE("codec: crop_jpeg on a grayscale JPEG snaps to the 8-pixel grid") {
     CHECK(decoded.image->width == 25);
 }
 
+TEST_CASE("codec: crop_jpeg stays inside a grayscale JPEG that declares 2x2 sampling") {
+    // A single-component scan ignores sampling factors, so a gray JPEG may
+    // declare 2x2 (patched into its SOF here) and still decode the same. Its
+    // grid is 8 px, but libjpeg pads its block rows and columns to multiples
+    // of 2: a crop at an odd block offset reaching the right and bottom edges
+    // must copy only the blocks the source holds (it over-read a block per row,
+    // and libjpeg refused the rows past the end).
+    auto bytes = pptctl::encode_jpeg(pattern(16, 16, 1), {.quality = 90, .progressive = false});
+    bool patched = false;
+    for (std::size_t i = 0; i + 11 < bytes.size() && !patched; ++i) {
+        if (bytes[i] == std::byte{0xFF} && bytes[i + 1] == std::byte{0xC0}) {
+            REQUIRE(bytes[i + 9] == std::byte{1});  // one component
+            REQUIRE(bytes[i + 11] == std::byte{0x11});
+            bytes[i + 11] = std::byte{0x22};
+            patched = true;
+        }
+    }
+    REQUIRE(patched);
+    const auto r = pptctl::crop_jpeg(bytes, {8, 8, 8, 8});
+    REQUIRE_MESSAGE(!r.bytes.empty(), r.reason);
+    CHECK(r.kept.x == 8);
+    CHECK(r.kept.width == 8);
+    CHECK(r.kept.height == 8);
+    const auto before = pptctl::decode_jpeg(bytes);
+    const auto after = pptctl::decode_jpeg(r.bytes);
+    REQUIRE(before.image.has_value());
+    REQUIRE(after.image.has_value());
+    CHECK(after.image->width == 8);
+    CHECK(at(*after.image, 4, 4, 0) == at(*before.image, 12, 12, 0));
+}
+
 TEST_CASE("codec: crop_jpeg carries the ICC profile and EXIF orientation over") {
     auto img = pattern(64, 48, 3);
     img.exif_orientation = 6;

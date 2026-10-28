@@ -452,15 +452,25 @@ JpegCropResult crop_jpeg_impl(Bytes bytes, const PixelRect& rect) {
                 const std::uint32_t wb = (out_w * h + max_h * DCTSIZE - 1) / (max_h * DCTSIZE);
                 const std::uint32_t hb = (out_h * v + max_v * DCTSIZE - 1) / (max_v * DCTSIZE);
                 const std::uint32_t row_blocks = (wb + h - 1) / h * h;
-                for (std::uint32_t y = 0; y < (hb + v - 1) / v * v; y += v) {
-                    JBLOCKARRAY dst_rows =
-                        (*src.mem->access_virt_barray)(common, dst_coefs[ci], y, v, TRUE);
-                    JBLOCKARRAY src_rows = (*src.mem->access_virt_barray)(
-                        common, src_coefs[ci], y + y_blocks, v, FALSE);
-                    for (std::uint32_t r = 0; r < v; ++r) {
-                        std::memcpy(
-                            dst_rows[r], src_rows[r] + x_blocks, sizeof(JBLOCK) * row_blocks);
+                // Copy only what the source arrays hold (they are padded the
+                // same way, but a single-component image's 8 px grid can put
+                // an odd block offset against padding to a multiple of
+                // h_samp > 1). Blocks past them lie outside the image: zero.
+                const std::uint32_t src_cols = (comp.width_in_blocks + h - 1) / h * h;
+                const std::uint32_t src_rows = (comp.height_in_blocks + v - 1) / v * v;
+                const std::uint32_t copy =
+                    src_cols > x_blocks ? std::min(row_blocks, src_cols - x_blocks) : 0;
+                for (std::uint32_t y = 0; y < (hb + v - 1) / v * v; ++y) {
+                    JBLOCKROW dst_row =
+                        (*src.mem->access_virt_barray)(common, dst_coefs[ci], y, 1, TRUE)[0];
+                    std::uint32_t copied = 0;
+                    if (y + y_blocks < src_rows) {
+                        JBLOCKROW src_row = (*src.mem->access_virt_barray)(
+                            common, src_coefs[ci], y + y_blocks, 1, FALSE)[0];
+                        std::memcpy(dst_row, src_row + x_blocks, sizeof(JBLOCK) * copy);
+                        copied = copy;
                     }
+                    std::memset(dst_row + copied, 0, sizeof(JBLOCK) * (row_blocks - copied));
                 }
             }
         })) {
