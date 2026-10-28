@@ -1,10 +1,13 @@
 name: ci
 
+# Docs-only changes don't build anything.
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   pull_request:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
 
 # Cancel in-progress runs on the same branch when a new push lands.
 concurrency:
@@ -45,6 +48,9 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
+      # Read by CMake on first configure; the libjpeg-turbo sub-build inherits them.
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
       - uses: actions/checkout@v4
@@ -64,16 +70,31 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Cache FetchContent downloads
+      # Compiled objects. Most of the build is our own code, and a PR touches
+      # a few files, so most translation units come out of this cache.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.name }}
+          max-size: 500M
+
+      # FetchContent sources plus the libjpeg-turbo install and its stamp, so
+      # configure neither re-downloads nor rebuilds libjpeg-turbo. The key
+      # changes with any CMake change; restore-keys falls back to the newest
+      # older entry, and FetchContent/the stamp redo only what actually changed.
+      - name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: |
             build/${{ matrix.preset }}/_deps/*-src
             build/${{ matrix.preset }}/_deps/*-subbuild
-          key: deps-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt') }}
+            build/${{ matrix.preset }}/_deps/libjpeg_turbo-install
+            build/${{ matrix.preset }}/_deps/libjpeg_turbo-ext-build/pptctl-*.txt
+          key: deps-${{ matrix.name }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
+          restore-keys: deps-${{ matrix.name }}-
 
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }} -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
@@ -99,27 +120,69 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull_request checkout is a merge commit; its first parent is the
+          # base branch, so HEAD^1..HEAD is exactly what the PR changes.
+          fetch-depth: 2
+
+      # On a PR, tidy only the source files it changed, unless it changed
+      # something that can affect every file (a header, the build, the tidy
+      # config), in which case tidy everything. Pushes to main always tidy
+      # everything. The pre-commit hook already tidies changed files locally.
+      - name: Select files
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+        run: |
+          all=$(find src -name '*.cpp' | sort)
+          if [ "$EVENT" != pull_request ]; then
+            files="$all"
+            echo "Push to $REF: tidying every file."
+          else
+            changed=$(git diff --name-only HEAD^1 HEAD)
+            if echo "$changed" | grep -Eq '\.(h|hpp)$|(^|/)CMakeLists\.txt$|^cmake/|^CMakePresets\.json$|^\.clang-tidy$'; then
+              files="$all"
+              echo "PR changes a header or build/tidy config: tidying every file."
+            else
+              files=$(echo "$changed" | grep -E '^src/.*\.cpp$' | while read -r f; do [ -f "$f" ] && echo "$f"; done || true)
+              echo "PR changes these source files:"; echo "${files:-  (none)}"
+            fi
+          fi
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$files" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Install build tools
+        if: steps.select.outputs.files != ''
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang-18 clang-tidy-18 clang-tools-18
 
-      - name: Cache FetchContent downloads
+      - name: Cache dependencies
+        if: steps.select.outputs.files != ''
         uses: actions/cache@v4
         with:
           path: |
             build/linux-release/_deps/*-src
             build/linux-release/_deps/*-subbuild
-          key: deps-lint-${{ hashFiles('CMakeLists.txt') }}
+            build/linux-release/_deps/libjpeg_turbo-install
+            build/linux-release/_deps/libjpeg_turbo-ext-build/pptctl-*.txt
+          key: deps-lint-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}
+          restore-keys: deps-lint-
 
       - name: Configure (generate compile_commands.json)
+        if: steps.select.outputs.files != ''
         env:
           CC: clang-18
           CXX: clang++-18
-        run: cmake --preset linux-release
+        run: cmake --preset linux-release -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
 
       - name: Run clang-tidy
+        if: steps.select.outputs.files != ''
+        env:
+          FILES: ${{ steps.select.outputs.files }}
+        # $FILES unquoted on purpose (one argument per line); no globbing.
         run: |
-          run-clang-tidy-18 -p build/linux-release \
-            $(find src -name '*.cpp' | sort)
+          set -f
+          run-clang-tidy-18 -p build/linux-release $FILES
