@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <format>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/optimize.hpp>
@@ -14,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -178,15 +181,22 @@ TEST_CASE("complete_removals: nothing removed means nothing added") {
 
 // ── pipeline ──────────────────────────────────────────────────────────────────
 
-TEST_CASE("optimize: the built-in stub passes leave every part byte-identical") {
+TEST_CASE("optimize: passes that change nothing leave every part byte-identical") {
     ScratchDir dir;
     const auto in = fixture("images_deck.pptx");
     const auto out = (dir.path / "out.pptx").string();
+    const auto noop = [](const pptctl::Package&,
+                         const pptctl::PartGraph&,
+                         const pptctl::OptimizeOptions&) { return pptctl::PassResult{}; };
+    const std::vector<pptctl::RegisteredPass> passes{
+        {"layouts", &pptctl::OptimizeOptions::layouts, noop},
+        {"orphans", &pptctl::OptimizeOptions::orphans, noop},
+    };
     std::string error;
-    const auto report = pptctl::optimize(in, out, {}, error);
+    const auto report = pptctl::optimize(in, out, {}, error, passes);
     REQUIRE_MESSAGE(report, error);
 
-    REQUIRE(report->passes.size() == 5);
+    REQUIRE(report->passes.size() == 2);
     for (const auto& p : report->passes) {
         CHECK(p.actions.empty());
     }
@@ -344,7 +354,7 @@ TEST_CASE("optimize command: --json reports every enabled pass") {
     std::vector<std::string> ids;
     for (const auto& p : j["passes"]) {
         ids.push_back(p["id"]);
-        CHECK(p["actions"].empty());
+        CHECK(p["actions"].is_array());
     }
     CHECK(ids == std::vector<std::string>{"layouts", "crop", "images", "orphans"});
 }
@@ -376,8 +386,55 @@ TEST_CASE("optimize command: the summary groups each pass's actions by kind") {
     pptctl::cmd::render_optimize(report, "in.pptx", out, os);
     const auto text = os.str();
     CAPTURE(text);
-    CHECK(text.find("images: 2 recompressed, 1 downsampled, 37.2 MiB -> 8.6 MiB") !=
-          std::string::npos);
+    CHECK(text.find("images: 2 recompressed, 1 downsampled (4000x3000 -> 1920x1440), 37.2 MiB -> "
+                    "8.6 MiB") != std::string::npos);
     CHECK(text.find("fonts: nothing to do") != std::string::npos);
     CHECK(text.find("total: 38.1 MiB -> 9.5 MiB (-75%)") != std::string::npos);
+}
+
+TEST_CASE("optimize command: a change under 1% isn't shown as +0%") {
+    pptctl::OptimizeOutputOptions out;
+    out.output = "out.pptx";
+    for (const auto& [after, expected] : std::vector<std::pair<std::uint64_t, std::string>>{
+             {996, "(-<1%)"}, {1'004, "(+<1%)"}, {1'000, "(no change)"}, {980, "(-2%)"}}) {
+        pptctl::OptimizeReport report;
+        report.input_bytes = 1'000;
+        report.output_bytes = after;
+        std::ostringstream os;
+        pptctl::cmd::render_optimize(report, "in.pptx", out, os);
+        CAPTURE(os.str());
+        CHECK(os.str().find(expected) != std::string::npos);
+    }
+}
+
+TEST_CASE("optimize command: the summary lists each kind's details") {
+    pptctl::OptimizeReport report;
+    report.passes.push_back({"fonts",
+                             {{"ppt/fonts/font1.fntdata", "removed", "Lato", 10, 0},
+                              {"ppt/fonts/font2.fntdata", "removed", "Lato Bold", 10, 0}}});
+    std::vector<pptctl::OptimizeAction> layouts;
+    for (int i = 0; i < 11; ++i) {
+        layouts.push_back({"l", "removed", "layout", 1, 0});
+    }
+    layouts.push_back({"m", "removed", "master", 1, 0});
+    layouts.push_back({"t", "removed", "theme", 1, 0});
+    report.passes.push_back({"layouts", layouts});
+    std::vector<pptctl::OptimizeAction> images;
+    for (int i = 0; i < 6; ++i) {
+        images.push_back({"i", "downsampled", std::format("{}x10 -> 1x1", i + 1), 1, 0});
+    }
+    images.push_back({"j", "recompressed", "", 1, 0});
+    report.passes.push_back({"images", images});
+
+    pptctl::OptimizeOutputOptions out;
+    out.output = "out.pptx";
+    std::ostringstream os;
+    pptctl::cmd::render_optimize(report, "in.pptx", out, os);
+    const auto text = os.str();
+    CAPTURE(text);
+    CHECK(text.find("fonts: 2 removed (Lato, Lato Bold), 20 B -> 0 B") != std::string::npos);
+    CHECK(text.find("layouts: 13 removed (layout x11, master, theme), 13 B -> 0 B") !=
+          std::string::npos);
+    CHECK(text.find("images: 6 downsampled (1x10 -> 1x1, 2x10 -> 1x1, 3x10 -> 1x1, 4x10 -> 1x1, "
+                    "+2 more), 1 recompressed, 7 B -> 0 B") != std::string::npos);
 }
