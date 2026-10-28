@@ -59,12 +59,13 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-# nlohmann/json — JSON output.
+# nlohmann/json — JSON output. The release tarball (~110 KB) rather than the
+# repository, whose shallow clone is ~195 MB of test data.
 FetchContent_Declare(
     nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.12.0
-    GIT_SHALLOW TRUE
+    URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+    URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 
 # minizip-ng — ZIP I/O. Disable compression formats we don't need.
