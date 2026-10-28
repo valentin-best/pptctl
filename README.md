@@ -1,6 +1,6 @@
 # pptctl
 
-> A fast CLI for `.pptx` files. Inspect, lint, diff, optimize, merge, extract.
+> Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
 **Status:** early development, v0.4.0. `info`, `extract`, `lint` and `diff` work; the others are stubs.
 
@@ -40,7 +40,7 @@ The dominant libraries for working with `.pptx` files programmatically — pytho
 - No tool in the open-source ecosystem can semantically **diff** two decks, **merge** them without corrupting embedded images, or **lint** them for layout problems.
 - The closed-source alternative (Aspose) costs $3K+/developer/year.
 
-`pptctl` is a CLI written in modern C++ that handles the workflows existing tools don't, and is designed so its parser/serializer becomes a reusable library with cross-language bindings.
+Editors and generators — python-pptx, PptxGenJS, agent tools like OfficeCLI — write decks. `pptctl` is what you run on them afterwards: it finds problems (`lint`), shows what changed (`diff`), shrinks them (`optimize`) and combines them (`merge`) without breaking the relationship graph. It is a single C++ binary meant for CI, git hooks and pipelines; it edits only the parts it has to and never round-trips a whole deck.
 
 See [PLAN.md](./PLAN.md) for the long version.
 
@@ -54,7 +54,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
 | `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented |
 | `merge` | Merge decks while preserving images, themes, and slide masters | Planned |
-| `fill` | Template-fill from a `.pptx` template + JSON data | Planned |
+| `fill` | Template-fill from a `.pptx` template + JSON data | Deferred (see [ROADMAP.md](./ROADMAP.md)) |
 
 ## `pptctl diff`
 

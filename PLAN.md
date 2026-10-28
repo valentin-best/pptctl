@@ -8,6 +8,8 @@ A fast, single-binary CLI for `.pptx` files, written in C++. Each subcommand att
 
 Think `ripgrep` for grep, `bat` for cat, `fd` for find — but for `.pptx`.
 
+> **Positioning update (2026-10-28).** Since this plan was written, OfficeCLI (agent-first pptx/docx/xlsx editor, ~32k stars) took the "general CLI for Office files" slot, and markitdown/docling own pptx → Markdown extraction. pptctl now narrows to what none of them do: **lint, diff, optimize and a corruption-free merge**, run in CI and pipelines on decks other tools produce. `fill` and library extraction are deferred until users ask. See the Positioning section of ROADMAP.md for the evidence.
+
 ## The problem (what hurts, with receipts)
 
 ### Library-level pain (python-pptx)
@@ -53,7 +55,7 @@ pptctl lint <file.pptx>             # canvas overflow, missing alt-text, font fa
 pptctl optimize <file.pptx>         # recompress images, strip unused masters/fonts
 pptctl diff a.pptx b.pptx           # semantic diff: slide added/removed, text changed, chart updated
 pptctl merge a.pptx b.pptx -o out   # merge that actually preserves images and themes
-pptctl fill template.pptx --data data.json   # safe templating; no Jinja required
+pptctl fill template.pptx --data data.json   # safe templating; no Jinja required (deferred)
 ```
 
 These are not all v0.1 — see ROADMAP.md for phasing.
@@ -83,8 +85,9 @@ These are not all v0.1 — see ROADMAP.md for phasing.
 - At least one downstream user — someone using pptctl in a CI pipeline or product.
 
 **Year 2:**
-- All v0 subcommands shipped.
-- Core extracted into `libpptctl` with Python bindings via pybind11.
+- All v0 subcommands shipped (except `fill`, deferred).
+- pptctl running in other people's CI via the GitHub Action / pre-commit hook.
+- Core extracted into `libpptctl` with Python bindings via pybind11 — if users ask for it.
 - 2k+ stars. Real contributors (not just drive-by PRs).
 
 **Year 3 — the bet:**
