@@ -38,6 +38,14 @@ struct OptimizeOptions {
     bool crop = true;
     bool images = true;
     bool orphans = true;
+
+    // images pass (#103): JPEG re-encode quality (--quality, 1-100), and the
+    // pixel density kept at each image's largest displayed size: max_scale
+    // times the 96 DPI canvas density (--max-scale; the default 2 is "retina",
+    // 192 DPI), or max_dpi instead when it is set (--max-dpi, > 0).
+    int jpeg_quality = 85;
+    double max_scale = 2.0;
+    double max_dpi = 0.0;
 };
 
 // One thing a pass did to one part. Sizes are uncompressed part bytes.
