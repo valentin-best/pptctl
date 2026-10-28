@@ -6,7 +6,9 @@
 // Two renderers over one OptimizeReport: a per-pass summary (the default) and
 // JSON (--json).
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -29,31 +31,66 @@ std::string bytes(std::uint64_t n) {
     return human_bytes(static_cast<std::size_t>(n));
 }
 
-// "2 recompressed, 1 downsampled, 37.2 MiB -> 8.6 MiB": action counts by
-// kind in first-seen order, then the pass's total before/after.
+// Distinct details shown per kind before the rest is summarized as "+N more".
+constexpr std::size_t kMaxDetails = 4;
+
+// Values in first-seen order with their counts.
+using Tally = std::vector<std::pair<std::string, int>>;
+
+void count_in(Tally& tally, const std::string& value) {
+    auto it = tally.begin();
+    while (it != tally.end() && it->first != value) {
+        ++it;
+    }
+    if (it == tally.end()) {
+        tally.emplace_back(value, 1);
+    } else {
+        ++it->second;
+    }
+}
+
+// " (layout x11, master, theme)": a kind's distinct details, or "" if none.
+std::string details_of(const Tally& details) {
+    std::string out;
+    std::size_t shown = 0;
+    for (const auto& [detail, n] : details) {
+        if (detail.empty()) {
+            continue;
+        }
+        if (shown == kMaxDetails) {
+            out += std::format(", +{} more", details.size() - shown);
+            break;
+        }
+        out += (shown++ == 0 ? "" : ", ") + detail + (n > 1 ? std::format(" x{}", n) : "");
+    }
+    return out.empty() ? out : " (" + out + ")";
+}
+
+// "2 removed (Lato, Lato Bold), 1 recompressed, 37.2 MiB -> 8.6 MiB": action
+// counts by kind in first-seen order, each with its details, then the pass's
+// total before/after.
 std::string pass_summary(const PassReport& pass) {
     if (pass.actions.empty()) {
         return "nothing to do";
     }
-    std::vector<std::pair<std::string, int>> kinds;
+    Tally kinds;
+    std::vector<Tally> details;  // parallel to kinds
     std::uint64_t before = 0;
     std::uint64_t after = 0;
     for (const auto& a : pass.actions) {
-        auto it = kinds.begin();
-        while (it != kinds.end() && it->first != a.kind) {
-            ++it;
-        }
-        if (it == kinds.end()) {
-            kinds.emplace_back(a.kind, 1);
-        } else {
-            ++it->second;
-        }
+        count_in(kinds, a.kind);
+        details.resize(kinds.size());
+        const auto k = static_cast<std::size_t>(
+            std::find_if(
+                kinds.begin(), kinds.end(), [&](const auto& e) { return e.first == a.kind; }) -
+            kinds.begin());
+        count_in(details[k], a.detail);
         before += a.bytes_before;
         after += a.bytes_after;
     }
     std::string out;
-    for (const auto& [kind, n] : kinds) {
-        out += std::format("{} {}, ", n, kind);
+    for (std::size_t k = 0; k < kinds.size(); ++k) {
+        out += std::format("{} {}{}, ", kinds[k].second, kinds[k].first, details_of(details[k]));
     }
     return out + std::format("{} -> {}", bytes(before), bytes(after));
 }
@@ -63,7 +100,11 @@ std::string change_percent(std::uint64_t before, std::uint64_t after) {
         return "no change";
     }
     const double delta = static_cast<double>(after) - static_cast<double>(before);
-    return std::format("{:+}%", std::lround(100.0 * delta / static_cast<double>(before)));
+    const auto pct = std::lround(100.0 * delta / static_cast<double>(before));
+    if (pct == 0) {
+        return delta < 0 ? "-<1%" : "+<1%";
+    }
+    return std::format("{:+}%", pct);
 }
 
 std::string target_of(const std::string& in, const OptimizeOutputOptions& out) {
