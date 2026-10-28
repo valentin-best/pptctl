@@ -11,6 +11,7 @@ Work is planned in `ROADMAP.md` / `PLAN.md` and tracked in GitHub **milestones**
 - **To see where things stand and what to do next, run `/next`** — it reports the current phase, its open issues, and a recommended next task. Prefer it over re-deriving status by hand.
 - Work issue-by-issue within the current phase. Reference the issue number in commits/PRs.
 - Phases 0–4 are done and tagged (v0.1.0 … v0.4.0; see `CHANGELOG.md`). Phases 5–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
+- **Positioning (since 2026-10-28):** pptctl is static analysis and safe surgery for decks — `lint`, `diff`, `optimize`, `merge` — not a general deck editor (that's OfficeCLI's ground). Phase 6 adds package-integrity lint rules alongside `merge`; Phase 7 is integrations (GitHub Action, pre-commit, agent skill); `fill` and library extraction are deferred. See the Positioning section of `ROADMAP.md`.
 - Don't publish the roadmap, make the repo public, or post launch content until something has actually shipped (a deliberate choice — see `ROADMAP.md`).
 
 ## Build, test, run

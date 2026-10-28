@@ -2,6 +2,18 @@
 
 A phased plan. Each phase is roughly one month of evenings/weekends for one person. Adjust to your actual pace; don't commit to dates publicly until something has shipped.
 
+## Positioning (revised 2026-10-28)
+
+**pptctl is static analysis and safe surgery for slide decks: `lint`, `diff`, `optimize`, `merge` — with output that opens without warnings in PowerPoint, Keynote, LibreOffice and Google Slides.** It is not a general-purpose "CLI for .pptx", and it is not an agent editing tool.
+
+Why the change: a competitive survey in October 2026 found the general slot taken.
+
+- **OfficeCLI** (iOfficeAI/OfficeCLI, C#, ~32k stars in seven months, weekly releases) is an agent-first editor for pptx/docx/xlsx. It covers `info` (`view stats`), `extract` (`view text`, `get --json`), template fill (its `merge` command fills `{{key}}`), and part of `lint` (`validate` = schema check, `view issues` = overflow and alt text). It has **no** diff (declined in its #359), **no** optimize, and **no** whole-deck merge. Its open bugs — slide duplication losing media rels (#534), shared tags parts PowerPoint can't open (#540), dangling chart rels (#541) — are exactly the relationship-graph failures pptctl is designed around.
+- **markitdown** and **docling** own "pptx → Markdown for LLMs". `extract` is a commodity, not a selling point.
+- Everything else (pptxboss, pptx-review, pptx-cli, pptxdiff, puppt, hands-on-deck, pptx-downsizer) is small or abandoned. No maintained, headless, CI-friendly tool does diff, optimize or a corruption-free merge.
+
+Consequences for the plan below: `optimize` and `merge` stay; `lint` gains package-integrity rules so pptctl can verify what *other* tools write; `fill` is deferred (OfficeCLI covers it); Phase 7 becomes integrations (CI, git, agent skill); library extraction waits for demand.
+
 ## Phase 0 — Foundation (weeks 1–2) ✅
 
 Goal: skeleton you can build on. No features yet.
@@ -98,40 +110,49 @@ Goal: make 50–90% file size reductions one command.
 
 Exit criteria: on a corpus of ten public decks, average size reduction ≥40% with no visible quality loss in PowerPoint and Keynote.
 
-## Phase 6 — `pptctl merge` (weeks 18–20)
+**Ship moment:** v0.5.0. Nobody else does this well, and the story is concrete: "shrinks decks 40–90% without breaking them in Keynote". A natural candidate for going public (still the maintainer's call).
+
+## Phase 6 — `pptctl merge` + package integrity (weeks 18–21)
 
 The one with the most subtle bugs. Save it for when you have your sea legs.
 
+Package-integrity lint rules come first: they are the test oracle for `merge`, and they make `pptctl lint` the verifier for decks written by other tools (OfficeCLI, python-pptx, agents).
+
+- [ ] Lint: **dangling relationship** — a rel whose internal target part does not exist.
+- [ ] Lint: **shared part** — one part targeted from two places that must own it exclusively (tags, notes, charts' style/color parts; see OfficeCLI #540, #541).
+- [ ] Lint: **undeclared content type** — a part with neither a `Default` extension nor an `Override` in `[Content_Types].xml`.
+- [ ] Lint: **orphan part** — a part no relationship reaches (also feeds `optimize`).
+- [ ] Lint: **broken r:id** — an `r:embed` / `r:id` / `r:link` in slide XML that the part's `.rels` does not define.
 - [ ] Concatenate slides from multiple decks.
 - [ ] Rewrite all relationship IDs.
 - [ ] De-duplicate media (same image hash → single file).
 - [ ] Theme merge strategy (use first deck's theme, or `--theme=N` to pick).
 - [ ] Slide master de-duplication.
 
-Exit criteria: merge ten 5-slide decks; output opens in PowerPoint, Keynote, LibreOffice, and Google Slides with all images intact.
+Exit criteria: merge ten 5-slide decks; output passes `pptctl lint --strict` on the integrity rules and opens in PowerPoint, Keynote, LibreOffice, and Google Slides with all images intact.
 
-## Phase 7 — `pptctl fill` (weeks 21–24)
+**Ship moment:** v0.6.0. "Merge decks without corrupting them" — the headline feature.
 
-Templating without the Jinja-in-a-binary-file horror.
+## Phase 7 — integrations (weeks 22–24)
 
-- [ ] Define template marker syntax (e.g. `{{customer.name}}` inside text runs).
-- [ ] Walk text runs, substitute markers from JSON data.
-- [ ] Repeat-slide syntax: `{{#each items}}` style for generating slides from arrays.
-- [ ] Image substitution: `{{image:logo}}` swaps a placeholder picture for one from data.
+Meet users where decks already flow: pull requests, git, and agent pipelines. Distribution, not new subcommands.
 
-Exit criteria: produce ten personalized decks from one template + ten JSON files; visual diff between them shows only the intended changes.
+- [ ] GitHub Action: `lint` and `diff` decks changed in a PR, post the diff as a job summary.
+- [ ] pre-commit hook definition (`.pre-commit-hooks.yaml`).
+- [ ] Git setup docs/command for `diff.pptx.textconv` and a difftool.
+- [ ] Agent skill file (`SKILL.md`): "after generating a deck, run `pptctl lint --strict`". A usage guide for agents, not an AI subcommand.
+- [ ] Renderer-compatibility corpus: public decks + CI job that opens `optimize`/`merge` output headlessly in LibreOffice; published results table.
 
-## Phase 8 onwards — extraction into a library
+Exit criteria: a sample repo where a PR touching a `.pptx` gets lint findings and a readable diff with no manual setup beyond adding the Action.
 
-By month ~6, the parser and document model should be stable enough to extract:
+**Ship moment:** v0.7.0. "Code review for slide decks."
 
-- [ ] Move `include/pptctl/` into a separate repo: `libpptctl`.
-- [ ] CLI consumes it as a dependency.
-- [ ] First binding: Python via pybind11.
-- [ ] Second binding: Node via N-API or Neon (if Rust).
-- [ ] Document the C and C++ APIs separately.
+## Deferred (demand-triggered)
 
-This is when the project graduates from "neat CLI" to "infrastructure people depend on." It's also when contributors start showing up for real.
+Not scheduled. Pick up only when real users ask.
+
+- **`pptctl fill`** — `{{key}}` templating is already covered by OfficeCLI's `merge`. The parts it lacks (repeat-slide `{{#each}}`, image substitution) are the only reason to revisit. The CLI stub stays.
+- **Library extraction** — move `include/pptctl/` into `libpptctl`, Python binding (pybind11), Node binding (N-API), documented C/C++ APIs. OfficeCLI and pptxboss already ship SDKs; a pptctl binding is worth it once people want diff/optimize/merge inside their own pipelines. Keep `src/lib/` free of CLI concerns so this stays cheap.
 
 ## Anti-roadmap (things to refuse for at least year 1)
 
@@ -139,6 +160,7 @@ This is when the project graduates from "neat CLI" to "infrastructure people dep
 - A SaaS hosted version.
 - DOCX / XLSX support. (Tempting because OOXML overlap is huge. But scope discipline matters more.)
 - An AI-powered subcommand. (Plenty of projects do that. Yours is the layer underneath them.)
+- A general-purpose deck editor (`set`/`add`/`move` shape-level edits for agents). That is OfficeCLI's ground; pptctl verifies and repairs what editors produce.
 - A configuration file system.
 - A plugin system.
 - Custom rendering (PNG/PDF output beyond shelling out to LibreOffice).
