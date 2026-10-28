@@ -86,6 +86,10 @@ set(MZ_FETCH_LIBS ON CACHE BOOL "" FORCE)
 # them, so skip their install rules entirely. (The MINIZIP::minizip alias we
 # link against is created independently of the install block.)
 set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+# When it has to fetch zlib-ng, build it with the classic zlib API (zlib.h,
+# inflate/deflate) rather than its native zng_ one, so the same zlib also
+# serves libpng (see the image codecs section below).
+set(ZLIB_COMPAT ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     minizip-ng
     GIT_REPOSITORY https://github.com/zlib-ng/minizip-ng.git
@@ -103,6 +107,75 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(cli11 pugixml nlohmann_json minizip-ng doctest)
 
+# --- image codecs (#102) -------------------------------------------------------
+# libpng — PNG decode/encode. It finds zlib with find_package(ZLIB); make that
+# resolve to the zlib minizip-ng already uses. On macOS and Linux minizip-ng
+# uses the system zlib (or Apple's libcompression), which libpng finds the
+# same way. Where there is none (Windows), minizip-ng has fetched zlib-ng in
+# zlib-compat mode instead: alias its static target as ZLIB::ZLIB and answer
+# libpng's find_package(ZLIB) from FetchContent's redirects directory, so
+# libpng links the same zlib rather than failing to find one.
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    if(TARGET zlibstatic)
+        set(_pptctl_zlib zlibstatic)
+    elseif(TARGET zlib)
+        set(_pptctl_zlib zlib)
+    else()
+        message(FATAL_ERROR "libpng needs zlib, but neither a system zlib nor minizip-ng's "
+                            "fetched zlib-ng was found")
+    endif()
+    get_target_property(_pptctl_zlib_aliased ${_pptctl_zlib} ALIASED_TARGET)
+    if(_pptctl_zlib_aliased)
+        set(_pptctl_zlib ${_pptctl_zlib_aliased})
+    endif()
+    if(NOT TARGET ZLIB::ZLIB)
+        add_library(ZLIB::ZLIB ALIAS ${_pptctl_zlib})
+    endif()
+    # zlib-ng generates zlib.h/zconf.h in its binary dir. libpng also passes
+    # ZLIB_INCLUDE_DIRS to the preprocessor run that generates pnglibconf.h,
+    # which must see the same zlib.h as the build.
+    get_target_property(_pptctl_zlib_bin ${_pptctl_zlib} BINARY_DIR)
+    get_target_property(_pptctl_zlib_src ${_pptctl_zlib} SOURCE_DIR)
+    file(WRITE "${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}/zlib-config.cmake"
+        "# Written by pptctl: zlib is minizip-ng's ${_pptctl_zlib} target (ZLIB::ZLIB).\n"
+        "set(ZLIB_FOUND TRUE)\n"
+        "set(ZLIB_INCLUDE_DIRS \"${_pptctl_zlib_bin};${_pptctl_zlib_src}\")\n"
+        "set(ZLIB_INCLUDE_DIR \"${_pptctl_zlib_bin}\")\n"
+        "set(ZLIB_LIBRARIES ZLIB::ZLIB)\n")
+    message(STATUS "libpng: using minizip-ng's zlib target ${_pptctl_zlib}")
+endif()
+
+set(PNG_SHARED OFF CACHE BOOL "" FORCE)
+set(PNG_STATIC ON CACHE BOOL "" FORCE)
+set(PNG_FRAMEWORK OFF CACHE BOOL "" FORCE)
+set(PNG_TESTS OFF CACHE BOOL "" FORCE)
+set(PNG_TOOLS OFF CACHE BOOL "" FORCE)
+# libpng's stock configuration header (its default feature set) rather than one
+# generated with awk at build time: it then exists right after configure, which
+# the clang-tidy CI job (configure only) needs to parse png.h, and the build
+# needs no awk.
+set(PNG_LIBCONF_HEADER "${FETCHCONTENT_BASE_DIR}/libpng-src/scripts/pnglibconf.h.prebuilt"
+    CACHE FILEPATH "" FORCE)
+# libpng only looks for awk when it generates the header, but a cached AWK from
+# an older configure makes it expect generated sources it no longer writes.
+unset(AWK CACHE)
+FetchContent_Declare(
+    libpng
+    GIT_REPOSITORY https://github.com/pnggroup/libpng.git
+    GIT_TAG v1.6.59
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(libpng)
+# libpng's build-tree include directories are not marked SYSTEM; mark them so
+# png.h is held to the same no-warnings boundary as the other deps.
+get_target_property(_pptctl_png_inc png_static INTERFACE_INCLUDE_DIRECTORIES)
+set_target_properties(png_static PROPERTIES
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_pptctl_png_inc}")
+
+# libjpeg-turbo — JPEG decode/encode; built as an external sub-build, see the file.
+include(cmake/libjpeg-turbo.cmake)
+
 # Suppress warnings from third-party code so they don't drown out ours.
 if(NOT MSVC)
     if(TARGET minizip-ng)
@@ -110,6 +183,9 @@ if(NOT MSVC)
     endif()
     if(TARGET pugixml-static)
         target_compile_options(pugixml-static PRIVATE -w)
+    endif()
+    if(TARGET png_static)
+        target_compile_options(png_static PRIVATE -w)
     endif()
 endif()
 
@@ -120,6 +196,7 @@ add_library(pptctl_lib STATIC
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
+    src/lib/image_codec.cpp
     src/lib/diff.cpp
     src/lib/diff_text.cpp
     src/lib/diff_shape.cpp
@@ -140,6 +217,8 @@ target_link_libraries(pptctl_lib
         nlohmann_json::nlohmann_json
     PRIVATE
         MINIZIP::minizip
+        png_static
+        libjpeg_turbo::jpeg
         pptctl_warnings
 )
 
