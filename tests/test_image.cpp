@@ -541,6 +541,127 @@ TEST_CASE("codec: truncated or garbage JPEG fails with a reason") {
     CHECK_FALSE(garbage.reason.empty());
 }
 
+// ── lossless JPEG crop ────────────────────────────────────────────────────────
+
+namespace {
+
+// Busy content, so every block carries distinct coefficients.
+Image pattern(std::uint32_t w, std::uint32_t h, std::uint8_t channels) {
+    Image img;
+    img.width = w;
+    img.height = h;
+    img.channels = channels;
+    img.pixels.resize(std::size_t{w} * h * channels);
+    std::size_t i = 0;
+    for (std::uint32_t y = 0; y < h; ++y) {
+        for (std::uint32_t x = 0; x < w; ++x) {
+            for (std::uint32_t c = 0; c < channels; ++c) {
+                img.pixels[i++] = static_cast<std::uint8_t>((x * 7 + y * 13 + c * 50) % 256);
+            }
+        }
+    }
+    return img;
+}
+
+// Pixel `c` of (x, y).
+std::uint8_t at(const Image& img, std::uint32_t x, std::uint32_t y, std::uint32_t c) {
+    return img.pixels[(std::size_t{y} * img.width + x) * img.channels + c];
+}
+
+}  // namespace
+
+TEST_CASE("codec: crop_jpeg keeps the covered blocks and decodes them unchanged") {
+    // 4:2:0 colour: the block grid is 16 px, so the left/top edges of
+    // {37, 21} snap out to {32, 16}; right/bottom stay at 77 and 51.
+    const auto src = pptctl::encode_jpeg(pattern(100, 80, 3), {.quality = 90});
+    const auto r = pptctl::crop_jpeg(src, {37, 21, 40, 30});
+    REQUIRE_MESSAGE(!r.bytes.empty(), r.reason);
+    CHECK(r.kept.x == 32);
+    CHECK(r.kept.y == 16);
+    CHECK(r.kept.width == 45);
+    CHECK(r.kept.height == 35);
+    const auto dims = probe(r.bytes);
+    REQUIRE(dims.has_value());
+    CHECK(dims->width == 45);
+    CHECK(dims->height == 35);
+    CHECK(contains_marker(r.bytes, 0xC2));  // progressive
+
+    // Same coefficients, same pixels; only the outermost rows and columns may
+    // differ, where chroma upsampling now sees the image edge.
+    const auto before = pptctl::decode_jpeg(src);
+    const auto after = pptctl::decode_jpeg(r.bytes);
+    REQUIRE(before.image.has_value());
+    REQUIRE(after.image.has_value());
+    int differing = 0;
+    for (std::uint32_t y = 2; y + 2 < after.image->height; ++y) {
+        for (std::uint32_t x = 2; x + 2 < after.image->width; ++x) {
+            for (std::uint32_t c = 0; c < 3; ++c) {
+                if (at(*after.image, x, y, c) != at(*before.image, x + 32, y + 16, c)) {
+                    ++differing;
+                }
+            }
+        }
+    }
+    CHECK(differing == 0);
+}
+
+TEST_CASE("codec: crop_jpeg on a grayscale JPEG snaps to the 8-pixel grid") {
+    const auto src = pptctl::encode_jpeg(pattern(40, 30, 1));
+    const auto r = pptctl::crop_jpeg(src, {13, 9, 20, 10});
+    REQUIRE_MESSAGE(!r.bytes.empty(), r.reason);
+    CHECK(r.kept.x == 8);
+    CHECK(r.kept.y == 8);
+    CHECK(r.kept.width == 25);
+    CHECK(r.kept.height == 11);
+    const auto decoded = pptctl::decode_jpeg(r.bytes);
+    REQUIRE(decoded.image.has_value());
+    CHECK(decoded.image->channels == 1);
+    CHECK(decoded.image->width == 25);
+}
+
+TEST_CASE("codec: crop_jpeg carries the ICC profile and EXIF orientation over") {
+    auto img = pattern(64, 48, 3);
+    img.exif_orientation = 6;
+    img.icc_profile = fake_icc();
+    const auto r = pptctl::crop_jpeg(pptctl::encode_jpeg(img), {16, 16, 32, 16});
+    REQUIRE_MESSAGE(!r.bytes.empty(), r.reason);
+    CHECK(r.exif_orientation == 6);
+    const auto decoded = pptctl::decode_jpeg(r.bytes);
+    REQUIRE(decoded.image.has_value());
+    CHECK(decoded.image->exif_orientation == 6);
+    CHECK(decoded.image->icc_profile == img.icc_profile);
+}
+
+TEST_CASE("codec: crop_jpeg crops CMYK too, without a second Adobe marker") {
+    const auto r = pptctl::crop_jpeg(std::as_bytes(std::span(kCmykJpeg)), {0, 0, 4, 4});
+    REQUIRE_MESSAGE(!r.bytes.empty(), r.reason);
+    const auto dims = probe(r.bytes);
+    REQUIRE(dims.has_value());
+    CHECK(dims->width == 4);
+    CHECK(dims->height == 4);
+    const std::string_view adobe = "Adobe";
+    const auto first = std::search(
+        r.bytes.begin(), r.bytes.end(), adobe.begin(), adobe.end(), [](std::byte x, char y) {
+            return x == static_cast<std::byte>(y);
+        });
+    REQUIRE(first != r.bytes.end());
+    CHECK(
+        std::search(first + 1, r.bytes.end(), adobe.begin(), adobe.end(), [](std::byte x, char y) {
+            return x == static_cast<std::byte>(y);
+        }) == r.bytes.end());
+}
+
+TEST_CASE("codec: crop_jpeg refuses bad rectangles and non-JPEG input") {
+    const auto src = pptctl::encode_jpeg(pattern(32, 32, 3));
+    CHECK_FALSE(pptctl::crop_jpeg(src, {0, 0, 0, 8}).reason.empty());
+    CHECK_FALSE(pptctl::crop_jpeg(src, {8, 0, 25, 8}).reason.empty());
+    CHECK_FALSE(pptctl::crop_jpeg(src, {0, 32, 8, 1}).reason.empty());
+    CHECK(pptctl::crop_jpeg(src, {8, 0, 24, 8}).reason.empty());
+    const auto not_jpeg = pptctl::crop_jpeg(png(4, 4), {0, 0, 2, 2});
+    CHECK(not_jpeg.bytes.empty());
+    CHECK_FALSE(not_jpeg.reason.empty());
+}
+
 // ── PNG ───────────────────────────────────────────────────────────────────────
 
 TEST_CASE("codec: truecolour RGBA PNG round-trips losslessly") {
