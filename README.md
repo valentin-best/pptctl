@@ -51,7 +51,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `info` | Quick metadata: slide count, dimensions, fonts, media | ✅ Implemented |
 | `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
 | `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat; `--json`, `--strict` | ✅ Implemented |
-| `optimize` | Recompress images, strip unused masters/fonts (50–90% size cuts) | Planned |
+| `optimize` | Shrink a deck without changing what it shows: unused layouts/masters, embedded fonts, cropped-out image regions, oversized images, orphan media; `--dry-run`, `--json` | ✅ Implemented |
 | `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented |
 | `merge` | Merge decks while preserving images, themes, and slide masters | Planned |
 | `fill` | Template-fill from a `.pptx` template + JSON data | Deferred (see [ROADMAP.md](./ROADMAP.md)) |
@@ -109,6 +109,47 @@ pptctl diff -q approved.pptx candidate.pptx || echo "deck changed"
 To get these diffs from `git diff` and `git log -p`, see [docs/git-integration.md](./docs/git-integration.md).
 
 Not there yet (Phase 4 is still open): table and chart contents are not compared, and the diff has not been validated on a corpus of real-world decks.
+
+## `pptctl optimize`
+
+Shrinks a deck without changing what it shows. Five passes run in this order, each with an opt-out:
+
+| Pass | What it removes | Opt-out |
+|---|---|---|
+| `layouts` | Slide layouts no slide uses, masters left with none, and what only they used (themes, media) | `--no-layouts` |
+| `fonts` | Embedded fonts, and the "embed fonts" setting that would put them back on the next save | `--keep-fonts` |
+| `crop` | The pixels outside a picture's crop; PowerPoint keeps the whole photo behind a 10 % sliver | `--no-crop` |
+| `images` | Pixels beyond what each image needs at its largest displayed size (2 × 96 DPI by default: Retina at 100 % zoom), then a re-encode | `--no-images` |
+| `orphans` | Media nothing references | `--no-orphans` |
+
+```
+$ pptctl optimize -o lean.pptx deck.pptx
+deck.pptx -> lean.pptx
+  layouts: 9 removed (layout x9), 35.2 KiB -> 0 B
+  fonts: nothing to do
+  crop: 11 cropped (1280x1024 -> 305x321, 480x640 -> 400x530, 1280x1024 -> 658x822, 1024x768 -> 304x234, +7 more), 4.4 MiB -> 2.5 MiB
+  images: 1 recompressed (670x460), 2 downsampled (1280x522 -> 866x353, 681x681 -> 465x465), 1.7 MiB -> 941.8 KiB
+  orphans: nothing to do
+total: 4.8 MiB -> 2.1 MiB (-55%)
+```
+
+| Flag | Meaning |
+|---|---|
+| `-o FILE` / `--in-place` / `--dry-run` | Where the result goes: a new file, over the input (written to a temp file and renamed), or nowhere (the report still shows the resulting size). One is required. |
+| `--json` | The report as versioned JSON instead; see [docs/optimize-schema.md](./docs/optimize-schema.md). |
+| `--quality N` | JPEG re-encode quality, 1-100 (default 85). |
+| `--max-scale F` | Pixels kept per 96 DPI canvas pixel at an image's largest displayed size (default 2). |
+| `--max-dpi N` | Pixels kept per displayed inch instead (overrides `--max-scale`). |
+
+What it promises:
+
+- **Surgical.** Only the parts a pass changes are rewritten; every other ZIP entry is copied byte for byte, still compressed. Relationships and `[Content_Types].xml` are updated for every part removed.
+- **Never worse.** A part is replaced only if the result is smaller (by at least 1 KiB). PNGs are re-encoded losslessly, and JPEG crops are lossless (DCT-domain, like `jpegtran -crop`). A JPEG is re-encoded at the same size only if that saves at least 5 %. Vector (EMF/WMF/SVG), GIF, TIFF, video and audio media are never re-encoded, only removed when nothing uses them.
+- **Same deck.** On the validation corpus, `pptctl diff` between input and output shows only replaced pictures, `pptctl extract` is identical apart from picture sizes, and a second `optimize` finds nothing to do. Every output opens in PowerPoint (and re-saves without a repair prompt), Keynote and LibreOffice.
+
+How much it saves depends on what a deck is made of. Over 15 public decks the mean reduction is **42.9 %** (median 43.4 %, from 9.7 % to 90.5 %), but over the 10 university lecture decks among them it is **35.8 %**. Photo-heavy decks with oversized or cropped images shrink the most. What `optimize` leaves alone is often most of what remains in the others: vector metafiles, embedded OLE objects, and screenshots already stored at the size they are shown. `--max-scale 1` (96 DPI) saves more, about 50 % on the same corpus, at the cost of sharpness on high-DPI screens. Full numbers, renderer checks and method: [docs/phase5-optimize-validation.md](./docs/phase5-optimize-validation.md).
+
+Exit codes: `0` when the deck was optimized or measured (even if nothing changed), `1` when the input can't be read, no output was given, or the output can't be written.
 
 ## Building
 

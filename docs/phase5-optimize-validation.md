@@ -4,10 +4,18 @@ Tracks [issue #107](https://github.com/valentin-best/pptctl/issues/107). The
 Phase 5 exit criterion is: **average ≥40% reduction over 10 public decks, no
 visible quality loss in PowerPoint + Keynote.**
 
-**Result.** Over the full 15-deck public corpus, the mean reduction is
-**42.3%** (median 37.0%, from 6.7% to 90.5%). Over the 10 university lecture
-decks alone it is **34.9%**. Whether the bar is met depends on which ten decks
-count; see [Reduction](#reduction).
+**Verdict: met, with caveats.** The maintainer decided on 2026-10-29 that the
+bar is met on the full public corpus. After #93, the mean reduction there is
+**42.9%** (median 43.4%; see [After #93](#after-93)). The results are not
+uniform, and that stays on record:
+- The 10 university lecture decks alone average **35.8%**, under 40%.
+- What remains in the low scorers is content optimize leaves alone by design: vector metafiles, OLE embeddings, and screenshots already at their displayed size.
+- Only a lower default density (`--max-scale 1`, which gives up Retina headroom) would close the gap.
+
+**Result of the #107 run** (before #93). Over the full 15-deck public corpus, the
+mean reduction is **42.3%** (median 37.0%, from 6.7% to 90.5%). Over the 10
+university lecture decks alone it is **34.9%**. Whether the bar is met depends
+on which ten decks count; see [Reduction](#reduction).
 
 Every output is the same deck:
 - **0 crashes**, under both a release build and an ASan/UBSan build.
