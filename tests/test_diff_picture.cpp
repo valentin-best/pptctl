@@ -355,3 +355,48 @@ TEST_CASE("Diff/picture: end to end over the fixture pair") {
     CHECK(ops[2] == pptctl::PictureOp::Added);
     CHECK(ops[3] == pptctl::PictureOp::AltTextChanged);
 }
+
+// ── slide matching (#121) ─────────────────────────────────────────────────────
+
+namespace {
+
+// A p:pic with its own frame, so slide matching can recognise the picture's slot.
+std::string framed_pic(const char* rid, const char* x = "914400") {
+    return std::string(R"(
+    <p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture 1"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed=")") +
+           rid + R"("/></p:blipFill>
+      <p:spPr><a:xfrm><a:off x=")" +
+           x + R"(" y="914400"/><a:ext cx="1828800" cy="1371600"/></a:xfrm></p:spPr></p:pic>)";
+}
+
+pptctl::DiffReport match_one(const std::string& a_body, const std::string& b_body) {
+    auto a = parse(slide_xml(a_body));
+    auto b = parse(slide_xml(b_body));
+    a.set_index(1);
+    b.set_index(1);
+    return pptctl::match_slides({pptctl::summarize(a)}, {pptctl::summarize(b)}, {});
+}
+
+}  // namespace
+
+TEST_CASE("Diff/picture: a picture-only slide whose image changed pairs as Changed") {
+    // Parse-only slides identify a picture by its rId: rId3 stands in for new
+    // bytes, as when optimize re-encodes the only image on a slide.
+    const auto report = match_one(framed_pic("rId2"), framed_pic("rId3"));
+    REQUIRE(report.slides.size() == 1);
+    CHECK(report.slides[0].status == pptctl::SlideStatus::Changed);
+    CHECK(report.slides[0].a_index == 1);
+    CHECK(report.slides[0].b_index == 1);
+
+    const auto ops = pictures_between(framed_pic("rId2"), framed_pic("rId3"));
+    REQUIRE(ops.size() == 1);
+    CHECK(ops[0].op == pptctl::PictureOp::Replaced);
+}
+
+TEST_CASE("Diff/picture: a picture moved and swapped is a different slide") {
+    const auto report = match_one(framed_pic("rId2"), framed_pic("rId3", "5000000"));
+    REQUIRE(report.slides.size() == 2);
+    CHECK(report.slides[0].status == pptctl::SlideStatus::Removed);
+    CHECK(report.slides[1].status == pptctl::SlideStatus::Added);
+}

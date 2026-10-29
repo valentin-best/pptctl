@@ -192,6 +192,15 @@ void tokenize_shape(const Shape& s, std::vector<std::string>& out) {
     tokenize_paragraphs(s.paragraphs, out);
     if (s.picture) {
         out.push_back("pic:" + picture_identity(*s.picture));
+        // The picture's slot, so the same frame with new image bytes (an
+        // optimized or swapped image) still scores: on a picture-only slide
+        // the media token alone would share nothing with the new version.
+        std::string frame = "picframe:" + s.name;
+        if (s.geometry) {
+            const auto& g = *s.geometry;
+            frame += std::format("@{},{},{},{}", g.off_x, g.off_y, g.ext_cx, g.ext_cy);
+        }
+        out.push_back(std::move(frame));
     }
     if (s.table) {
         for (const auto& row : s.table->rows) {
