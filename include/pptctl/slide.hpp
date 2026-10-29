@@ -8,6 +8,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <map>
 #include <optional>
 #include <pptctl/image.hpp>  // for ImageDimensions
 #include <pptctl/package.hpp>
@@ -164,10 +166,20 @@ struct Shape {
     ShapeKind kind = ShapeKind::Other;
     std::string id;                               // p:cNvPr@id
     std::string name;                             // p:cNvPr@name
+    bool placeholder = false;                     // has a p:nvPr/p:ph, whatever the kind
     std::optional<std::string> placeholder_type;  // p:nvPr/p:ph@type
     std::optional<int> placeholder_idx;           // p:nvPr/p:ph@idx
+    // The shape's own a:xfrm. For a placeholder without one, Slide::load()
+    // fills in the geometry it inherits from its layout or master and sets
+    // geometry_inherited; nullopt when there is nothing to inherit from
+    // (parse() alone, or no matching placeholder).
     std::optional<Geometry> geometry;
-    std::optional<Fill> fill;           // explicit solid/no fill; nullopt when inherited
+    bool geometry_inherited = false;
+    // Explicit solid/no fill. For a placeholder without one, Slide::load()
+    // fills in the fill it inherits, as for geometry; nullopt when inherited
+    // from the shape style or theme, or not modelled (see Fill).
+    std::optional<Fill> fill;
+    bool fill_inherited = false;
     std::vector<Paragraph> paragraphs;  // text body; empty for non-text shapes
     std::vector<Shape> children;        // populated only for Group, recursive
     std::optional<Picture> picture;     // populated only when kind == Picture
@@ -175,13 +187,62 @@ struct Shape {
     std::optional<Chart> chart;         // populated only when kind == Chart
 };
 
+// What placeholders inherit from their slide layout and its slide master. A
+// placeholder without its own a:xfrm (or fill) takes it from the matching
+// placeholder on the layout, else on the master. Matching follows PowerPoint:
+// on the layout by p:ph idx, then by type; on the master by type. Type
+// classes: title and ctrTitle are one; dt, ftr, sldNum, hdr and sldImg each
+// match themselves; every other type, or none, is body (the master's body
+// serves subTitle, obj, pic, tbl, chart and the rest).
+//
+// Each layout and master is parsed once, so one instance should serve every
+// slide of a package. The package must outlive it.
+class PlaceholderInheritance {
+ public:
+    explicit PlaceholderInheritance(const Package& pkg) : pkg_(pkg) {}
+
+    struct Inherited {
+        std::optional<Geometry> geometry;
+        std::optional<Fill> fill;
+    };
+
+    // What a placeholder with this p:ph type and idx on `slide_part`
+    // inherits. Each property comes from the nearest level that declares it;
+    // absent from both, it stays nullopt.
+    [[nodiscard]] Inherited lookup(std::string_view slide_part,
+                                   const std::optional<std::string>& type,
+                                   std::optional<int> idx);
+
+ private:
+    struct Entry {
+        std::string type_class;
+        int idx = 0;
+        std::optional<Geometry> geometry;
+        std::optional<Fill> fill;
+    };
+    // The placeholders of a layout or master, parsed on first use.
+    const std::vector<Entry>& placeholders(const std::string& part);
+    // The internal target of `part`'s first relationship of this type (by
+    // its last segment, e.g. "slideLayout"); empty when there is none.
+    const std::string& related(std::string_view part, std::string_view type);
+
+    const Package& pkg_;
+    std::map<std::string, std::vector<Entry>, std::less<>> parsed_;
+    std::map<std::string, std::string, std::less<>> related_;  // "part|type" -> target
+};
+
 class Slide {
  public:
     Slide() = default;
 
     // Read and parse a slide part from the package. Returns false if the part
-    // is missing or not parseable.
-    [[nodiscard]] bool load(const Package& pkg, std::string_view part_name);
+    // is missing or not parseable. Placeholders without their own geometry or
+    // fill get what they inherit (see PlaceholderInheritance); pass a shared
+    // `inheritance` when loading several slides of one package, so each
+    // layout and master is parsed once.
+    [[nodiscard]] bool load(const Package& pkg,
+                            std::string_view part_name,
+                            PlaceholderInheritance* inheritance = nullptr);
 
     // Parse slide XML directly from bytes. Exposed for testing the parser
     // without a package. Returns false if the XML can't be parsed.

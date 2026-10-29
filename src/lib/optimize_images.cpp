@@ -13,8 +13,9 @@
 //    layouts and masters, slide backgrounds, table cells, any reference that
 //    isn't a plain blip, and parts other than slides. A tiled fill draws the
 //    image at its own pixel size, so a tiled image is never resized. A
-//    placeholder picture without its own a:xfrm inherits its geometry from
-//    the layout/master (#93); its image is skipped and reported.
+//    placeholder picture without its own a:xfrm is sized by the geometry it
+//    inherits from its layout or master (PlaceholderInheritance, #93); one
+//    with nothing to inherit is skipped and reported.
 // 2. Decode it (the codec refuses CMYK JPEGs, 16-bit PNGs and the like, which
 //    are skipped and reported), downsample by area averaging when it has more
 //    pixels than needed, never upscaling, and re-encode in the same format:
@@ -44,6 +45,7 @@
 #include <memory>
 #include <optional>
 #include <pptctl/image.hpp>
+#include <pptctl/slide.hpp>
 #include <pugixml.hpp>
 #include <string>
 #include <string_view>
@@ -151,16 +153,47 @@ Extent group_scale(pugi::xml_node shape) {
     return s;
 }
 
-bool is_placeholder(const pugi::xml_node& shape) {
-    // p:nvPicPr / p:nvSpPr / ... -> p:nvPr -> p:ph
-    const auto children = shape.children();
-    return std::any_of(children.begin(), children.end(), [](const pugi::xml_node& c) {
-        return local_name(c.name()).starts_with("nv") && child(child(c, "nvPr"), "ph");
-    });
+// The shape's p:ph (p:nvPicPr / p:nvSpPr / ... -> p:nvPr -> p:ph), if any.
+pugi::xml_node placeholder_of(const pugi::xml_node& shape) {
+    for (const auto& c : shape.children()) {
+        if (local_name(c.name()).starts_with("nv")) {
+            if (auto ph = child(child(c, "nvPr"), "ph")) {
+                return ph;
+            }
+        }
+    }
+    return {};
+}
+
+// The slide being sized, and where its placeholders' inherited geometry
+// comes from.
+struct SlideContext {
+    const std::string& part;
+    Extent canvas;
+    PlaceholderInheritance& inheritance;
+};
+
+// The extent a placeholder without its own a:xfrm inherits from its layout
+// or master; nullopt when neither declares one.
+std::optional<Extent> inherited_ext(const pugi::xml_node& ph, SlideContext& ctx) {
+    std::optional<std::string> type;
+    if (auto a = ph.attribute("type")) {
+        type = a.as_string("");
+    }
+    std::optional<int> idx;
+    if (auto a = ph.attribute("idx")) {
+        idx = a.as_int(0);
+    }
+    const auto g = ctx.inheritance.lookup(ctx.part, type, idx).geometry;
+    if (!g || g->ext_cx <= 0 || g->ext_cy <= 0) {
+        return std::nullopt;
+    }
+    return Extent{static_cast<double>(g->ext_cx), static_cast<double>(g->ext_cy)};
 }
 
 // One a:blip r:embed use on a slide.
-void add_blip_use(const pugi::xml_node& blip, const Extent& canvas, Demand& demand) {
+void add_blip_use(const pugi::xml_node& blip, SlideContext& ctx, Demand& demand) {
+    const Extent& canvas = ctx.canvas;
     const auto fill = blip.parent();
     if (!is(fill, "blipFill")) {
         demand.include(canvas);
@@ -183,14 +216,18 @@ void add_blip_use(const pugi::xml_node& blip, const Extent& canvas, Demand& dema
         demand.include(canvas);  // background (bgPr), table cell (tcPr), ...
         return;
     }
-    const auto ext = ext_of(child(sp_pr, "xfrm"));
+    auto ext = ext_of(child(sp_pr, "xfrm"));
     if (!ext) {
-        if (is_placeholder(shape)) {
-            demand.inherited = true;
-        } else {
+        const auto ph = placeholder_of(shape);
+        if (!ph) {
             demand.include(canvas);
+            return;
         }
-        return;
+        ext = inherited_ext(ph, ctx);
+        if (!ext) {
+            demand.inherited = true;  // a placeholder with nothing to inherit from
+            return;
+        }
     }
     const Extent scale = group_scale(shape);
     const Extent visible = kept_fraction(child(fill, "srcRect"));
@@ -202,8 +239,9 @@ void add_blip_use(const pugi::xml_node& blip, const Extent& canvas, Demand& dema
 // Every use of relationship `rel_id` in a slide's XML.
 void add_slide_uses(const pugi::xml_document& doc,
                     const std::string& rel_id,
-                    const Extent& canvas,
+                    SlideContext& ctx,
                     Demand& demand) {
+    const Extent& canvas = ctx.canvas;
     bool found = false;
     for (const auto& node : doc.select_nodes("//*")) {
         const auto el = node.node();
@@ -214,7 +252,7 @@ void add_slide_uses(const pugi::xml_document& doc,
             }
             found = true;
             if (is(el, "blip") && local_name(name) == "embed") {
-                add_blip_use(el, canvas, demand);
+                add_blip_use(el, ctx, demand);
             } else {
                 demand.include(canvas);  // a14:imgLayer, video/audio, ... sized conservatively
             }
@@ -293,7 +331,8 @@ class SourceCache {
 Demand demand_for(const PartGraph& graph,
                   const std::string& media,
                   const Canvases& canvases,
-                  SourceCache& sources) {
+                  SourceCache& sources,
+                  PlaceholderInheritance& inheritance) {
     Demand demand;
     for (const auto& ref : graph.references_to(media)) {
         // Transitional or Strict OOXML image relationship; anything else
@@ -304,7 +343,8 @@ Demand demand_for(const PartGraph& graph,
         }
         if (is_slide(ref.source)) {
             if (const auto* doc = sources.get(ref.source)) {
-                add_slide_uses(*doc, ref.rel.id, canvases.slide, demand);
+                SlideContext ctx{ref.source, canvases.slide, inheritance};
+                add_slide_uses(*doc, ref.rel.id, ctx, demand);
             } else {
                 demand.include(canvases.slide);
             }
@@ -443,12 +483,13 @@ PassResult optimize_images(const Package& pkg,
     PassResult result;
     const Canvases canvases = read_canvases(pkg);
     SourceCache sources(pkg);
+    PlaceholderInheritance inheritance(pkg);
     for (const auto& part : graph.reachable()) {
         const auto format = media_format(pkg, part);
         if (!format) {
             continue;
         }
-        const Demand demand = demand_for(graph, part, canvases, sources);
+        const Demand demand = demand_for(graph, part, canvases, sources, inheritance);
         if (demand.foreign) {
             continue;
         }

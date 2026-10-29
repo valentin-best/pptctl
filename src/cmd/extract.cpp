@@ -259,7 +259,9 @@ nlohmann::json shape_to_json(const Shape& shape) {
     j["placeholder_type"] =
         shape.placeholder_type ? nlohmann::json(*shape.placeholder_type) : nlohmann::json(nullptr);
 
-    if (shape.geometry) {
+    // The shape's own geometry only: a placeholder's inherited position stays
+    // null, as in schema v1 (#93 resolves it for diff, lint and optimize).
+    if (shape.geometry && !shape.geometry_inherited) {
         j["geometry"] = {{"off_x", shape.geometry->off_x},
                          {"off_y", shape.geometry->off_y},
                          {"ext_cx", shape.geometry->ext_cx},
@@ -429,6 +431,7 @@ int extract_to(const std::string& path, const std::string& format_str, std::ostr
         return 1;
     }
 
+    pptctl::PlaceholderInheritance inheritance(pkg);
     if (fmt == Format::Json) {
         nlohmann::json out;
         out["schema_version"] = 1;
@@ -440,7 +443,7 @@ int extract_to(const std::string& path, const std::string& format_str, std::ostr
         for (const auto& part : pres.slide_parts()) {
             ++n;
             pptctl::Slide slide;
-            if (!slide.load(pkg, part)) {
+            if (!slide.load(pkg, part, &inheritance)) {
                 pptctl::eprintln("warning: could not read {}", part);
                 continue;
             }
@@ -465,7 +468,7 @@ int extract_to(const std::string& path, const std::string& format_str, std::ostr
     for (const auto& part : pres.slide_parts()) {
         ++n;
         pptctl::Slide slide;
-        if (!slide.load(pkg, part)) {
+        if (!slide.load(pkg, part, &inheritance)) {
             pptctl::eprintln("warning: could not read {}", part);
             continue;
         }

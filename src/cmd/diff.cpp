@@ -40,8 +40,14 @@ namespace {
 // re-loaded later.
 struct Deck {
     Package pkg;
+    std::optional<PlaceholderInheritance> inheritance;  // over pkg; set by open()
     std::vector<std::string> parts;
     std::vector<SlideSummary> summaries;
+
+    // The deck's shared lookup; null before open() (Slide::load makes its own).
+    PlaceholderInheritance* placeholders() {
+        return inheritance ? &*inheritance : nullptr;
+    }
 
     bool open(const std::string& path) {
         if (!pkg.open(path)) {
@@ -54,12 +60,13 @@ struct Deck {
             return false;
         }
         parts = pres.slide_parts();
+        inheritance.emplace(pkg);
         summaries.reserve(parts.size());
         std::size_t n = 0;
         for (const auto& part : parts) {
             ++n;
             Slide slide;
-            if (!slide.load(pkg, part)) {
+            if (!slide.load(pkg, part, placeholders())) {
                 eprintln("warning: could not read {} in '{}'", part, path);
                 continue;
             }
@@ -486,8 +493,8 @@ std::optional<DiffReport> diff_report(const std::string& a,
         }
         Slide sa;
         Slide sb;
-        if (!sa.load(da.pkg, da.parts[s.a_index - 1]) ||
-            !sb.load(db.pkg, db.parts[s.b_index - 1])) {
+        if (!sa.load(da.pkg, da.parts[s.a_index - 1], da.placeholders()) ||
+            !sb.load(db.pkg, db.parts[s.b_index - 1], db.placeholders())) {
             continue;
         }
         sa.set_index(s.a_index);

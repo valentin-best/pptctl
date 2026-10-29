@@ -2,10 +2,14 @@
 
 #include <cstddef>
 #include <format>
+#include <optional>
 #include <pptctl/image.hpp>
 #include <pptctl/slide.hpp>
 #include <pugixml.hpp>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace pptctl {
 
@@ -188,6 +192,17 @@ void set_identity(pugi::xml_node shape_el, Shape& shape) {
     shape.name = cnvpr.attribute("name").as_string("");
     shape.geometry = parse_geometry(shape_el);
     shape.fill = parse_fill(shape_el);
+    // p:ph sits in the nv* container's p:nvPr for every kind of shape: text
+    // placeholders, but also picture, table and chart ones.
+    if (auto ph = shape_el.first_child().child("p:nvPr").child("p:ph")) {
+        shape.placeholder = true;
+        if (auto type = ph.attribute("type")) {
+            shape.placeholder_type = type.as_string("");
+        }
+        if (auto idx = ph.attribute("idx")) {
+            shape.placeholder_idx = idx.as_int(0);
+        }
+    }
 }
 
 ShapeKind graphic_frame_kind(pugi::xml_node gf) {
@@ -253,18 +268,7 @@ Shape parse_graphic_frame(pugi::xml_node gf_el) {
 Shape parse_sp(pugi::xml_node sp_el) {
     Shape shape;
     set_identity(sp_el, shape);
-    auto ph = sp_el.child("p:nvSpPr").child("p:nvPr").child("p:ph");
-    if (ph) {
-        shape.kind = ShapeKind::Placeholder;
-        if (auto type = ph.attribute("type")) {
-            shape.placeholder_type = type.as_string("");
-        }
-        if (auto idx = ph.attribute("idx")) {
-            shape.placeholder_idx = idx.as_int(0);
-        }
-    } else {
-        shape.kind = ShapeKind::TextBox;
-    }
+    shape.kind = shape.placeholder ? ShapeKind::Placeholder : ShapeKind::TextBox;
     if (auto tx = sp_el.child("p:txBody")) {
         parse_paragraphs(tx, shape.paragraphs);
     }
@@ -595,7 +599,135 @@ bool Slide::parse_notes(std::string_view xml) {
     return true;
 }
 
-bool Slide::load(const Package& pkg, std::string_view part_name) {
+namespace {
+
+// The placeholder type classes PlaceholderInheritance matches on.
+std::string type_class(std::string_view type) {
+    if (type == "title" || type == "ctrTitle") {
+        return "title";
+    }
+    if (type == "dt" || type == "ftr" || type == "sldNum" || type == "hdr" || type == "sldImg") {
+        return std::string(type);
+    }
+    return "body";
+}
+
+}  // namespace
+
+const std::string& PlaceholderInheritance::related(std::string_view part, std::string_view type) {
+    std::string key = std::string(part) + "|" + std::string(type);
+    if (auto it = related_.find(key); it != related_.end()) {
+        return it->second;
+    }
+    std::string target;
+    for (const auto& rel : pkg_.relationships(part)) {
+        const auto slash = rel.type.rfind('/');
+        if (!rel.external && slash != std::string::npos &&
+            std::string_view(rel.type).substr(slash + 1) == type) {
+            target = rel.target;
+            break;
+        }
+    }
+    return related_.emplace(std::move(key), std::move(target)).first->second;
+}
+
+const std::vector<PlaceholderInheritance::Entry>& PlaceholderInheritance::placeholders(
+    const std::string& part) {
+    if (auto it = parsed_.find(part); it != parsed_.end()) {
+        return it->second;
+    }
+    std::vector<Entry> entries;
+    const auto bytes = pkg_.read_part(part);
+    pugi::xml_document doc;
+    if (!bytes.empty() && doc.load_buffer(bytes.data(), bytes.size(), kParseFlags)) {
+        for (const auto& hit : doc.select_nodes("//p:ph")) {
+            const auto ph = hit.node();
+            const auto shape_el = ph.parent().parent().parent();  // p:nvPr / nv*Pr / shape
+            entries.push_back({type_class(ph.attribute("type").as_string("")),
+                               ph.attribute("idx").as_int(0),
+                               parse_geometry(shape_el),
+                               parse_fill(shape_el)});
+        }
+    }
+    return parsed_.emplace(part, std::move(entries)).first->second;
+}
+
+PlaceholderInheritance::Inherited PlaceholderInheritance::lookup(
+    std::string_view slide_part, const std::optional<std::string>& type, std::optional<int> idx) {
+    Inherited out;
+    const std::string cls = type_class(type.value_or(""));
+    const std::string layout = related(slide_part, "slideLayout");
+    if (layout.empty()) {
+        return out;
+    }
+    const auto& on_layout = placeholders(layout);
+    const Entry* from_layout = nullptr;
+    for (const auto& e : on_layout) {
+        if (e.type_class == cls && e.idx == idx.value_or(0)) {
+            from_layout = &e;
+            break;
+        }
+    }
+    if (from_layout == nullptr) {
+        for (const auto& e : on_layout) {
+            if (e.type_class == cls) {
+                from_layout = &e;
+                break;
+            }
+        }
+    }
+    const Entry* from_master = nullptr;
+    const std::string master = related(layout, "slideMaster");
+    if (!master.empty()) {
+        for (const auto& e : placeholders(master)) {
+            if (e.type_class == cls) {
+                from_master = &e;
+                break;
+            }
+        }
+    }
+    for (const Entry* level : {from_layout, from_master}) {
+        if (level == nullptr) {
+            continue;
+        }
+        if (!out.geometry) {
+            out.geometry = level->geometry;
+        }
+        if (!out.fill) {
+            out.fill = level->fill;
+        }
+    }
+    return out;
+}
+
+namespace {
+
+// Fill in what placeholders without their own geometry or fill inherit.
+// NOLINTNEXTLINE(misc-no-recursion)
+void resolve_placeholders(PlaceholderInheritance& inheritance,
+                          std::string_view part,
+                          std::vector<Shape>& shapes) {
+    for (auto& s : shapes) {
+        if (s.placeholder && (!s.geometry || !s.fill)) {
+            const auto inherited = inheritance.lookup(part, s.placeholder_type, s.placeholder_idx);
+            if (!s.geometry && inherited.geometry) {
+                s.geometry = inherited.geometry;
+                s.geometry_inherited = true;
+            }
+            if (!s.fill && inherited.fill) {
+                s.fill = inherited.fill;
+                s.fill_inherited = true;
+            }
+        }
+        resolve_placeholders(inheritance, part, s.children);
+    }
+}
+
+}  // namespace
+
+bool Slide::load(const Package& pkg,
+                 std::string_view part_name,
+                 PlaceholderInheritance* inheritance) {
     part_name_ = std::string(part_name);
     const auto bytes = pkg.read_part(part_name);
     if (bytes.empty()) {
@@ -604,6 +736,11 @@ bool Slide::load(const Package& pkg, std::string_view part_name) {
     if (!parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) {
         return false;
     }
+    std::optional<PlaceholderInheritance> local;
+    if (inheritance == nullptr) {
+        inheritance = &local.emplace(pkg);
+    }
+    resolve_placeholders(*inheritance, part_name_, shapes_);
     resolve_pictures(pkg, part_name_, shapes_);
     resolve_charts(pkg, part_name_, shapes_);
 

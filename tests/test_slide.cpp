@@ -3,11 +3,15 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -1024,4 +1028,151 @@ TEST_CASE("Slide: a run whose text is a single space is kept") {
     REQUIRE(runs.size() == 3);
     CHECK(runs[1].text == " ");
     CHECK(slide.shapes()[0].paragraphs[0].text() == "www.google.com = 74.125.131.26");
+}
+
+// ── placeholder inheritance (#93) ─────────────────────────────────────────────
+
+namespace {
+
+namespace fs = std::filesystem;
+
+// The shape named `name` on `slide`, which must exist.
+const pptctl::Shape& named(const pptctl::Slide& slide, std::string_view name) {
+    const auto& shapes = slide.shapes();
+    const auto it = std::find_if(
+        shapes.begin(), shapes.end(), [&](const pptctl::Shape& s) { return s.name == name; });
+    REQUIRE_MESSAGE(it != shapes.end(), "no shape named ", name);
+    return *it;
+}
+
+void check_geometry(
+    const pptctl::Shape& s, pptctl::Emu x, pptctl::Emu y, pptctl::Emu cx, pptctl::Emu cy) {
+    REQUIRE(s.geometry.has_value());
+    CHECK(s.geometry->off_x == x);
+    CHECK(s.geometry->off_y == y);
+    CHECK(s.geometry->ext_cx == cx);
+    CHECK(s.geometry->ext_cy == cy);
+}
+
+std::vector<std::byte> bytes_of(std::string_view s) {
+    std::vector<std::byte> out(s.size());
+    std::transform(
+        s.begin(), s.end(), out.begin(), [](char c) { return static_cast<std::byte>(c); });
+    return out;
+}
+
+std::string text_of(const std::vector<std::byte>& b) {
+    std::string out(b.size(), '\0');
+    std::transform(
+        b.begin(), b.end(), out.begin(), [](std::byte x) { return static_cast<char>(x); });
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("Slide: a placeholder without a:xfrm inherits its layout placeholder's geometry") {
+    // three_slides slide 1: the ctrTitle and the subTitle (idx 1) have no
+    // a:xfrm; slideLayout1 declares both.
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, "ppt/slides/slide1.xml"));
+    const auto& title = named(slide, "Title 1");
+    CHECK(title.placeholder);
+    CHECK(title.geometry_inherited);
+    check_geometry(title, 685800, 2130425, 7772400, 1470025);
+    const auto& subtitle = named(slide, "Subtitle 2");
+    CHECK(subtitle.geometry_inherited);
+    check_geometry(subtitle, 1371600, 3886200, 6400800, 1752600);
+}
+
+TEST_CASE("Slide: a placeholder its layout doesn't place inherits from the master") {
+    // diff_base slide 2 (Title and Content): neither the slide's nor the
+    // layout's title and body placeholders have an a:xfrm; the master's do.
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("diff_base.pptx")));
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, "ppt/slides/slide2.xml"));
+    std::vector<const pptctl::Shape*> phs;
+    for (const auto& s : slide.shapes()) {
+        if (s.placeholder) {
+            phs.push_back(&s);
+        }
+    }
+    REQUIRE(phs.size() == 2);
+    CHECK(phs[0]->placeholder_type == "title");
+    CHECK(phs[0]->geometry_inherited);
+    check_geometry(*phs[0], 457200, 274638, 8229600, 1143000);   // master title
+    CHECK_FALSE(phs[1]->placeholder_type.has_value());           // <p:ph idx="1"/>: body
+    check_geometry(*phs[1], 457200, 1600200, 8229600, 4525963);  // master body
+}
+
+TEST_CASE("Slide: placeholders match their layout by idx before type") {
+    // Slide 2 moved onto the Two Content layout, its body placeholder made
+    // idx 2: it must take the right-hand box, not the first body (idx 1).
+    pptctl::Package base;
+    REQUIRE(base.open(fixture("diff_base.pptx")));
+    pptctl::PartChanges changes;
+    auto rels = text_of(base.read_part("ppt/slides/_rels/slide2.xml.rels"));
+    rels.replace(rels.find("slideLayout2.xml"), 16, "slideLayout4.xml");
+    changes.replaced["ppt/slides/_rels/slide2.xml.rels"] = bytes_of(rels);
+    auto xml = text_of(base.read_part("ppt/slides/slide2.xml"));
+    const auto at = xml.find(R"(<p:ph idx="1"/>)");
+    REQUIRE(at != std::string::npos);
+    xml.replace(at, 15, R"(<p:ph idx="2"/>)");
+    changes.replaced["ppt/slides/slide2.xml"] = bytes_of(xml);
+    const auto path = (fs::temp_directory_path() / "pptctl_slide_ph_idx.pptx").string();
+    REQUIRE(base.write(path, changes));
+
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(path));
+    pptctl::PlaceholderInheritance inheritance(pkg);
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, "ppt/slides/slide2.xml", &inheritance));
+    const auto body = std::find_if(slide.shapes().begin(), slide.shapes().end(), [](const auto& s) {
+        return s.placeholder_idx == 2;
+    });
+    REQUIRE(body != slide.shapes().end());
+    check_geometry(*body, 4648200, 1600200, 4038600, 4525963);
+    std::error_code ec;
+    fs::remove(path, ec);
+}
+
+TEST_CASE("Slide: explicit geometry wins, and parse alone inherits nothing") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("diff_base.pptx")));
+    pptctl::Slide loaded;
+    REQUIRE(loaded.load(pkg, "ppt/slides/slide4.xml"));
+    for (const auto& s : loaded.shapes()) {
+        if (!s.placeholder) {
+            CHECK_FALSE(s.geometry_inherited);  // a text box or shape keeps its own
+        }
+    }
+    pptctl::Slide parsed;
+    REQUIRE(parsed.parse(text_of(pkg.read_part("ppt/slides/slide1.xml"))));
+    for (const auto& s : parsed.shapes()) {
+        CHECK_FALSE(s.geometry_inherited);
+        CHECK_FALSE(s.geometry.has_value());  // slide 1's placeholders have no a:xfrm
+    }
+}
+
+TEST_CASE("Slide: picture placeholders record their p:ph") {
+    pptctl::Slide slide;
+    REQUIRE(slide.parse(R"(<?xml version="1.0"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+    <p:pic><p:nvPicPr><p:cNvPr id="2" name="Picture 1"/><p:cNvPicPr/>
+      <p:nvPr><p:ph type="pic" idx="13"/></p:nvPr></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rId2"/></p:blipFill><p:spPr/></p:pic>
+  </p:spTree></p:cSld>
+</p:sld>)"));
+    REQUIRE(slide.shapes().size() == 1);
+    const auto& pic = slide.shapes()[0];
+    CHECK(pic.kind == pptctl::ShapeKind::Picture);
+    CHECK(pic.placeholder);
+    CHECK(pic.placeholder_type == "pic");
+    CHECK(pic.placeholder_idx == 13);
 }

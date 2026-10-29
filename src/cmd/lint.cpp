@@ -901,11 +901,12 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
     };
 
     std::set<std::string> referenced_fonts;
+    PlaceholderInheritance inheritance(pkg);
     std::size_t n = 0;
     for (const auto& part : pres.slide_parts()) {
         ++n;
         Slide slide;
-        if (!slide.load(pkg, part)) {
+        if (!slide.load(pkg, part, &inheritance)) {
             eprintln("warning: could not read {}", part);
             continue;
         }

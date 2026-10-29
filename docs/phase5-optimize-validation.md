@@ -81,7 +81,7 @@ the passes deliberately leave alone:
 - **Vector metafiles.** `edu_umass_dns` keeps a 2 MB EMF (558 KB stored), and `edu_uva_virtualization` keeps two EMFs of 0.5 and 0.8 MB. Rasterizing a metafile would trade a vector for pixels.
 - **OLE embeddings.** `edu_utsa_oral_presentation` keeps a 1.1 MB `oleObject1.bin`.
 - **Screenshots already at the size they're shown,** which only a lossless recompress can touch: `edu_stanford_cs345d_lecture01`.
-- **Placeholder pictures that inherit their geometry** from the layout. The images pass skips them until #93 lands: 4 in `edu_umass_dns` and 9 in `edu_mit_math_lecture1`.
+- **Placeholder pictures that inherit their geometry** from the layout: 4 in `edu_umass_dns` and 9 in `edu_mit_math_lecture1`. The images pass skipped them; #93 resolved them afterwards (see [After #93](#after-93)).
 
 The defaults could reach the bar on the lecture decks only by giving up
 Retina headroom:
@@ -133,5 +133,13 @@ save more.
 
 ## Follow-ups
 
-- **#93** (inherited placeholder geometry) would let the images pass size the 13 placeholder pictures it skips here.
+- **#93** (inherited placeholder geometry) has since landed; see below.
 - Nothing new is filed. The remaining weight in the low-scoring decks is vector metafiles, OLE embeddings and screenshots already at their displayed size, which optimize leaves alone by design.
+
+## After #93
+
+[#93](https://github.com/valentin-best/pptctl/issues/93) resolves a placeholder's geometry from its layout or master. The images pass now sizes the 13 placeholder pictures it used to skip, and no deck reports an inherited-geometry skip.
+
+- **Results:** `edu_mit_math_lecture1` goes from 37.0% to 43.5%, and `edu_umass_dns` from 6.7% to 9.7%. The mean is **42.9%** over the 15 decks (median 43.4%), and **35.8%** over the 10 lecture decks.
+- **Quality:** all 13 pictures already had at most 192 DPI in their inherited frames (umass's run from 107 to 168 DPI). So they are recompressed or cropped losslessly, never downsampled, with no quality change.
+- **Re-checks:** the two changed outputs pass the same-deck and stability checks, PowerPoint re-save, Keynote PDF export and LibreOffice conversion, all with their original slide counts. The other 13 outputs are byte-identical.
