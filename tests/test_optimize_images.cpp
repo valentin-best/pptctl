@@ -609,11 +609,35 @@ TEST_CASE("optimize images: unsupported formats are left untouched") {
     CHECK(skipped->bytes_after == skipped->bytes_before);
 }
 
-TEST_CASE("optimize images: a placeholder picture without its own geometry is skipped") {
+TEST_CASE("optimize images: a placeholder picture is sized by the geometry it inherits") {
+    // image2 (200x150) in a picture placeholder (idx 1) without its own
+    // a:xfrm; the slide's layout places that placeholder at 0.5 x 0.375 in,
+    // as slide 2's explicit geometry did: 96x72 either way.
     Variant v;
     v.edit("ppt/slides/slide2.xml",
            R"(<p:nvPr/></p:nvPicPr>)",
            R"(<p:nvPr><p:ph type="pic" idx="1"/></p:nvPr></p:nvPicPr>)");
+    v.edit("ppt/slides/slide2.xml",
+           R"(<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="457200" cy="342900"/></a:xfrm>)",
+           "");
+    v.edit("ppt/slideLayouts/slideLayout7.xml",
+           "</p:spTree>",
+           R"(<p:sp><p:nvSpPr><p:cNvPr id="9" name="Picture Placeholder 8"/><p:cNvSpPr/>)"
+           R"(<p:nvPr><p:ph type="pic" idx="1"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm>)"
+           R"(<a:off x="914400" y="914400"/><a:ext cx="457200" cy="342900"/></a:xfrm></p:spPr>)"
+           R"(</p:sp></p:spTree>)");
+    const auto r = run(v.open());
+    const auto& out = replaced(r, "ppt/media/image2.png");
+    CHECK(dims_of(out).width == 96);
+    CHECK(dims_of(out).height == 72);
+}
+
+TEST_CASE("optimize images: a placeholder with nothing to inherit from is skipped") {
+    // A header placeholder: no slide layout or master carries one.
+    Variant v;
+    v.edit("ppt/slides/slide2.xml",
+           R"(<p:nvPr/></p:nvPicPr>)",
+           R"(<p:nvPr><p:ph type="hdr"/></p:nvPr></p:nvPicPr>)");
     v.edit("ppt/slides/slide2.xml",
            R"(<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="457200" cy="342900"/></a:xfrm>)",
            "");

@@ -3,12 +3,21 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cstddef>
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/diff.hpp>
+#include <pptctl/package.hpp>
 #include <pptctl/slide.hpp>
 #include <string>
+#include <system_error>
 #include <vector>
+
+#ifndef PPTCTL_FIXTURES_DIR
+#define PPTCTL_FIXTURES_DIR "tests/fixtures"
+#endif
 
 namespace {
 
@@ -496,4 +505,67 @@ TEST_CASE("Diff/shape: placeholder reset to the layout position is Moved the oth
     REQUIRE(ops[0].old_geometry.has_value());
     CHECK_FALSE(ops[0].new_geometry.has_value());
     CHECK(pptctl::describe(ops[0]).find("inherited") != std::string::npos);
+}
+
+// ── inherited placeholder geometry (#93) ──────────────────────────────────────
+
+namespace {
+
+// Slide 1 of three_slides.pptx with `edit` applied to its XML, loaded from a
+// package so its placeholders resolve their inherited geometry. Its title
+// (ctrTitle) has no a:xfrm and inherits (685800, 2130425) 7772400 x 1470025.
+pptctl::Slide three_slides_title(const std::string& title_xfrm) {
+    pptctl::Package base;
+    REQUIRE(base.open(std::string(PPTCTL_FIXTURES_DIR) + "/three_slides.pptx"));
+    const auto bytes = base.read_part("ppt/slides/slide1.xml");
+    std::string xml(bytes.size(), '\0');
+    std::transform(
+        bytes.begin(), bytes.end(), xml.begin(), [](std::byte b) { return static_cast<char>(b); });
+    if (!title_xfrm.empty()) {
+        // The title's empty p:spPr is the first one in the slide.
+        const auto at = xml.find("<p:spPr/>");
+        REQUIRE(at != std::string::npos);
+        xml.replace(at, 9, "<p:spPr>" + title_xfrm + "</p:spPr>");
+    }
+    pptctl::PartChanges changes;
+    std::vector<std::byte> out(xml.size());
+    std::transform(
+        xml.begin(), xml.end(), out.begin(), [](char c) { return static_cast<std::byte>(c); });
+    changes.replaced["ppt/slides/slide1.xml"] = std::move(out);
+    static int n = 0;
+    const auto path = (std::filesystem::temp_directory_path() /
+                       ("pptctl_diff_inherit_" + std::to_string(n++) + ".pptx"))
+                          .string();
+    REQUIRE(base.write(path, changes));
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(path));
+    pptctl::Slide slide;
+    REQUIRE(slide.load(pkg, "ppt/slides/slide1.xml"));
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    return slide;
+}
+
+}  // namespace
+
+TEST_CASE("Diff/shape: nudging an inherited placeholder reports the delta") {
+    const auto a = three_slides_title("");
+    const auto b = three_slides_title(
+        R"(<a:xfrm><a:off x="914400" y="2130425"/><a:ext cx="7772400" cy="1470025"/></a:xfrm>)");
+    const auto ops = pptctl::compare_slides(a, b, {}).shapes;
+    REQUIRE(ops.size() == 1);
+    CHECK(ops[0].op == pptctl::ShapeOp::Moved);
+    CHECK(ops[0].delta_x == 228600);  // +0.25 in
+    CHECK(ops[0].delta_y == 0);
+    REQUIRE(ops[0].old_geometry.has_value());
+    CHECK(ops[0].old_geometry->off_x == 685800);
+    CHECK(pptctl::describe(ops[0]).find("inherited") == std::string::npos);
+}
+
+TEST_CASE("Diff/shape: writing out the inherited geometry is no change") {
+    // What a Keynote export does to every placeholder.
+    const auto a = three_slides_title("");
+    const auto b = three_slides_title(
+        R"(<a:xfrm><a:off x="685800" y="2130425"/><a:ext cx="7772400" cy="1470025"/></a:xfrm>)");
+    CHECK(pptctl::compare_slides(a, b, {}).shapes.empty());
 }

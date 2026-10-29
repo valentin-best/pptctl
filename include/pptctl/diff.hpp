@@ -101,8 +101,11 @@ struct ShapeChange {
     ShapeKind kind = ShapeKind::Other;    // kind in B (in A when Removed); new kind for KindChanged
     std::optional<ShapeKind> old_kind;    // KindChanged only
     std::vector<std::string> group_path;  // names of enclosing groups, outermost first
-    std::optional<Geometry> old_geometry;  // A side; nullopt when Added or A has no a:xfrm
-    std::optional<Geometry> new_geometry;  // B side; nullopt when Removed or B has no a:xfrm
+    // A placeholder without its own a:xfrm carries the geometry it inherits
+    // from its layout or master (when loaded from a package, #93), so
+    // explicit-equal-to-inherited is no change and a nudge has a delta.
+    std::optional<Geometry> old_geometry;  // A side; nullopt when Added or nothing to inherit
+    std::optional<Geometry> new_geometry;  // B side; nullopt when Removed or nothing to inherit
     Emu delta_x = 0;                       // Moved: new.off_x - old.off_x
     Emu delta_y = 0;                       // Moved: new.off_y - old.off_y
     Emu delta_cx = 0;                      // Resized: new.ext_cx - old.ext_cx

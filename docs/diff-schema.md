@@ -107,9 +107,9 @@ Whitespace-only differences and field runs (`a:fld`) are ignored unless
 | `old_kind` | `string \| null` | `kind_changed` only. |
 | `old_geometry` | `Geometry \| null` | A side; `null` when `added` or A has no `a:xfrm`. |
 | `new_geometry` | `Geometry \| null` | B side; `null` when `removed` or B has no `a:xfrm`. |
-| `delta` | `Geometry \| null` | `moved` / `resized`: new minus old. `null` when one side inherits its position from the layout placeholder (no `a:xfrm`); the op then carries only the explicit side. |
-| `old_fill` | `Fill \| null` | A side; `null` when inherited. |
-| `new_fill` | `Fill \| null` | B side; `null` when inherited. |
+| `delta` | `Geometry \| null` | `moved` / `resized`: new minus old. A placeholder without its own `a:xfrm` is compared at the position it inherits from its layout or master (#93), so writing out the inherited geometry is no change and a nudge has a delta. `null` only when one side has nothing to inherit from; the op then carries only the explicit side. |
+| `old_fill` | `Fill \| null` | A side; a placeholder's fill inherited from its layout or master is resolved like its geometry. `null` when inherited from the shape style or theme, or not modelled. |
+| `new_fill` | `Fill \| null` | B side; as `old_fill`. |
 
 `Geometry` carries EMU as integers (`x_emu`, `y_emu`, `cx_emu`, `cy_emu`)
 alongside inches as doubles (`x_in`, `y_in`, `cx_in`, `cy_in`). `Fill` is
