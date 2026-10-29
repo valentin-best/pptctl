@@ -1,0 +1,116 @@
+{
+  "dry_run": true,
+  "input": "<path>",
+  "input_bytes": 119897,
+  "output": null,
+  "output_bytes": "<bytes>",
+  "passes": [
+    {
+      "actions": [
+        {
+          "bytes_after": 0,
+          "bytes_before": 4357,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout1.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 3021,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout10.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 3245,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout11.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 2966,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout2.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4440,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout3.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4712,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout4.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 7222,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout5.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 2232,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout6.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4802,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout8.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4657,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout9.xml"
+        }
+      ],
+      "id": "layouts"
+    },
+    {
+      "actions": [],
+      "id": "fonts"
+    },
+    {
+      "actions": [
+        {
+          "bytes_after": "<bytes>",
+          "bytes_before": "<bytes>",
+          "detail": "160x120 -> 80x60",
+          "kind": "cropped",
+          "part": "ppt/media/image1.png"
+        },
+        {
+          "bytes_after": "<bytes>",
+          "bytes_before": "<bytes>",
+          "detail": "2 uses with different crops",
+          "kind": "skipped",
+          "part": "ppt/media/image2.png"
+        }
+      ],
+      "id": "crop"
+    },
+    {
+      "actions": [],
+      "id": "images"
+    },
+    {
+      "actions": [],
+      "id": "orphans"
+    }
+  ],
+  "schema_version": 1
+}
