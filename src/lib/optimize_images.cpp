@@ -26,7 +26,11 @@
 //    a tiny icon is left alone for the sake of a few dozen bytes. A JPEG
 //    re-encoded at the same size must also save kMinRecompressSavings, so an
 //    already well-compressed photo isn't put through another lossy
-//    generation for a sliver.
+//    generation for a sliver. When a downsampled image doesn't pass, the
+//    image is re-encoded at its own size instead, under the same rules:
+//    resampling blends a palette screenshot's colours, and the truecolour
+//    result can be larger than the original that a lossless recompress
+//    would still shrink.
 //
 // The part name, extension and content type never change, so no relationship
 // or [Content_Types].xml edit is needed.
@@ -358,6 +362,28 @@ void skip(PassResult& result, const std::string& part, std::uint64_t size, std::
     result.actions.push_back({part, "skipped", std::move(why), size, size});
 }
 
+// `img` encoded in `format`, if that's worth replacing a part of `before`
+// bytes with: never larger, at least kMinSavingsBytes smaller, and for a JPEG
+// re-encoded at its own size (`same_size`) at least kMinRecompressSavings too.
+std::optional<std::vector<std::byte>> reencode(const Image& img,
+                                               ImageFormat format,
+                                               std::uint64_t before,
+                                               bool same_size,
+                                               const OptimizeOptions& opts) {
+    auto encoded = format == ImageFormat::Jpeg
+                       ? encode_jpeg(img, {.quality = opts.jpeg_quality, .progressive = true})
+                       : encode_png(img);
+    const auto after = static_cast<std::uint64_t>(encoded.size());
+    const bool lossy_same_size = same_size && format == ImageFormat::Jpeg;
+    const double ratio_limit =
+        static_cast<double>(before) * (lossy_same_size ? 1 - kMinRecompressSavings : 1.0);
+    if (encoded.empty() || static_cast<double>(after) >= ratio_limit ||
+        before - after < kMinSavingsBytes) {
+        return std::nullopt;  // never grow, and don't rewrite a part for crumbs
+    }
+    return encoded;
+}
+
 void process(const Package& pkg,
              const std::string& part,
              ImageFormat format,
@@ -378,36 +404,35 @@ void process(const Package& pkg,
         skip(result, part, before, decoded.reason);
         return;
     }
-    Image img = std::move(*decoded.image);
-    const ImageDimensions original{img.width, img.height};
+    const Image& img = *decoded.image;
 
     const double dpi = opts.max_dpi > 0 ? opts.max_dpi : kCanvasDpi * opts.max_scale;
     const auto target =
         demand.tiled || dpi <= 0 ? std::nullopt : target_size(img, demand.displayed, dpi);
     if (target) {
-        img = downsample_area(img, target->width, target->height);
+        const Image small = downsample_area(img, target->width, target->height);
+        if (auto encoded = reencode(small, format, before, false, opts)) {
+            result.actions.push_back(
+                {part,
+                 "downsampled",
+                 std::format("{}x{} -> {}x{}", img.width, img.height, small.width, small.height),
+                 before,
+                 encoded->size()});
+            result.changes.replaced.emplace(part, std::move(*encoded));
+            return;
+        }
+        // Downsampling didn't pay: blending can turn a palette screenshot
+        // into a truecolour PNG larger than the original. A re-encode at
+        // the original size may still.
     }
-
-    const auto encoded = format == ImageFormat::Jpeg
-                             ? encode_jpeg(img, {.quality = opts.jpeg_quality, .progressive = true})
-                             : encode_png(img);
-    const auto after = static_cast<std::uint64_t>(encoded.size());
-    const bool lossy_same_size = !target && format == ImageFormat::Jpeg;
-    const double ratio_limit =
-        static_cast<double>(before) * (lossy_same_size ? 1 - kMinRecompressSavings : 1.0);
-    if (encoded.empty() || static_cast<double>(after) >= ratio_limit ||
-        before - after < kMinSavingsBytes) {
-        return;  // never grow, and don't rewrite a part for crumbs
+    if (auto encoded = reencode(img, format, before, true, opts)) {
+        result.actions.push_back({part,
+                                  "recompressed",
+                                  std::format("{}x{}", img.width, img.height),
+                                  before,
+                                  encoded->size()});
+        result.changes.replaced.emplace(part, std::move(*encoded));
     }
-    result.actions.push_back(
-        {part,
-         target ? "downsampled" : "recompressed",
-         target
-             ? std::format("{}x{} -> {}x{}", original.width, original.height, img.width, img.height)
-             : std::format("{}x{}", original.width, original.height),
-         before,
-         after});
-    result.changes.replaced.emplace(part, encoded);
 }
 
 }  // namespace
