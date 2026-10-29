@@ -195,6 +195,92 @@ const Bytes& replaced(const pptctl::PassResult& r, const std::string& part) {
 
 constexpr std::string_view kSlide2Ext = R"(<a:ext cx="457200" cy="342900"/>)";
 
+void push_be32(Bytes& b, std::uint32_t v) {
+    for (const int shift : {24, 16, 8, 0}) {
+        b.push_back(static_cast<std::byte>((v >> shift) & 0xFFU));
+    }
+}
+
+void push_chunk(Bytes& b, std::string_view tag, const Bytes& data) {
+    push_be32(b, static_cast<std::uint32_t>(data.size()));
+    const std::size_t start = b.size();
+    for (const char ch : tag) {
+        b.push_back(static_cast<std::byte>(ch));
+    }
+    b.insert(b.end(), data.begin(), data.end());
+    std::uint32_t c = 0xFFFFFFFFU;
+    for (std::size_t i = start; i < b.size(); ++i) {
+        c ^= static_cast<std::uint32_t>(b[i]);
+        for (int k = 0; k < 8; ++k) {
+            c = (c & 1U) != 0 ? 0xEDB88320U ^ (c >> 1) : c >> 1;
+        }
+    }
+    push_be32(b, c ^ 0xFFFFFFFFU);
+}
+
+// A palette PNG of `colours` (RGB triples) picked per pixel by a fixed LCG,
+// stored without compression (zlib stored blocks): bulky, but every pixel is
+// one of a few colours, so max deflate shrinks it a lot. Like a screenshot
+// saved by a careless tool.
+Bytes stored_palette_png(std::uint32_t w,
+                         std::uint32_t h,
+                         const std::vector<std::uint8_t>& colours) {
+    Bytes raw;
+    std::uint32_t state = 7;
+    const auto n = static_cast<std::uint32_t>(colours.size() / 3);
+    for (std::uint32_t y = 0; y < h; ++y) {
+        raw.push_back(std::byte{0});  // filter: none
+        for (std::uint32_t x = 0; x < w; ++x) {
+            state = state * 1103515245U + 12345U;
+            raw.push_back(static_cast<std::byte>((state >> 16) % n));
+        }
+    }
+    Bytes z{std::byte{0x78}, std::byte{0x01}};
+    for (std::size_t at = 0; at < raw.size(); at += 65535) {
+        const auto len = static_cast<std::uint32_t>(std::min<std::size_t>(65535, raw.size() - at));
+        const bool last = at + len == raw.size();
+        z.push_back(static_cast<std::byte>(last ? 1 : 0));
+        for (const std::uint32_t v : {len, ~len}) {
+            z.push_back(static_cast<std::byte>(v & 0xFFU));
+            z.push_back(static_cast<std::byte>((v >> 8) & 0xFFU));
+        }
+        z.insert(z.end(),
+                 raw.begin() + static_cast<std::ptrdiff_t>(at),
+                 raw.begin() + static_cast<std::ptrdiff_t>(at + len));
+    }
+    std::uint32_t a = 1;
+    std::uint32_t sum = 0;
+    for (const auto byte : raw) {
+        a = (a + static_cast<std::uint32_t>(byte)) % 65521U;
+        sum = (sum + a) % 65521U;
+    }
+    push_be32(z, (sum << 16) | a);
+
+    Bytes png{std::byte{0x89},
+              std::byte{'P'},
+              std::byte{'N'},
+              std::byte{'G'},
+              std::byte{0x0D},
+              std::byte{0x0A},
+              std::byte{0x1A},
+              std::byte{0x0A}};
+    Bytes ihdr;
+    push_be32(ihdr, w);
+    push_be32(ihdr, h);
+    for (const int v : {8, 3, 0, 0, 0}) {  // 8-bit palette
+        ihdr.push_back(static_cast<std::byte>(v));
+    }
+    push_chunk(png, "IHDR", ihdr);
+    Bytes plte;
+    for (const auto c : colours) {
+        plte.push_back(static_cast<std::byte>(c));
+    }
+    push_chunk(png, "PLTE", plte);
+    push_chunk(png, "IDAT", z);
+    push_chunk(png, "IEND", {});
+    return png;
+}
+
 }  // namespace
 
 // ── resampler ─────────────────────────────────────────────────────────────────
@@ -296,6 +382,40 @@ TEST_CASE("optimize images: a PNG that needs all its pixels is recompressed loss
     REQUIRE(before.image.has_value());
     REQUIRE(after.image.has_value());
     CHECK(after.image->width == 1600);
+    CHECK(after.image->pixels == before.image->pixels);
+}
+
+TEST_CASE("optimize images: a PNG that downsampling would grow is still recompressed") {
+    // A 400x300 palette PNG of 16 noisy colours, stored uncompressed (118 KiB),
+    // shown at 75 % of its pixels: downsampling blends the colours into a
+    // truecolour PNG larger than the original, but a lossless recompress at
+    // the original size still halves it. The pass must fall back to that
+    // rather than leave the image as it was.
+    std::vector<std::uint8_t> colours;
+    for (int i = 0; i < 16; ++i) {
+        colours.insert(colours.end(),
+                       {static_cast<std::uint8_t>(i * 16),
+                        static_cast<std::uint8_t>(255 - i * 16),
+                        static_cast<std::uint8_t>((i * 97) % 256)});
+    }
+    const auto png = stored_palette_png(400, 300, colours);
+    REQUIRE(pptctl::decode_png(png).image.has_value());
+    Variant v;
+    v.add_media("palette.png", png, "image/png");
+    v.retarget_slide(2, "image2.png", "palette.png");
+    // 1.5625 x 1.171875 in at 192 DPI: 300x225 px.
+    v.edit("ppt/slides/slide2.xml", kSlide2Ext, R"(<a:ext cx="1428750" cy="1071563"/>)");
+    const auto r = run(v.open());
+    const auto* a = action_for(r, "ppt/media/palette.png");
+    REQUIRE(a != nullptr);
+    CHECK(a->kind == "recompressed");
+    CHECK(a->detail == "400x300");
+    const auto& out = replaced(r, "ppt/media/palette.png");
+    CHECK(out.size() + 1024 <= png.size());
+    const auto before = pptctl::decode_png(png);
+    const auto after = pptctl::decode_png(out);
+    REQUIRE(after.image.has_value());
+    CHECK(after.image->width == 400);
     CHECK(after.image->pixels == before.image->pixels);
 }
 
