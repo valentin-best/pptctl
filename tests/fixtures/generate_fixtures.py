@@ -19,6 +19,7 @@ Generates, next to this script:
   - images_deck_v2.pptx     images_deck.pptx with one picture replaced, one removed,
                             one added and one alt text changed; media parts renamed.
   - bloat_deck.pptx         3 slides: tiny-but-oversampled PNG, large oversampled PNG, clean PNG.
+  - crop_deck.pptx          2 slides: a cropped PNG; a PNG shown twice with different crops.
   - lint_problems.pptx      7 slides, one per lint rule (plus the printer-settings stub
                             python-pptx ships, which trips the deck-level ctype rule).
   - lint_clean.pptx         2 ordinary slides with the printer-settings stub stripped;
@@ -491,6 +492,31 @@ def build_bloat_deck(path: Path) -> None:
     _normalize_zip(path)
 
 
+def build_crop_deck(path: Path) -> None:
+    """2 slides for the optimize crop pass (#104).
+    1. 160x120 noise PNG shown 2 in wide, cropped 25 % left and right and
+       50 % from the bottom: only the 80x60 region at (40, 0) is visible.
+    2. 120x90 noise PNG shown twice (one media part): cropped 50 % from the
+       left, and uncropped. Differing crops: the pass must leave it alone."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    s1 = prs.slides.add_slide(blank)
+    pic = s1.shapes.add_picture(
+        io.BytesIO(_noise_png(160, 120, 11)), Inches(1), Inches(1), width=Inches(2)
+    )
+    pic.crop_left = 0.25
+    pic.crop_right = 0.25
+    pic.crop_bottom = 0.5
+    s2 = prs.slides.add_slide(blank)
+    shared = _noise_png(120, 90, 12)
+    half = s2.shapes.add_picture(io.BytesIO(shared), Inches(1), Inches(1), width=Inches(2))
+    half.crop_left = 0.5
+    s2.shapes.add_picture(io.BytesIO(shared), Inches(4), Inches(1), width=Inches(2))
+    _set_core_props(prs, "pptctl crop fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
 def build_lint_problems_deck(path: Path) -> None:
     """One slide per lint rule, each tripping exactly one slide-level rule, in
     rule-registry order. Blank layouts carry no content placeholders, so
@@ -763,6 +789,7 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
     ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
     ("bloat_deck.pptx", [build_bloat_deck]),
+    ("crop_deck.pptx", [build_crop_deck]),
     ("lint_problems.pptx", [build_lint_problems_deck]),
     ("lint_clean.pptx", [build_lint_clean_deck, strip_printer_settings]),
     ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),

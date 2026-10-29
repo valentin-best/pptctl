@@ -360,6 +360,166 @@ std::vector<std::byte> encode_jpeg_impl(const Image& img, const JpegEncodeOption
     return result;
 }
 
+JpegCropResult crop_failure(std::string reason) {
+    JpegCropResult r;
+    r.reason = std::move(reason);
+    return r;
+}
+
+// True if a saved marker starts with `tag` (e.g. "JFIF\0").
+bool marker_is(const jpeg_marker_struct* m, std::string_view tag) {
+    return m->data_length >= tag.size() &&
+           std::equal(tag.begin(), tag.end(), m->data, [](char c, JOCTET b) {
+               return static_cast<JOCTET>(c) == b;
+           });
+}
+
+// Lossless crop by coefficient copy, as transupp.c's do_crop does without a
+// transform. Block offsets per component are the iMCU-aligned pixel offset
+// scaled by the component's sampling: x0 * h_samp / (max_h_samp * 8), which
+// is also right for single-component images (their iMCU is one 8x8 block).
+JpegCropResult crop_jpeg_impl(Bytes bytes, const PixelRect& rect) {
+    if (sniff_image_format(bytes) != ImageFormat::Jpeg) {
+        return crop_failure("not a JPEG");
+    }
+    jpeg_decompress_struct src{};
+    JpegErrors src_errors;
+    install(src_errors);
+    src.err = &src_errors.mgr;
+    const JpegStructGuard<jpeg_decompress_struct> src_guard{src};
+    if (!guarded(src_errors, [&] {
+            jpeg_CreateDecompress(&src, JPEG_LIB_VERSION, sizeof(src));
+            jpeg_mem_src(&src,
+                         reinterpret_cast<const unsigned char*>(bytes.data()),
+                         static_cast<unsigned long>(bytes.size()));
+            jpeg_save_markers(&src, JPEG_COM, 0xFFFF);
+            for (int m = 0; m < 16; ++m) {
+                jpeg_save_markers(&src, JPEG_APP0 + m, 0xFFFF);
+            }
+            (void)jpeg_read_header(&src, TRUE);
+        })) {
+        return crop_failure(jpeg_reason(src_errors));
+    }
+    const std::uint32_t width = src.image_width;
+    const std::uint32_t height = src.image_height;
+    if (too_large(width, height)) {
+        return crop_failure("JPEG too large to decode");
+    }
+    if (rect.width == 0 || rect.height == 0 || rect.x >= width || rect.y >= height ||
+        rect.width > width - rect.x || rect.height > height - rect.y) {
+        return crop_failure("crop rectangle outside the image");
+    }
+
+    JpegCropResult result;
+    for (auto* m = src.marker_list; m != nullptr; m = m->next) {
+        if (m->marker == JPEG_APP0 + 1 && result.exif_orientation == 0) {
+            result.exif_orientation =
+                exif_orientation(std::as_bytes(std::span<const JOCTET>(m->data, m->data_length)));
+        }
+    }
+    const auto max_h = static_cast<std::uint32_t>(src.max_h_samp_factor);
+    const auto max_v = static_cast<std::uint32_t>(src.max_v_samp_factor);
+    const std::uint32_t imcu_w = src.num_components == 1 ? DCTSIZE : max_h * DCTSIZE;
+    const std::uint32_t imcu_h = src.num_components == 1 ? DCTSIZE : max_v * DCTSIZE;
+    const std::uint32_t x0 = rect.x / imcu_w * imcu_w;
+    const std::uint32_t y0 = rect.y / imcu_h * imcu_h;
+    result.kept = {x0, y0, rect.x + rect.width - x0, rect.y + rect.height - y0};
+    const std::uint32_t out_w = result.kept.width;
+    const std::uint32_t out_h = result.kept.height;
+
+    const auto components = static_cast<std::size_t>(src.num_components);
+    std::vector<jvirt_barray_ptr> dst_coefs(components);
+    if (!guarded(src_errors, [&] {
+            auto* common = reinterpret_cast<j_common_ptr>(&src);
+            for (std::size_t ci = 0; ci < components; ++ci) {
+                const jpeg_component_info& comp = src.comp_info[ci];
+                const auto h = static_cast<std::uint32_t>(comp.h_samp_factor);
+                const auto v = static_cast<std::uint32_t>(comp.v_samp_factor);
+                // Blocks covering the output, padded to whole MCU rows/columns
+                // as libjpeg pads its own coefficient arrays.
+                const std::uint32_t wb = (out_w * h + max_h * DCTSIZE - 1) / (max_h * DCTSIZE);
+                const std::uint32_t hb = (out_h * v + max_v * DCTSIZE - 1) / (max_v * DCTSIZE);
+                dst_coefs[ci] = (*src.mem->request_virt_barray)(
+                    common, JPOOL_IMAGE, FALSE, (wb + h - 1) / h * h, (hb + v - 1) / v * v, v);
+            }
+            jvirt_barray_ptr* src_coefs = jpeg_read_coefficients(&src);
+            for (std::size_t ci = 0; ci < components; ++ci) {
+                const jpeg_component_info& comp = src.comp_info[ci];
+                const auto h = static_cast<std::uint32_t>(comp.h_samp_factor);
+                const auto v = static_cast<std::uint32_t>(comp.v_samp_factor);
+                const std::uint32_t x_blocks = x0 * h / (max_h * DCTSIZE);
+                const std::uint32_t y_blocks = y0 * v / (max_v * DCTSIZE);
+                const std::uint32_t wb = (out_w * h + max_h * DCTSIZE - 1) / (max_h * DCTSIZE);
+                const std::uint32_t hb = (out_h * v + max_v * DCTSIZE - 1) / (max_v * DCTSIZE);
+                const std::uint32_t row_blocks = (wb + h - 1) / h * h;
+                // Copy only what the source arrays hold (they are padded the
+                // same way, but a single-component image's 8 px grid can put
+                // an odd block offset against padding to a multiple of
+                // h_samp > 1). Blocks past them lie outside the image: zero.
+                const std::uint32_t src_cols = (comp.width_in_blocks + h - 1) / h * h;
+                const std::uint32_t src_rows = (comp.height_in_blocks + v - 1) / v * v;
+                const std::uint32_t copy =
+                    src_cols > x_blocks ? std::min(row_blocks, src_cols - x_blocks) : 0;
+                for (std::uint32_t y = 0; y < (hb + v - 1) / v * v; ++y) {
+                    JBLOCKROW dst_row =
+                        (*src.mem->access_virt_barray)(common, dst_coefs[ci], y, 1, TRUE)[0];
+                    std::uint32_t copied = 0;
+                    if (y + y_blocks < src_rows) {
+                        JBLOCKROW src_row = (*src.mem->access_virt_barray)(
+                            common, src_coefs[ci], y + y_blocks, 1, FALSE)[0];
+                        std::memcpy(dst_row, src_row + x_blocks, sizeof(JBLOCK) * copy);
+                        copied = copy;
+                    }
+                    std::memset(dst_row + copied, 0, sizeof(JBLOCK) * (row_blocks - copied));
+                }
+            }
+        })) {
+        return crop_failure(jpeg_reason(src_errors));
+    }
+    if (src_errors.mgr.num_warnings > 0) {
+        std::array<char, JMSG_LENGTH_MAX> text{};
+        (*src_errors.mgr.format_message)(reinterpret_cast<j_common_ptr>(&src), text.data());
+        return crop_failure("corrupt JPEG: " + std::string(text.data()));
+    }
+
+    // The destination writes from arrays owned by the source's memory pool, so
+    // it must be finished (and is declared, hence destroyed) after the source.
+    jpeg_compress_struct dst{};
+    JpegErrors dst_errors;
+    install(dst_errors);
+    dst.err = &dst_errors.mgr;
+    const JpegStructGuard<jpeg_compress_struct> dst_guard{dst};
+    unsigned char* out = nullptr;
+    unsigned long out_size = 0;
+    const bool ok = guarded(dst_errors, [&] {
+        jpeg_CreateCompress(&dst, JPEG_LIB_VERSION, sizeof(dst));
+        jpeg_mem_dest(&dst, &out, &out_size);
+        jpeg_copy_critical_parameters(&src, &dst);
+        dst.image_width = out_w;
+        dst.image_height = out_h;
+        dst.optimize_coding = TRUE;
+        jpeg_simple_progression(&dst);
+        jpeg_write_coefficients(&dst, dst_coefs.data());
+        for (auto* m = src.marker_list; m != nullptr; m = m->next) {
+            const bool jfif = m->marker == JPEG_APP0 && marker_is(m, {"JFIF\0", 5});
+            const bool adobe = m->marker == JPEG_APP0 + 14 && marker_is(m, "Adobe");
+            if ((jfif && dst.write_JFIF_header) || (adobe && dst.write_Adobe_marker)) {
+                continue;  // the encoder already wrote its own
+            }
+            jpeg_write_marker(&dst, m->marker, m->data, m->data_length);
+        }
+        jpeg_finish_compress(&dst);
+    });
+    if (ok && dst_errors.mgr.num_warnings == 0 && out != nullptr) {
+        const auto* first = reinterpret_cast<const std::byte*>(out);
+        result.bytes.assign(first, first + out_size);
+    } else {
+        result.reason = ok ? "JPEG crop failed" : jpeg_reason(dst_errors);
+    }
+    std::free(out);  // NOLINT(cppcoreguidelines-no-malloc): jpeg_mem_dest malloc'd it
+    return result;
+}
+
 // ── PNG ───────────────────────────────────────────────────────────────────────
 
 // Fixed storage: the callbacks run inside libpng's C frames and must not throw.
@@ -815,6 +975,14 @@ std::vector<std::byte> encode_png(const Image& image) noexcept {
         return encode_png_impl(image);
     } catch (const std::exception&) {
         return {};
+    }
+}
+
+JpegCropResult crop_jpeg(Bytes bytes, const PixelRect& rect) noexcept {
+    try {
+        return crop_jpeg_impl(bytes, rect);
+    } catch (const std::exception&) {
+        return crop_failure("out of memory");
     }
 }
 

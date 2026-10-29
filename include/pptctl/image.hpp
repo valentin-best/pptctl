@@ -106,4 +106,34 @@ struct JpegEncodeOptions {
 // lossless. Returns empty bytes for inconsistent dimensions. Never throws.
 [[nodiscard]] std::vector<std::byte> encode_png(const Image& image) noexcept;
 
+// A rectangle of pixels: top-left corner, then size.
+struct PixelRect {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
+// What a lossless JPEG crop produced: the cropped JPEG, or why there is none.
+struct JpegCropResult {
+    std::vector<std::byte> bytes;        // empty on failure
+    PixelRect kept;                      // the region actually kept, in source pixels
+    std::uint16_t exif_orientation = 0;  // the source's, as decode_jpeg reads it
+    std::string reason;                  // set when bytes is empty
+};
+
+// Crop a JPEG to `rect` without decoding it, the way `jpegtran -crop` does:
+// the DCT coefficient blocks the rect covers are copied into a new JPEG, so
+// the kept pixels decode exactly as before, with no generation loss. The rect
+// is in stored pixel order (EXIF orientation is not applied). Its right and
+// bottom edges are kept exactly; its left and top edges move out to the
+// block grid (8 or 16 pixels, by chroma subsampling), so `kept` may start up
+// to 15 pixels before `rect`. The output is progressive with optimised
+// Huffman tables and keeps every APPn and COM marker (ICC profile, EXIF, ...)
+// except the JFIF/Adobe headers the encoder writes itself. Refuses an empty
+// or out-of-bounds rect, images over kMaxDecodePixels, and corrupt data.
+// Never throws.
+[[nodiscard]] JpegCropResult crop_jpeg(std::span<const std::byte> bytes,
+                                       const PixelRect& rect) noexcept;
+
 }  // namespace pptctl
