@@ -8,11 +8,11 @@ the C++ build has no Python dependency.
 
 Run it with `uv` (no install needed):
 
-    uv run --python 3.12 --with python-pptx==1.0.2 tests/fixtures/generate_fixtures.py
+    uv run --python 3.12 --with python-pptx==1.0.2 --with pillow==13.0.0 tests/fixtures/generate_fixtures.py
 
 Pass --check to verify committed fixtures match regenerated output (useful in CI):
 
-    uv run --python 3.12 --with python-pptx==1.0.2 tests/fixtures/generate_fixtures.py --check
+    uv run --python 3.12 --with python-pptx==1.0.2 --with pillow==13.0.0 tests/fixtures/generate_fixtures.py --check
 
 Generates, next to this script:
   - images_deck.pptx        12 slides, each with a distinct embedded PNG.
@@ -20,6 +20,10 @@ Generates, next to this script:
                             one added and one alt text changed; media parts renamed.
   - bloat_deck.pptx         3 slides: tiny-but-oversampled PNG, large oversampled PNG, clean PNG.
   - crop_deck.pptx          2 slides: a cropped PNG; a PNG shown twice with different crops.
+  - optimize_deck.pptx      3 slides with something for every optimize pass (#105): an
+                            oversized JPEG, an oversized PNG with alpha, a cropped JPEG; plus
+                            a second master with an unused layout, an orphan media part and
+                            an embedded font.
   - lint_problems.pptx      7 slides, one per lint rule (plus the printer-settings stub
                             python-pptx ships, which trips the deck-level ctype rule).
   - lint_clean.pptx         2 ordinary slides with the printer-settings stub stripped;
@@ -47,7 +51,8 @@ a second master with its own layout and theme. Counts asserted by the C++ tests:
 
 Reproducibility contract
 ------------------------
-- python-pptx is pinned above so XML serialization is identical across machines.
+- python-pptx is pinned above so XML serialization is identical across machines,
+  and Pillow (its own dependency) so the one JPEG encoder in use is too.
 - All ZIP entries are written with a fixed timestamp and in sorted order so the
   committed bytes are stable regardless of python-pptx's internal entry ordering.
 """
@@ -517,6 +522,135 @@ def build_crop_deck(path: Path) -> None:
     _normalize_zip(path)
 
 
+def _wave_jpeg(width: int, height: int, seed: int) -> bytes:
+    """A photo-like RGB JPEG: smooth colour ramps over a blocky texture, so it
+    compresses like a photo rather than a flat fill. Encoded by Pillow, which is
+    python-pptx's own dependency (pinned above for stable bytes)."""
+    from PIL import Image
+
+    px = bytearray()
+    for y in range(height):
+        for x in range(width):
+            px += bytes(
+                (
+                    (x * 255 // width + seed) & 0xFF,
+                    (y * 255 // height) & 0xFF,
+                    ((x // 24 + y // 16) * 37 + seed) & 0xFF,
+                )
+            )
+    out = io.BytesIO()
+    Image.frombytes("RGB", (width, height), bytes(px)).save(
+        out, "JPEG", quality=85, subsampling=2, optimize=False, progressive=False
+    )
+    return out.getvalue()
+
+
+def _alpha_png(width: int, height: int) -> bytes:
+    """An RGBA PNG whose colour and alpha ramp across the image. Rows use the
+    Sub filter, so it stays a few KiB however large it is."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+    rows = bytearray()
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            row += bytes(
+                (x * 255 // width, y * 255 // height, (x + y) * 255 // (width + height), 255 - x * 255 // width)
+            )
+        # Sub filter: each byte minus the one 4 bytes (one pixel) to its left.
+        rows.append(1)
+        rows += bytes((row[i] - (row[i - 4] if i >= 4 else 0)) & 0xFF for i in range(len(row)))
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)  # 8-bit RGBA
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(bytes(rows), 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def build_optimize_deck(path: Path) -> None:
+    """3 slides for the optimize goldens (#105); inject_optimize_extras adds the rest.
+    1. 1200x900 JPEG shown 2 in wide: the images pass downsamples it to 384x288.
+    2. 800x600 PNG with alpha shown 1 in wide: downsampled to 192x144, alpha kept.
+    3. 800x600 JPEG shown 3 in wide, cropped 25 % left and right, under a text
+       box: the crop pass keeps 408x600 losslessly from x=192 (the visible
+       region starts at 200, between two 16 px blocks; srcRect keeps the 8)."""
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    s1 = prs.slides.add_slide(blank)
+    s1.shapes.add_picture(
+        io.BytesIO(_wave_jpeg(1200, 900, 0)), Inches(1), Inches(1), width=Inches(2)
+    )
+    s2 = prs.slides.add_slide(blank)
+    s2.shapes.add_picture(io.BytesIO(_alpha_png(800, 600)), Inches(1), Inches(1), width=Inches(1))
+    s3 = prs.slides.add_slide(blank)
+    s3.shapes.add_textbox(Inches(1), Inches(0.3), Inches(6), Inches(0.6)).text_frame.text = (
+        "Cropped photo"
+    )
+    pic = s3.shapes.add_picture(
+        io.BytesIO(_wave_jpeg(800, 600, 90)), Inches(1), Inches(1), width=Inches(3)
+    )
+    pic.crop_left = 0.25
+    pic.crop_right = 0.25
+    _set_core_props(prs, "pptctl optimize fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def inject_optimize_extras(path: Path) -> None:
+    """Add to optimize_deck.pptx what python-pptx can't make: an orphan media
+    part nothing references, and an embedded font (ppt/fonts/font1.fntdata,
+    its presentation relationship, p:embeddedFontLst, embedTrueTypeFonts and
+    the fntdata Default). The font bytes are a fixed LCG stream, not a font:
+    the fonts pass only removes them."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+
+    parts["ppt/media/orphan.png"] = _png(64, 64, (1, 2, 3))
+
+    state, font = 20251, bytearray()
+    for _ in range(6000):
+        state = (1103515245 * state + 12345) & 0x7FFFFFFF
+        font.append((state >> 16) & 0xFF)
+    parts["ppt/fonts/font1.fntdata"] = bytes(font)
+
+    rels = parts["ppt/_rels/presentation.xml.rels"].decode("utf-8")
+    used = [int(m) for m in re.findall(r'Id="rId(\d+)"', rels)]
+    rid = f"rId{max(used) + 1}"
+    rels = rels.replace(
+        "</Relationships>",
+        f'<Relationship Id="{rid}" Type="{_REL_NS}/font" Target="fonts/font1.fntdata"/>'
+        "</Relationships>",
+    )
+    parts["ppt/_rels/presentation.xml.rels"] = rels.encode("utf-8")
+
+    pres = parts["ppt/presentation.xml"].decode("utf-8")
+    pres = pres.replace("<p:presentation ", '<p:presentation embedTrueTypeFonts="1" ', 1)
+    pres = re.sub(
+        r"(<p:notesSz [^>]*/>)",
+        r'\1<p:embeddedFontLst><p:embeddedFont><p:font typeface="Lato"/>'
+        f'<p:regular r:id="{rid}"/></p:embeddedFont></p:embeddedFontLst>',
+        pres,
+        count=1,
+    )
+    parts["ppt/presentation.xml"] = pres.encode("utf-8")
+
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = re.sub(
+        r"(<Types [^>]*>)",
+        r'\1<Default Extension="fntdata" ContentType="application/x-fontdata"/>',
+        ct,
+        count=1,
+    )
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+
+    _write_zip(path, parts)
+
+
 def build_lint_problems_deck(path: Path) -> None:
     """One slide per lint rule, each tripping exactly one slide-level rule, in
     rule-registry order. Blank layouts carry no content placeholders, so
@@ -790,6 +924,7 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
     ("bloat_deck.pptx", [build_bloat_deck]),
     ("crop_deck.pptx", [build_crop_deck]),
+    ("optimize_deck.pptx", [build_optimize_deck, inject_second_master, inject_optimize_extras]),
     ("lint_problems.pptx", [build_lint_problems_deck]),
     ("lint_clean.pptx", [build_lint_clean_deck, strip_printer_settings]),
     ("notes_and_masters.pptx", [build_notes_deck_base, inject_second_master]),

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate all golden files (extract + lint + diff) from a built pptctl binary.
+# Regenerate all golden files (extract + lint + diff + optimize) from a built pptctl binary.
 # Usage: ./tests/golden/generate_golden.sh <path-to-pptctl-binary>
 # Example: ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
 set -euo pipefail
@@ -84,4 +84,28 @@ for pair in "${DIFF_PAIRS[@]}"; do
         rm -f "${outfile}.bak"
         echo "wrote $outfile"
     done
+done
+
+# Optimize goldens (#105): one <fixture>.optimize.json per fixture, the
+# `optimize --dry-run --json` report. Besides the input path, every byte count
+# that depends on the zlib in use (the system zlib on macOS and Linux, zlib-ng
+# on Windows) becomes "<bytes>": the output size and both sizes of every action
+# that isn't a removal. Removals keep their (uncompressed, deterministic) part
+# sizes. The test applies the same rewrite, and checks the blanked counts as
+# invariants instead (output smaller than input, rewritten parts smaller).
+if ! command -v jq >/dev/null; then
+    echo "error: the optimize goldens need jq" >&2
+    exit 1
+fi
+OPTIMIZE_FIXTURES=(minimal notes_and_masters bloat_deck crop_deck optimize_deck)
+
+for fixture in "${OPTIMIZE_FIXTURES[@]}"; do
+    outfile="$GOLDEN/${fixture}.optimize.json"
+    "$BIN" optimize --dry-run --json "$FIXTURES/${fixture}.pptx" | jq '
+        .input = "<path>"
+        | .output_bytes = "<bytes>"
+        | .passes[].actions[] |= (
+            if .kind == "removed" then . else .bytes_before = "<bytes>" | .bytes_after = "<bytes>" end)
+    ' > "$outfile"
+    echo "wrote $outfile"
 done

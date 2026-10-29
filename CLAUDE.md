@@ -72,7 +72,7 @@ OOXML's native unit is EMU (`914400` per inch; `Emu` / `kEmuPerInch` in `present
 
 Adding a test file means adding `tests/test_<name>.cpp` to the `pptctl_tests` target in `CMakeLists.txt`. Fixtures live in `tests/fixtures/`; reach them via the `PPTCTL_FIXTURES_DIR` macro (set by CMake).
 
-Some fixtures are real PowerPoint output (`minimal.pptx`, `three_slides.pptx`); others are synthetic and built by `tests/fixtures/generate_fixtures.py` (e.g. `images_deck.pptx`, `notes_and_masters.pptx`). The generator is dev-only — CMake never runs it — and is invoked via `uv` so the build stays Python-free: `uv run --python 3.12 --with python-pptx tests/fixtures/generate_fixtures.py`. Edit the script and rerun it to change those fixtures; don't hand-edit the binaries.
+Some fixtures are real PowerPoint output (`minimal.pptx`, `three_slides.pptx`); others are synthetic and built by `tests/fixtures/generate_fixtures.py` (e.g. `images_deck.pptx`, `notes_and_masters.pptx`). The generator is dev-only — CMake never runs it — and is invoked via `uv` so the build stays Python-free: `uv run --python 3.12 --with python-pptx==1.0.2 --with pillow==13.0.0 tests/fixtures/generate_fixtures.py`. Edit the script and rerun it to change those fixtures; don't hand-edit the binaries.
 
 ## Conventions
 

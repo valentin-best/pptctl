@@ -263,6 +263,7 @@ add_executable(pptctl_tests
     tests/test_optimize_crop.cpp
     tests/test_optimize_images.cpp
     tests/test_optimize_orphans.cpp
+    tests/test_optimize_golden.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

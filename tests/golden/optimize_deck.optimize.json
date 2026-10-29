@@ -1,0 +1,161 @@
+{
+  "dry_run": true,
+  "input": "<path>",
+  "input_bytes": 80715,
+  "output": null,
+  "output_bytes": "<bytes>",
+  "passes": [
+    {
+      "actions": [
+        {
+          "bytes_after": 0,
+          "bytes_before": 4357,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout1.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 3021,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout10.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 3245,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout11.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4357,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout12.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 2966,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout2.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4440,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout3.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4712,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout4.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 7222,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout5.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 2232,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout6.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4802,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout8.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 4657,
+          "detail": "layout",
+          "kind": "removed",
+          "part": "ppt/slideLayouts/slideLayout9.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 11544,
+          "detail": "master",
+          "kind": "removed",
+          "part": "ppt/slideMasters/slideMaster2.xml"
+        },
+        {
+          "bytes_after": 0,
+          "bytes_before": 7655,
+          "detail": "theme",
+          "kind": "removed",
+          "part": "ppt/theme/theme2.xml"
+        }
+      ],
+      "id": "layouts"
+    },
+    {
+      "actions": [
+        {
+          "bytes_after": 0,
+          "bytes_before": 6000,
+          "detail": "Lato",
+          "kind": "removed",
+          "part": "ppt/fonts/font1.fntdata"
+        }
+      ],
+      "id": "fonts"
+    },
+    {
+      "actions": [
+        {
+          "bytes_after": "<bytes>",
+          "bytes_before": "<bytes>",
+          "detail": "800x600 -> 408x600",
+          "kind": "cropped",
+          "part": "ppt/media/image3.jpg"
+        }
+      ],
+      "id": "crop"
+    },
+    {
+      "actions": [
+        {
+          "bytes_after": "<bytes>",
+          "bytes_before": "<bytes>",
+          "detail": "1200x900 -> 384x288",
+          "kind": "downsampled",
+          "part": "ppt/media/image1.jpg"
+        },
+        {
+          "bytes_after": "<bytes>",
+          "bytes_before": "<bytes>",
+          "detail": "800x600 -> 192x144",
+          "kind": "downsampled",
+          "part": "ppt/media/image2.png"
+        }
+      ],
+      "id": "images"
+    },
+    {
+      "actions": [
+        {
+          "bytes_after": 0,
+          "bytes_before": 134,
+          "detail": "",
+          "kind": "removed",
+          "part": "ppt/media/orphan.png"
+        }
+      ],
+      "id": "orphans"
+    }
+  ],
+  "schema_version": 1
+}
