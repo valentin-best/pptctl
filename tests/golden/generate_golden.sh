@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate all golden files (extract + lint + diff + optimize) from a built pptctl binary.
+# Regenerate all golden files (extract + lint + diff + optimize + merge) from a built pptctl binary.
 # Usage: ./tests/golden/generate_golden.sh <path-to-pptctl-binary>
 # Example: ./tests/golden/generate_golden.sh ./build/macos-release/pptctl
 set -euo pipefail
@@ -9,7 +9,7 @@ if [[ $# -ne 1 ]]; then
     exit 1
 fi
 
-BIN="$1"
+BIN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"  # absolute: the merge goldens cd
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FIXTURES="$SCRIPT_DIR/../fixtures"
 GOLDEN="$SCRIPT_DIR"
@@ -108,4 +108,32 @@ for fixture in "${OPTIMIZE_FIXTURES[@]}"; do
             if .kind == "removed" then . else .bytes_before = "<bytes>" | .bytes_after = "<bytes>" end)
     ' > "$outfile"
     echo "wrote $outfile"
+done
+
+# Merge goldens (#140): per case, merge/<case>.merge.json (the `merge --json`
+# report: input paths as file names, the output path and its zlib-dependent
+# size as placeholders) and merge/<case>.parts.txt (each output part's
+# uncompressed size and name, in ZIP order). Run from the fixtures directory
+# so the inputs are named by file name alone.
+MERGE_CASES=("a_b:merge_a merge_b"
+             "a_c:merge_a merge_c"
+             "a_b_c:merge_a merge_b merge_c"
+             "a_b_c_theme2:merge_a merge_b merge_c:--theme=2")
+mkdir -p "$GOLDEN/merge"
+merge_tmp="$(mktemp -d)"
+trap 'rm -rf "$merge_tmp"' EXIT
+
+for spec in "${MERGE_CASES[@]}"; do
+    IFS=: read -r name decks flags <<< "$spec"
+    inputs=()
+    for deck in $decks; do
+        inputs+=("${deck}.pptx")
+    done
+    out="$merge_tmp/${name}.pptx"
+    # shellcheck disable=SC2086 # $flags is empty or one flag
+    (cd "$FIXTURES" && "$BIN" merge "${inputs[@]}" $flags -o "$out" --json) |
+        jq '.output = "<path>" | .output_bytes = "<bytes>"' > "$GOLDEN/merge/${name}.merge.json"
+    unzip -l "$out" | awk 'NF >= 4 && $1 ~ /^[0-9]+$/ { print $1, $4 }' \
+        > "$GOLDEN/merge/${name}.parts.txt"
+    echo "wrote $GOLDEN/merge/${name}.merge.json, ${name}.parts.txt"
 done

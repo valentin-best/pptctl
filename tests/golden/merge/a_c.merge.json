@@ -1,0 +1,42 @@
+{
+  "dry_run": false,
+  "inputs": [
+    {
+      "base": true,
+      "bytes": 30592,
+      "masters": {
+        "imported": 0,
+        "reused": 0
+      },
+      "media_deduplicated": {
+        "bytes": 0,
+        "count": 0
+      },
+      "parts_added": 0,
+      "path": "merge_a.pptx",
+      "slides": 3,
+      "warnings": []
+    },
+    {
+      "base": false,
+      "bytes": 29826,
+      "masters": {
+        "imported": 0,
+        "reused": 1
+      },
+      "media_deduplicated": {
+        "bytes": 143,
+        "count": 1
+      },
+      "parts_added": 2,
+      "path": "merge_c.pptx",
+      "slides": 2,
+      "warnings": []
+    }
+  ],
+  "output": "<path>",
+  "output_bytes": "<bytes>",
+  "schema_version": 1,
+  "slides": 5,
+  "theme": null
+}
