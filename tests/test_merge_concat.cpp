@@ -234,14 +234,27 @@ TEST_CASE("merge: imported notes slides share the base's notes master") {
 
 TEST_CASE("merge: a base that relates its notes master without listing it gets it listed") {
     // python-pptx output relates the notes master from presentation.xml but
-    // leaves out p:notesMasterIdLst, and Keynote then refuses the deck.
-    pptctl::Package b;
-    REQUIRE(b.open(fixture("merge_b.pptx")));
-    const auto bytes = b.read_part("ppt/presentation.xml");
-    REQUIRE(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size())
-                .find("notesMasterIdLst") == std::string_view::npos);
+    // leaves out p:notesMasterIdLst, and Keynote then refuses the deck. The
+    // fixtures list it (#152), so rebuild merge_b without the list.
+    ScratchDir dir;
+    const auto unlisted = (dir.path / "unlisted_b.pptx").string();
+    {
+        pptctl::Package b;
+        REQUIRE(b.open(fixture("merge_b.pptx")));
+        const auto bytes = b.read_part("ppt/presentation.xml");
+        std::string xml(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        const std::string list =
+            R"(<p:notesMasterIdLst><p:notesMasterId r:id="rId8"/></p:notesMasterIdLst>)";
+        const auto at = xml.find(list);
+        REQUIRE(at != std::string::npos);
+        xml.erase(at, list.size());
+        const auto* p = reinterpret_cast<const std::byte*>(xml.data());
+        pptctl::PartChanges changes;
+        changes.replaced["ppt/presentation.xml"] = std::vector<std::byte>(p, p + xml.size());
+        REQUIRE(b.write(unlisted, changes));
+    }
 
-    const Merged m({fixture("merge_b.pptx"), fixture("merge_a.pptx")});
+    const Merged m({unlisted, fixture("merge_a.pptx")});
     const auto doc = m.xml("ppt/presentation.xml");
     const auto rid = doc.select_node("//p:notesMasterIdLst/p:notesMasterId")
                          .node()
@@ -249,6 +262,8 @@ TEST_CASE("merge: a base that relates its notes master without listing it gets i
                          .as_string();
     CHECK(std::string_view(rid) == "rId8");  // the base's own relationship, reused
     CHECK(m.pkg.resolve("ppt/presentation.xml", rid) == "ppt/notesMasters/notesMaster1.xml");
+    const auto ds = m.integrity();
+    CHECK_MESSAGE(ds.empty(), messages(ds));
 }
 
 // ── sections ──────────────────────────────────────────────────────────────────

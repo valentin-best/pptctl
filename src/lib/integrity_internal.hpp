@@ -22,8 +22,9 @@ namespace pptctl::detail {
 // One relationship-id use in a part's XML: an attribute in the relationships
 // namespace (Transitional or Strict), e.g. r:embed="rId4".
 struct RelationshipRef {
-    std::string qname;  // attribute name as written, e.g. "r:embed"
-    std::string id;     // its value, e.g. "rId4"
+    std::string qname;    // attribute name as written, e.g. "r:embed"
+    std::string id;       // its value, e.g. "rId4"
+    std::string element;  // local name of the element carrying it, e.g. "blip"
 };
 
 // Every relationship-id use in `xml`, in document order. The namespace is
@@ -54,6 +55,12 @@ void integrity_orphan_part(const Package& pkg,
                            const PartGraph& graph,
                            const LintOptions& opts,
                            std::vector<Diagnostic>& out);
+
+// #152 — a slide or master the presentation relates but doesn't list.
+void integrity_unlisted_part(const Package& pkg,
+                             const PartGraph& graph,
+                             const LintOptions& opts,
+                             std::vector<Diagnostic>& out);
 
 // #133 — a part that must have one owner, targeted from several.
 void integrity_shared_part(const Package& pkg,

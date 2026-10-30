@@ -21,14 +21,17 @@ std::string fixture(const char* name) {
 
 }  // namespace
 
-TEST_CASE("integrity: registry lists the five rules in run order") {
+TEST_CASE("integrity: registry lists the six rules in run order") {
     std::vector<std::string> ids;
     for (const auto& rule : pptctl::integrity_rules()) {
         ids.push_back(rule.id);
     }
-    CHECK(ids ==
-          std::vector<std::string>{
-              "dangling-rel", "broken-rid", "undeclared-ctype", "orphan-part", "shared-part"});
+    CHECK(ids == std::vector<std::string>{"dangling-rel",
+                                          "broken-rid",
+                                          "undeclared-ctype",
+                                          "orphan-part",
+                                          "shared-part",
+                                          "unlisted-part"});
 }
 
 TEST_CASE("integrity: a clean deck has no findings") {

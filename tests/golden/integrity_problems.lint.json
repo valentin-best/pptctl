@@ -49,6 +49,14 @@
       "slide": null
     },
     {
+      "message": "relationship rId11 (slide) targets \"ppt/slides/slide9.xml\", but ppt/presentation.xml doesn't list it in p:sldIdLst: it is not part of the slide show",
+      "part": "ppt/presentation.xml",
+      "rule": "unlisted-part",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
       "part": null,
       "rule": "ctype",
@@ -68,7 +76,7 @@
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 5,
+    "errors": 6,
     "warnings": 3
   }
 }
