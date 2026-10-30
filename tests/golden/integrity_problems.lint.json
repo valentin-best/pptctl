@@ -1,0 +1,26 @@
+{
+  "diagnostics": [
+    {
+      "message": "part \"ppt/media/extra.webp\" has no declared content type",
+      "part": null,
+      "rule": "ctype",
+      "severity": "warning",
+      "shape": null,
+      "slide": null
+    },
+    {
+      "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
+      "part": null,
+      "rule": "ctype",
+      "severity": "warning",
+      "shape": null,
+      "slide": null
+    }
+  ],
+  "file": "<path>",
+  "schema_version": 1,
+  "summary": {
+    "errors": 0,
+    "warnings": 2
+  }
+}

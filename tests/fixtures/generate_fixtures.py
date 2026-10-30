@@ -722,6 +722,106 @@ def build_lint_clean_deck(path: Path) -> None:
     _normalize_zip(path)
 
 
+def build_integrity_deck(path: Path) -> None:
+    """Base for integrity_problems.pptx: a picture slide with speaker notes,
+    then two chart slides (each chart has its own .rels for the embedded
+    workbook). Ordinary python-pptx output; inject_integrity_problems() breaks
+    the package afterwards."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+
+    s = prs.slides.add_slide(blank)
+    s.shapes.add_picture(
+        io.BytesIO(_png(64, 48, (200, 40, 40))), Inches(1), Inches(1), height=Inches(3)
+    )
+    s.notes_slide.notes_text_frame.text = "Notes owned by slide 1"
+
+    for chart_type, values in ((XL_CHART_TYPE.BAR_CLUSTERED, (1, 2, 3)), (XL_CHART_TYPE.PIE, (3, 2, 1))):
+        s = prs.slides.add_slide(blank)
+        cd = ChartData()
+        cd.categories = ["A", "B", "C"]
+        cd.add_series("S", values)
+        s.shapes.add_chart(chart_type, Inches(1), Inches(1), Inches(6), Inches(4), cd)
+
+    _set_core_props(prs, "pptctl integrity problems fixture")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def _add_rel(rels: bytes, rel_type: str, target: str) -> tuple[bytes, str]:
+    """Append a Relationship with a fresh rId to a .rels part; returns the new
+    bytes and the rId."""
+    text = rels.decode("utf-8")
+    used = [int(m) for m in re.findall(r'Id="rId(\d+)"', text)]
+    rid = f"rId{(max(used) + 1) if used else 1}"
+    text = text.replace(
+        "</Relationships>",
+        f'<Relationship Id="{rid}" Type="{rel_type}" Target="{target}"/></Relationships>',
+    )
+    return text.encode("utf-8"), rid
+
+
+def inject_integrity_problems(path: Path) -> None:
+    """Break the package at the ZIP level, one defect per integrity rule
+    (python-pptx can't write broken packages). Each defect trips only its own
+    rule:
+      dangling-rel      slide 1 rels -> ../media/missing.png (absent)
+      broken-rid        slide 1's picture r:embed -> rId99 (not in its rels)
+      undeclared-ctype  ppt/media/extra.webp, reached from slide 1, no webp
+                        Default; and a stale Override for /ppt/slides/slide99.xml
+      orphan-part       ppt/media/orphan.png, nothing references it
+      shared-part       slide 2 also targets slide 1's notesSlide; both charts
+                        target one chartStyle part"""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+
+    slide1_rels = "ppt/slides/_rels/slide1.xml.rels"
+    parts[slide1_rels], _ = _add_rel(parts[slide1_rels], f"{_REL_NS}/image", "../media/missing.png")
+
+    slide1 = parts["ppt/slides/slide1.xml"].decode("utf-8")
+    slide1 = re.sub(r'r:embed="rId\d+"', 'r:embed="rId99"', slide1, count=1)
+    parts["ppt/slides/slide1.xml"] = slide1.encode("utf-8")
+
+    parts["ppt/media/extra.webp"] = b"RIFF\x00\x00\x00\x00WEBP"
+    parts[slide1_rels], _ = _add_rel(parts[slide1_rels], f"{_REL_NS}/image", "../media/extra.webp")
+
+    parts["ppt/media/orphan.png"] = _png(16, 16, (9, 9, 9))
+
+    notes = re.search(r'Target="../notesSlides/(notesSlide\d+\.xml)"', parts[slide1_rels].decode())
+    assert notes, "slide 1 has no notes slide"
+    slide2_rels = "ppt/slides/_rels/slide2.xml.rels"
+    parts[slide2_rels], _ = _add_rel(
+        parts[slide2_rels], f"{_REL_NS}/notesSlide", f"../notesSlides/{notes.group(1)}"
+    )
+
+    style_rel = "http://schemas.microsoft.com/office/2011/relationships/chartStyle"
+    parts["ppt/charts/style1.xml"] = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        b'<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" '
+        b'id="201"/>'
+    )
+    chart_rels = sorted(n for n in parts if re.fullmatch(r"ppt/charts/_rels/chart\d+\.xml\.rels", n))
+    assert len(chart_rels) == 2, chart_rels
+    for rels in chart_rels:
+        parts[rels], _ = _add_rel(parts[rels], style_rel, "style1.xml")
+
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = ct.replace(
+        "</Types>",
+        '<Override PartName="/ppt/charts/style1.xml" '
+        'ContentType="application/vnd.ms-office.chartstyle+xml"/>'
+        '<Override PartName="/ppt/slides/slide99.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
+        "</Types>",
+    )
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+
+    _write_zip(path, parts)
+
+
 def strip_printer_settings(path: Path) -> None:
     """Remove the printerSettings1.bin stub python-pptx's default template
     carries: the part, its relationship from presentation.xml, and its
@@ -936,6 +1036,7 @@ _FIXTURES: list[tuple[str, list[object]]] = [
         for v in _DIFF_VARIANTS
     ],
     ("charts_deck_v2.pptx", [build_charts_deck_v2]),
+    ("integrity_problems.pptx", [build_integrity_deck, inject_integrity_problems]),
 ]
 
 

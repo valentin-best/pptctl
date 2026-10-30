@@ -2,6 +2,7 @@
   "diagnostics": [
     {
       "message": "font \"Nonexistent Sans\" is referenced but not embedded and not a system or Office font",
+      "part": null,
       "rule": "font-risk",
       "severity": "warning",
       "shape": null,
@@ -9,6 +10,7 @@
     },
     {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
+      "part": null,
       "rule": "ctype",
       "severity": "warning",
       "shape": null,
@@ -16,6 +18,7 @@
     },
     {
       "message": "shape \"TextBox 1\" extends 2.00 in past the right edge",
+      "part": null,
       "rule": "overflow",
       "severity": "warning",
       "shape": "TextBox 1",
@@ -23,6 +26,7 @@
     },
     {
       "message": "shape \"TextBox 1\" has text at 8.0pt (below 12pt minimum)",
+      "part": null,
       "rule": "tiny-text",
       "severity": "warning",
       "shape": "TextBox 1",
@@ -30,6 +34,7 @@
     },
     {
       "message": "picture \"Picture 1\" has no alt text",
+      "part": null,
       "rule": "alt-text",
       "severity": "warning",
       "shape": "Picture 1",
@@ -37,6 +42,7 @@
     },
     {
       "message": "placeholder \"Title 1\" (title) is empty",
+      "part": null,
       "rule": "empty-ph",
       "severity": "warning",
       "shape": "Title 1",
@@ -44,6 +50,7 @@
     },
     {
       "message": "picture \"Picture 1\" is 200x150 px shown at 0.5x0.4 in (400 DPI effective, above 300 DPI, 88.1 KiB stored)",
+      "part": null,
       "rule": "img-bloat",
       "severity": "warning",
       "shape": "Picture 1",

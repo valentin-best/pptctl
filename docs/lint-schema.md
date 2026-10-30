@@ -41,9 +41,10 @@ byte-for-byte reproducible for a given deck and `pptctl` version.
 | Field | Type | Description |
 |---|---|---|
 | `rule` | `string` | Stable rule id (see below). |
-| `severity` | `"warning"` \| `"error"` | Severity. Today every rule emits `warning`. |
-| `slide` | `integer` \| `null` | 1-based slide index, or `null` for a deck-level finding (fonts, content types). |
+| `severity` | `"warning"` \| `"error"` | Severity. Content rules emit `warning`; package-integrity rules may emit `error`. |
+| `slide` | `integer` \| `null` | 1-based slide index, or `null` for a deck-level finding (fonts, content types, most integrity findings). |
 | `shape` | `string` \| `null` | Name of the shape the finding is attached to (`p:cNvPr@name`), or `null` when the finding is not shape-specific. |
+| `part` | `string` \| `null` | Package part the finding is about (e.g. `ppt/slides/_rels/slide3.xml.rels`), or `null`. Set by the package-integrity rules. Added in v0.6.0 without a version bump (additive). |
 | `message` | `string` | Human-readable description. Wording may change between releases; key off `rule`, not `message`. |
 
 ### Rule ids
@@ -57,6 +58,26 @@ byte-for-byte reproducible for a given deck and `pptctl` version.
 | `empty-ph` | A content placeholder contains no text. |
 | `ctype` | A part has a suspect content type, or none declared at all. |
 | `img-bloat` | An image is stored at far higher resolution than it is displayed (default: above 300 DPI effective and at least 64 KiB stored; `--max-image-dpi`, `--min-image-bytes`). |
+
+#### Package-integrity rules
+
+These check the package itself (parts, relationships, content types), not
+slide content. `--only integrity` selects all of them; it is how `merge`
+output and decks written by other tools are verified.
+
+| `rule` | Meaning |
+|---|---|
+| `dangling-rel` | An internal relationship targets a part that doesn't exist. |
+| `broken-rid` | An `r:embed` / `r:id` / `r:link` names a relationship id the part's `.rels` doesn't define. |
+| `undeclared-ctype` | A part has neither a `Default` nor an `Override` in `[Content_Types].xml`. |
+| `orphan-part` | No relationship reaches a part. |
+| `shared-part` | A part that must have a single owner (notes, comments, tags, charts and their style parts) is targeted from several. |
+
+### Selecting rules
+
+`--only` restricts the run to the given rule ids and group aliases
+(comma-separated or repeated; `integrity` is the only group). Unselected
+rules produce no diagnostics. An unknown id is a usage error.
 
 ---
 
@@ -76,7 +97,7 @@ Exit codes are the same with and without `--json`.
 | Code | Meaning |
 |---|---|
 | `0` | Deck was read. Without `--strict`, this is returned even when diagnostics were emitted. |
-| `1` | The file could not be opened or is not a valid `.pptx`. Nothing is written to stdout. |
+| `1` | The file could not be opened as a ZIP (nothing is written to stdout), or its `presentation.xml` could not be loaded. In the second case the integrity rules have still run and, when any is selected, their report is written to stdout; the content rules are skipped. With only integrity rules selected (`--only integrity`), `presentation.xml` is never loaded. |
 | `2` | `--strict` was given and at least one diagnostic was emitted. |
 
 ---

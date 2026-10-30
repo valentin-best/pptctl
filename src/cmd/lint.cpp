@@ -10,8 +10,10 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <pptctl/image.hpp>
+#include <pptctl/integrity.hpp>
 #include <pptctl/lint.hpp>
 #include <pptctl/package.hpp>
+#include <pptctl/part_graph.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/print.hpp>
 #include <pptctl/slide.hpp>
@@ -670,6 +672,36 @@ std::vector<RegisteredRule> make_rules() {
             {"empty-ph", rule_empty_ph}};
 }
 
+// ── rule selection (--only) ───────────────────────────────────────────────────
+
+// Selects every integrity rule.
+constexpr std::string_view kIntegrityGroup = "integrity";
+
+bool is_integrity_rule(std::string_view id) {
+    const auto& rules = integrity_rules();
+    return std::any_of(rules.begin(), rules.end(), [&](const auto& r) { return r.id == id; });
+}
+
+bool selected(const LintOptions& opts, std::string_view id) {
+    if (opts.only.empty()) {
+        return true;
+    }
+    return std::any_of(opts.only.begin(), opts.only.end(), [&](const std::string& s) {
+        return s == id || (s == kIntegrityGroup && is_integrity_rule(id));
+    });
+}
+
+// True when a rule that reads slide or deck content (everything but the
+// integrity rules) is selected, i.e. when presentation.xml must be loaded.
+bool content_rules_selected(const LintOptions& opts) {
+    if (opts.only.empty()) {
+        return true;
+    }
+    return std::any_of(opts.only.begin(), opts.only.end(), [](const std::string& s) {
+        return s != kIntegrityGroup && !is_integrity_rule(s);
+    });
+}
+
 // ── output ────────────────────────────────────────────────────────────────────
 
 std::string_view severity_label(Severity s) noexcept {
@@ -701,12 +733,17 @@ std::string plural(std::size_t n, std::string_view noun) {
     return std::format("{} {}{}", n, noun, n == 1 ? "" : "s");
 }
 
-// Compiler-style `file:slide: severity[rule]: message`, deck-level lines
-// without the slide field, then a one-line summary.
+// Compiler-style `file:slide: severity[rule]: message`; a finding about a part
+// is located `file:part:` instead, and other deck-level lines carry neither.
+// Then a one-line summary.
 void emit_human(std::ostream& os, const std::string& path, const std::vector<Diagnostic>& sorted) {
     for (const auto& d : sorted) {
-        const std::string loc =
-            d.slide_index == 0 ? path : std::format("{}:{}", path, d.slide_index);
+        std::string loc = path;
+        if (!d.part.empty()) {
+            loc = std::format("{}:{}", path, d.part);
+        } else if (d.slide_index != 0) {
+            loc = std::format("{}:{}", path, d.slide_index);
+        }
         println_to(os, "{}: {}[{}]: {}", loc, severity_label(d.severity), d.rule_id, d.message);
     }
     if (sorted.empty()) {
@@ -736,6 +773,7 @@ void emit_json(std::ostream& os, const std::string& path, const std::vector<Diag
         j["severity"] = severity_label(d.severity);
         j["slide"] = d.slide_index == 0 ? nlohmann::json(nullptr) : nlohmann::json(d.slide_index);
         j["shape"] = d.shape_name.empty() ? nlohmann::json(nullptr) : nlohmann::json(d.shape_name);
+        j["part"] = d.part.empty() ? nlohmann::json(nullptr) : nlohmann::json(d.part);
         j["message"] = d.message;
         diags.push_back(std::move(j));
     }
@@ -746,6 +784,20 @@ void emit_json(std::ostream& os, const std::string& path, const std::vector<Diag
 }
 
 }  // namespace
+
+// Every value --only accepts: each rule id, then the group aliases.
+std::vector<std::string> lint_selectors() {
+    std::vector<std::string> out;
+    for (const auto& rule : make_rules()) {
+        out.push_back(rule.id);
+    }
+    out.insert(out.end(), {"font-risk", "ctype", "img-bloat"});
+    for (const auto& rule : integrity_rules()) {
+        out.push_back(rule.id);
+    }
+    out.emplace_back(kIntegrityGroup);
+    return out;
+}
 
 // Every literal typeface referenced by the slide's runs (latin/ea/cs), recursing
 // into groups. Theme-font references ("+mn-lt", …) are excluded.
@@ -875,15 +927,34 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
         eprintln("error: cannot open '{}'", path);
         return 1;
     }
+
+    // Integrity rules read only the package, so they run first and still
+    // report on a deck whose presentation.xml won't load.
+    std::vector<Diagnostic> diagnostics;
+    const PartGraph graph = PartGraph::build(pkg);
+    for (const auto& rule : integrity_rules()) {
+        if (selected(opts, rule.id)) {
+            rule.fn(pkg, graph, opts, diagnostics);
+        }
+    }
+    if (!content_rules_selected(opts)) {
+        return report(path, std::move(diagnostics), opts, os);
+    }
+
     Presentation pres(pkg);
     if (!pres.load()) {
         eprintln("error: '{}' is not a valid .pptx file", path);
+        if (std::any_of(integrity_rules().begin(), integrity_rules().end(), [&](const auto& r) {
+                return selected(opts, r.id);
+            })) {
+            static_cast<void>(report(path, std::move(diagnostics), opts, os));
+        }
         return 1;
     }
 
-    const auto rules = make_rules();
+    std::vector<RegisteredRule> rules = make_rules();
+    std::erase_if(rules, [&](const RegisteredRule& r) { return !selected(opts, r.id); });
     const CanvasSize canvas = pres.canvas();
-    std::vector<Diagnostic> diagnostics;
 
     // Media parts are shared across slides (a logo on every slide is one part),
     // so header probes are cached by part name and each part is read once.
@@ -914,8 +985,10 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
         for (const auto& rule : rules) {
             rule.fn(slide, canvas, opts, diagnostics);
         }
-        const auto bloat = check_img_bloat(slide, probe, opts);
-        diagnostics.insert(diagnostics.end(), bloat.begin(), bloat.end());
+        if (selected(opts, "img-bloat")) {
+            const auto bloat = check_img_bloat(slide, probe, opts);
+            diagnostics.insert(diagnostics.end(), bloat.begin(), bloat.end());
+        }
         const auto slide_fonts = slide_referenced_fonts(slide);
         referenced_fonts.insert(slide_fonts.begin(), slide_fonts.end());
     }
@@ -927,16 +1000,20 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
             referenced_fonts.insert(tf);
         }
     }
-    const auto font_risks =
-        check_font_risk(referenced_fonts, pres.embedded_fonts(), opts.font_target);
-    diagnostics.insert(diagnostics.end(), font_risks.begin(), font_risks.end());
-
-    std::vector<std::pair<std::string, std::string>> part_ctypes;
-    for (const auto& p : pkg.part_names()) {
-        part_ctypes.emplace_back(p, pkg.content_type(p));
+    if (selected(opts, "font-risk")) {
+        const auto font_risks =
+            check_font_risk(referenced_fonts, pres.embedded_fonts(), opts.font_target);
+        diagnostics.insert(diagnostics.end(), font_risks.begin(), font_risks.end());
     }
-    const auto ctype_diags = check_ctype(part_ctypes);
-    diagnostics.insert(diagnostics.end(), ctype_diags.begin(), ctype_diags.end());
+
+    if (selected(opts, "ctype")) {
+        std::vector<std::pair<std::string, std::string>> part_ctypes;
+        for (const auto& p : pkg.part_names()) {
+            part_ctypes.emplace_back(p, pkg.content_type(p));
+        }
+        const auto ctype_diags = check_ctype(part_ctypes);
+        diagnostics.insert(diagnostics.end(), ctype_diags.begin(), ctype_diags.end());
+    }
 
     return report(path, std::move(diagnostics), opts, os);
 }

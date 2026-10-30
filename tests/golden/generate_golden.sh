@@ -31,7 +31,7 @@ done
 
 # Lint goldens: one <fixture>.lint.json per fixture, path normalized the same way.
 LINT_FIXTURES=(minimal three_slides images_deck notes_and_masters tables_deck charts_deck
-               bloat_deck lint_problems lint_clean)
+               bloat_deck lint_problems lint_clean integrity_problems)
 
 for fixture in "${LINT_FIXTURES[@]}"; do
     outfile="$GOLDEN/${fixture}.lint.json"
