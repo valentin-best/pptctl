@@ -162,6 +162,16 @@ bool write_entry(void* writer, mz_zip_file info, std::span<const std::byte> byte
            MZ_OK;
 }
 
+// 1980-01-01 00:00 local time, the earliest DOS date: what Office on Windows
+// stamps every entry with.
+std::time_t dos_epoch() {
+    std::tm tm{};
+    tm.tm_year = 80;
+    tm.tm_mday = 1;
+    tm.tm_isdst = -1;
+    return std::mktime(&tm);
+}
+
 bool same_file(const std::filesystem::path& a, const std::filesystem::path& b) {
     std::error_code ec;
     if (std::filesystem::equivalent(a, b, ec)) {
@@ -602,12 +612,18 @@ bool copy_entries(void* reader, void* writer, const PartChanges& changes) {
         }
     }
 
+    // New parts take the date of the archive's first entry, so the same
+    // inputs always produce the same bytes (std::time would not).
+    std::optional<std::time_t> first_date;
     int err = mz_zip_reader_goto_first_entry(reader);
     while (err == MZ_OK) {
         mz_zip_file* info = nullptr;
         if (mz_zip_reader_entry_get_info(reader, &info) != MZ_OK || info == nullptr ||
             info->filename == nullptr) {
             return false;
+        }
+        if (!first_date) {
+            first_date = info->modified_date;
         }
         const std::string name(info->filename);
         if (changes.removed.contains(name)) {
@@ -632,7 +648,7 @@ bool copy_entries(void* reader, void* writer, const PartChanges& changes) {
         info.filename = name.c_str();
         info.filename_size = static_cast<uint16_t>(name.size());
         info.version_madeby = 20;  // MS-DOS host, spec 2.0: what PowerPoint itself writes
-        info.modified_date = std::time(nullptr);
+        info.modified_date = first_date ? *first_date : dos_epoch();
         if (!write_entry(writer, info, changes.replaced.at(name))) {
             return false;
         }

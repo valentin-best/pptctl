@@ -145,7 +145,8 @@ class Package {
     // Write the package to `out_path`, applying `changes`. Untouched entries
     // are copied raw (compressed bytes, no inflate/deflate) in their original
     // order; replaced parts keep their position and entry metadata; new parts
-    // are appended in name order. The output is written to a temp file next to
+    // are appended in name order, dated like the first entry, so the same
+    // inputs always produce byte-identical output. The output is written to a temp file next to
     // the target and renamed over it on success, so a failure never leaves a
     // half-written .pptx. The target's directory must already exist. A
     // symlinked target is followed: the file it points to is replaced.
