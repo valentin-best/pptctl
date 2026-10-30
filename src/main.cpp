@@ -7,6 +7,7 @@
 #include <ostream>
 #include <pptctl/diff.hpp>
 #include <pptctl/lint.hpp>
+#include <pptctl/merge.hpp>
 #include <pptctl/optimize.hpp>
 #include <pptctl/print.hpp>
 #include <string>
@@ -28,6 +29,9 @@ int diff(const std::string& a,
          const DiffOptions& opts,
          const DiffOutputOptions& out);
 int optimize(const std::string& in, const OptimizeOptions& opts, const OptimizeOutputOptions& out);
+int merge(const std::vector<std::string>& inputs,
+          const MergeOptions& opts,
+          const MergeOutputOptions& out);
 
 }  // namespace pptctl::cmd
 
@@ -220,12 +224,30 @@ int main(int argc, char** argv) {
         std::exit(pptctl::cmd::diff(diff_a, diff_b, diff_opts, diff_out));
     });
 
+    // --- merge ---------------------------------------------------------------
+    std::vector<std::string> merge_inputs;
+    pptctl::MergeOptions merge_opts;
+    pptctl::MergeOutputOptions merge_out;
+    auto* merge_cmd = app.add_subcommand("merge", "Merge two or more .pptx files into one");
+    merge_cmd->add_option("files", merge_inputs, "paths to the .pptx files, in slide order")
+        ->required()
+        ->expected(2, CLI::detail::expected_max_vector_size)
+        ->check(CLI::ExistingFile);
+    merge_cmd->add_option("-o,--output", merge_out.output, "path to write the result");
+    merge_cmd
+        ->add_option("--theme",
+                     merge_opts.theme,
+                     "restyle every slide onto deck N's masters and layouts (1-based); by "
+                     "default each deck keeps its own formatting")
+        ->check(CLI::PositiveNumber);
+    merge_cmd->add_flag("--dry-run", merge_out.dry_run, "report what would change; write nothing");
+    merge_cmd->add_flag("--json", merge_out.json, "emit machine-readable JSON");
+    merge_cmd->callback(
+        [&]() { std::exit(pptctl::cmd::merge(merge_inputs, merge_opts, merge_out)); });
+
     // --- placeholders for future subcommands ---------------------------------
     // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
     // shows the full planned surface area to users.
-    app.add_subcommand("merge", "Merge multiple .pptx files (not yet implemented)")->callback([] {
-        std::exit(not_implemented("merge"));
-    });
     app.add_subcommand("fill", "Template-fill a .pptx from JSON data (not yet implemented)")
         ->callback([] { std::exit(not_implemented("fill")); });
 
