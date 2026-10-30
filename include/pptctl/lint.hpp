@@ -59,8 +59,9 @@ struct LintOptions {
     FontTarget font_target = FontTarget::All;  // font-risk: --target
 
     // Rule selection (CLI: --only): rule ids and group aliases ("integrity").
-    // Empty runs every rule.
-    std::vector<std::string> only;
+    // Empty runs every rule. Default-initialized so designated initializers
+    // that omit it stay clean under gcc's -Wmissing-field-initializers.
+    std::vector<std::string> only = {};  // NOLINT(readability-redundant-member-init)
 };
 
 using LintRule = std::function<void(
