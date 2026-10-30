@@ -350,3 +350,31 @@ TEST_CASE("merge: docProps/app.xml counts the merged slides and notes") {
     CHECK(doc.child("Properties").child("Slides").text().as_int() == 7);
     CHECK(doc.child("Properties").child("Notes").text().as_int() == 2);
 }
+
+TEST_CASE("merge: docProps/app.xml takes the newest input's AppVersion") {
+    // An Office 2007 base (AppVersion 12) would make PowerPoint open the
+    // merged deck in compatibility mode, redrawing the newer decks' content.
+    ScratchDir dir;
+    const auto old_base = (dir.path / "office2007.pptx").string();
+    {
+        pptctl::Package a;
+        REQUIRE(a.open(fixture("merge_a.pptx")));
+        const auto bytes = a.read_part("docProps/app.xml");
+        std::string xml(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        const std::string from = "<AppVersion>14.0000</AppVersion>";
+        const auto at = xml.find(from);
+        REQUIRE(at != std::string::npos);
+        xml.replace(at, from.size(), "<AppVersion>12.0000</AppVersion>");
+        const auto* p = reinterpret_cast<const std::byte*>(xml.data());
+        pptctl::PartChanges changes;
+        changes.replaced["docProps/app.xml"] = std::vector<std::byte>(p, p + xml.size());
+        REQUIRE(a.write(old_base, changes));
+    }
+    const auto version = [](const Merged& m) {
+        return std::string(
+            m.xml("docProps/app.xml").child("Properties").child("AppVersion").text().as_string());
+    };
+    CHECK(version(Merged({old_base, fixture("merge_b.pptx")})) == "14.0000");
+    // A base newer than every input keeps its own.
+    CHECK(version(Merged({fixture("merge_b.pptx"), old_base})) == "14.0000");
+}
