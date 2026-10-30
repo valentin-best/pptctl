@@ -2,7 +2,7 @@
 
 > Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
-**Status:** early development, v0.5.0. `info`, `extract`, `lint`, `diff` and `optimize` work; `merge` is next.
+**Status:** early development, v0.5.0. `info`, `extract`, `lint`, `diff` and `optimize` work; `merge` and the package-integrity lint rules are on `main` for v0.6.0.
 
 ```
 $ pptctl info deck.pptx
@@ -44,17 +44,55 @@ Editors and generators — python-pptx, PptxGenJS, agent tools like OfficeCLI �
 
 See [PLAN.md](./PLAN.md) for the long version.
 
-## Planned subcommands
+## Subcommands
 
 | Command | What it does | Status |
 |---|---|---|
 | `info` | Quick metadata: slide count, dimensions, fonts, media | ✅ Implemented |
 | `extract` | Structured JSON/markdown export of slide content | ✅ Implemented |
-| `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat; `--json`, `--strict`, `--only <rules>` | ✅ Implemented |
+| `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat, and package integrity (broken relationships, undeclared parts, orphans, shared or unlisted parts); `--json`, `--strict`, `--only <rules>` | ✅ Implemented |
 | `optimize` | Shrink a deck without changing what it shows: unused layouts/masters, embedded fonts, cropped-out image regions, oversized images, orphan media; `--dry-run`, `--json` | ✅ Implemented |
 | `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented |
-| `merge` | Merge decks while preserving images, themes, and slide masters | Planned |
+| `merge` | Combine decks in order without breaking pictures, charts, notes or comments: each keeps its own theme, or `--theme=N` restyles all onto one; identical media and masters stored once; `--dry-run`, `--json` | ✅ On `main` (v0.6.0) |
 | `fill` | Template-fill from a `.pptx` template + JSON data | Deferred (see [ROADMAP.md](./ROADMAP.md)) |
+
+## `pptctl lint`
+
+Static analysis: finds what will look wrong on screen, or break in another app, before anyone opens the deck. Content rules check what the slides show; package-integrity rules check the file itself.
+
+| Rule | Finds |
+|---|---|
+| `overflow` | A shape that runs off the slide. |
+| `tiny-text` | Text below 12 pt (`--min-font-size`). |
+| `alt-text` | A picture without alt text that isn't marked decorative. |
+| `font-risk` | A font that is neither embedded nor installed with the target platform (`--target all\|windows\|macos`), and what it falls back to. |
+| `empty-ph` | A content placeholder left empty. |
+| `ctype` | A part with a content type renderers choke on (e.g. the printer-settings stub that breaks Keynote). |
+| `img-bloat` | An image stored at far more resolution than it is shown at (`--max-image-dpi`, `--min-image-bytes`). |
+| `dangling-rel` | A relationship to a part that doesn't exist. |
+| `broken-rid` | An `r:embed` / `r:id` / `r:link` naming a relationship id the part doesn't define. |
+| `undeclared-ctype` | A part with no content type in `[Content_Types].xml`. |
+| `orphan-part` | A part nothing references. |
+| `shared-part` | A part that must have one owner (notes, comments, charts, …) referenced from several. |
+| `unlisted-part` | A slide or master the presentation relates but doesn't list: a slide that isn't shown, or a notes master Keynote refuses (python-pptx writes these for any deck with speaker notes). |
+
+```
+$ pptctl lint --only integrity broken.pptx
+broken.pptx:ppt/slides/_rels/slide1.xml.rels: error[dangling-rel]: relationship rId4 (image) targets "ppt/media/missing.png", which does not exist
+broken.pptx:ppt/notesSlides/notesSlide1.xml: error[shared-part]: notesSlide part "ppt/notesSlides/notesSlide1.xml" is shared by ppt/slides/slide1.xml, ppt/slides/slide2.xml; each needs its own copy
+broken.pptx:ppt/presentation.xml: error[unlisted-part]: relationship rId11 (slide) targets "ppt/slides/slide9.xml", but ppt/presentation.xml doesn't list it in p:sldIdLst: it is not part of the slide show
+broken.pptx:ppt/slides/slide1.xml: error[broken-rid]: r:embed="rId99" is not defined in ppt/slides/_rels/slide1.xml.rels
+…
+broken.pptx: 2 warnings, 6 errors
+```
+
+`--only` takes rule ids and the group `integrity` (comma-separated or repeated). `--only integrity` is how to **verify a deck another tool wrote** (python-pptx, PptxGenJS, agent tools like OfficeCLI) before it reaches PowerPoint's repair prompt or Keynote's refusal; it never parses slide content, so it also runs on decks whose `presentation.xml` is broken. `--strict` exits `2` when anything is found, for CI:
+
+```bash
+pptctl lint --strict --only integrity generated.pptx
+```
+
+`--json` emits a versioned report; see [docs/lint-schema.md](./docs/lint-schema.md). Exit codes: `0` read (findings or not), `1` unreadable, `2` findings under `--strict`.
 
 ## `pptctl diff`
 
@@ -150,6 +188,41 @@ What it promises:
 How much it saves depends on what a deck is made of. Over 15 public decks the mean reduction is **42.9 %** (median 43.4 %, from 9.7 % to 90.5 %), but over the 10 university lecture decks among them it is **35.8 %**. Photo-heavy decks with oversized or cropped images shrink the most. What `optimize` leaves alone is often most of what remains in the others: vector metafiles, embedded OLE objects, and screenshots already stored at the size they are shown. `--max-scale 1` (96 DPI) saves more, about 50 % on the same corpus, at the cost of sharpness on high-DPI screens. Full numbers, renderer checks and method: [docs/phase5-optimize-validation.md](./docs/phase5-optimize-validation.md).
 
 Exit codes: `0` when the deck was optimized or measured (even if nothing changed), `1` when the input can't be read, no output was given, or the output can't be written.
+
+## `pptctl merge`
+
+Combines decks into one, slides in input order. Every picture, chart (with its embedded workbook), SmartArt diagram, speaker note, comment and link arrives working: each part a slide uses is copied under a fresh name and every relationship pointing at it is rewritten, which is exactly what naive merges get wrong.
+
+```
+$ pptctl merge intro.pptx results.pptx outro.pptx -o talk.pptx
+merge -> talk.pptx
+  1. intro.pptx: 3 slides (base)
+  2. results.pptx: 2 slides, 21 parts added, 1 master imported
+  3. outro.pptx: 2 slides, 2 parts added, 1 media deduplicated (143 B), 1 master reused
+total: 7 slides, 65.7 KiB
+```
+
+**Formatting.** By default each deck keeps its own look: its slides bring their slide master, layouts and theme. Decks made from the same template don't each bring a copy; an identical master is stored once (`master reused` above). `--theme=N` instead puts every slide on deck N's layouts and drops the other decks' masters and themes, so the result reads as one deck. Each slide goes to the layout of the same type (title, title and content, title only, …), else of the same name, else Title and Content; the report names any slide that needed that last fallback. A slide's own formatting stays; what it inherited from its old layout now comes from deck N's, so expect fonts, colours and placeholder positions to change: that is the point of the option.
+
+**Storage.** A picture, video or audio file identical to one already in the output is stored once (`media deduplicated`). Single-owner parts (notes, charts, workbooks, diagrams, comments) are always copied, one per slide.
+
+**The base deck.** The output is built on the `--theme` deck, or the first: its parts are copied byte for byte, and only `[Content_Types].xml`, `presentation.xml`, its relationships and `docProps/app.xml` are rewritten. Presentation-wide settings come from it too.
+
+| Flag | Meaning |
+|---|---|
+| `-o FILE` / `--dry-run` | Where the result goes; it can't be one of the inputs. `--dry-run` writes nothing but still measures the result. One is required. |
+| `--theme N` | Restyle every slide onto deck N's layouts (1-based). Default: each deck keeps its own. |
+| `--json` | The report as versioned JSON; see [docs/merge-schema.md](./docs/merge-schema.md). |
+
+Also carried over: sections (a deck without any gets one named after its file, when some input has sections), the notes master (imported notes use the base's; the first imported one is used if the base has none), and comment authors (matched by name and initials for classic comments, by id for PowerPoint 365 comments). The same inputs always produce the same bytes, and merging well-formed decks gives a deck that passes `pptctl lint --only integrity` (a defect already in an input, such as a dangling relationship, is copied as is and reported).
+
+Limitations, by design for now:
+
+- **Masters are shared only when byte-identical.** Two copies of a template that differ by a re-save, whitespace or one changed colour are imported separately; `pptctl optimize` then removes the layouts no slide uses.
+- **No resizing.** Slides from a deck with another slide size keep their geometry on the base's canvas, with a warning in the report.
+- **Presentation-wide settings come from the base deck.** Another deck's embedded fonts, custom shows and handout master are not carried over; `pptctl lint` reports text whose font then needs a substitute (`font-risk`).
+
+Exit codes: `0` merged (or measured), `1` when an input can't be read, `--theme` is out of range, `-o` names an input, or the output can't be written. Command-line errors (a missing file, fewer than two inputs) are rejected by the argument parser with a non-zero code.
 
 ## Building
 
