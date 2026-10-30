@@ -2,10 +2,12 @@
 
 #include <filesystem>
 #include <format>
+#include <map>
 #include <pptctl/merge.hpp>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <random>
+#include <set>
 #include <system_error>
 #include <utility>
 
@@ -23,6 +25,8 @@ constexpr std::string_view kNotesMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
 constexpr std::string_view kNotesMasterRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
+constexpr std::string_view kSlideMasterRel =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 constexpr std::string_view kOfficeDocumentRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 
@@ -34,6 +38,17 @@ std::string target_of_type(const Package& pkg, std::string_view source, std::str
         }
     }
     return {};
+}
+
+// The internal targets of the presentation part's relationships of `type`.
+std::vector<std::string> relationship_targets(const Package& pkg, std::string_view type) {
+    std::vector<std::string> out;
+    for (const auto& rel : pkg.relationships(target_of_type(pkg, "", kOfficeDocumentRel))) {
+        if (!rel.external && rel.type == type) {
+            out.push_back(rel.target);
+        }
+    }
+    return out;
 }
 
 // Write `base` with `changes` to a throwaway file and return its size, for a
@@ -103,6 +118,14 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
     std::string imported_notes_master;
     // Media identical to an output part already there is shared, not copied.
     detail::MediaIndex media(target);
+    // So is a slide master identical to one already there, with its closure.
+    detail::MasterIndex masters(packages[base]);
+    struct MasterReuse {
+        std::map<std::string, std::string> parts;   // source part -> output part
+        std::map<std::string, std::string> master;  // source part -> its master
+        std::set<std::string> used;                 // masters a slide reached
+    };
+    std::vector<MasterReuse> reuse(packages.size());
 
     std::vector<detail::PartImporter> importers;
     importers.reserve(packages.size());
@@ -116,11 +139,23 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         }
         const auto& source = packages[i];
         auto& input = report.inputs[i];
+        auto& same_masters = reuse[i];
+        for (const auto& master : relationship_targets(source, kSlideMasterRel)) {
+            for (auto& [from, to] : masters.match(source, master)) {
+                same_masters.master.emplace(from, master);
+                same_masters.parts.emplace(from, std::move(to));
+            }
+        }
         auto& importer = importers.emplace_back(
             source,
             target,
-            [&notes_master, &media, &input, src = &source](
+            [&notes_master, &media, &input, r = &same_masters, src = &source](
                 std::string_view part, std::string_view rel_type) -> std::optional<std::string> {
+                const std::string key(part);
+                if (const auto it = r->parts.find(key); it != r->parts.end()) {
+                    r->used.insert(r->master.at(key));
+                    return it->second;
+                }
                 if (!notes_master.empty() && src->content_type(part) == kNotesMasterType) {
                     return notes_master;
                 }
@@ -135,11 +170,13 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             (void)importer.import(slide);
         }
         input.parts_added = importer.copied().size();
+        input.masters_reused = same_masters.used.size();
         for (const auto& part : importer.copied()) {
             const auto type = source.content_type(part);
             if (type == kSlideMasterType) {
                 ++input.masters_imported;
                 deck.masters.push_back(importer.mapping().at(part));
+                masters.add(source, part, importer.mapping());
             } else if (type == kNotesMasterType && notes_master.empty()) {
                 notes_master = imported_notes_master = importer.mapping().at(part);
             }

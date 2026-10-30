@@ -132,9 +132,12 @@ TEST_CASE("merge: deck 1 is the base; the other decks' slides arrive as added pa
         CHECK_FALSE(input.base);
         CHECK(input.slides == 2);
         CHECK(input.parts_added > 0);
-        CHECK(input.masters_imported == 1);
         CHECK(input.warnings.empty());
     }
+    // b brings its own theme; c is on a's template and reuses a's master.
+    CHECK(report->inputs[1].masters_imported == 1);
+    CHECK(report->inputs[2].masters_imported == 0);
+    CHECK(report->inputs[2].masters_reused == 1);
 }
 
 TEST_CASE("merge: --theme=N makes deck N the base package") {
