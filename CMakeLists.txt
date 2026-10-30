@@ -254,6 +254,7 @@ add_executable(pptctl_tests
     tests/test_package_write.cpp
     tests/test_part_graph.cpp
     tests/test_integrity.cpp
+    tests/test_integrity_dangling_rel.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

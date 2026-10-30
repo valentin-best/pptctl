@@ -1,6 +1,14 @@
 {
   "diagnostics": [
     {
+      "message": "relationship rId4 (image) targets \"ppt/media/missing.png\", which does not exist",
+      "part": "ppt/slides/_rels/slide1.xml.rels",
+      "rule": "dangling-rel",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
       "message": "part \"ppt/media/extra.webp\" has no declared content type",
       "part": null,
       "rule": "ctype",
@@ -20,7 +28,7 @@
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 0,
+    "errors": 1,
     "warnings": 2
   }
 }
