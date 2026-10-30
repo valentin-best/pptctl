@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.5.0) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`). `merge` is being built in Phase 6: it combines decks in input order, each keeping its own masters (pipeline in `src/lib/merge.cpp`, closure import in `merge_import.cpp`, presentation-level parts in `merge_concat.cpp`); identical media and identical slide masters are stored once (`merge_media.cpp`, `merge_masters.cpp`), and `--theme=N` restyles every slide onto deck N's layouts (`merge_theme.cpp`); `fill` is a stub that prints "not yet implemented".
+`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.5.0) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`). `merge` is being built in Phase 6: it combines decks in input order, each keeping its own masters (pipeline in `src/lib/merge.cpp`, closure import in `merge_import.cpp`, presentation-level parts in `merge_concat.cpp`); identical media and identical slide masters are stored once (`merge_media.cpp`, `merge_masters.cpp`), `--theme=N` restyles every slide onto deck N's layouts (`merge_theme.cpp`), and comment authors are carried over (`merge_comments.cpp`); `fill` is a stub that prints "not yet implemented".
 
 ## Project workflow & status
 

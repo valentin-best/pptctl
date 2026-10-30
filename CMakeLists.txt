@@ -224,6 +224,7 @@ add_library(pptctl_lib STATIC
     src/lib/merge_media.cpp
     src/lib/merge_masters.cpp
     src/lib/merge_theme.cpp
+    src/lib/merge_comments.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -292,6 +293,7 @@ add_executable(pptctl_tests
     tests/test_merge_masters.cpp
     tests/test_merge_theme.cpp
     tests/test_merge_golden.cpp
+    tests/test_merge_comments.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

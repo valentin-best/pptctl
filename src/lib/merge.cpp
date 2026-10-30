@@ -26,6 +26,9 @@ constexpr std::string_view kNotesMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
 constexpr std::string_view kNotesMasterRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
+constexpr std::string_view kLegacyCommentsType =
+    "application/vnd.openxmlformats-officedocument.presentationml.comments+xml";
+constexpr std::string_view kModernCommentsType = "application/vnd.ms-powerpoint.comments+xml";
 constexpr std::string_view kSlideLayoutType =
     "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml";
 constexpr std::string_view kSlideLayoutRel =
@@ -138,6 +141,8 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         std::map<std::string, detail::LayoutMatch> layouts;  // --theme: source layout -> placement
     };
     std::vector<Resolved> resolved(packages.size());
+    // Imported comments keep their authors.
+    detail::CommentAuthors comment_authors(target);
 
     std::vector<detail::PartImporter> importers;
     importers.reserve(packages.size());
@@ -203,6 +208,14 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             }
         }
         input.warnings = importer.warnings();
+        std::vector<std::string> comments;
+        for (const auto& part : importer.copied()) {
+            const auto type = source.content_type(part);
+            if (type == kLegacyCommentsType || type == kModernCommentsType) {
+                comments.push_back(importer.mapping().at(part));
+            }
+        }
+        comment_authors.import(source, comments, input.warnings);
         for (std::size_t k = 0; k < slide_parts[i].size(); ++k) {
             const auto layout = target_of_type(source, slide_parts[i][k], kSlideLayoutRel);
             const auto it = res.layouts.find(layout);
@@ -218,6 +231,7 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         deck.imported = &importer.mapping();
     }
 
+    comment_authors.finish();
     detail::concatenate(target, decks, imported_notes_master);
     for (std::size_t i = 0; i < decks.size(); ++i) {
         auto& input = report.inputs[i];

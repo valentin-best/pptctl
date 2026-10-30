@@ -25,6 +25,8 @@ constexpr std::string_view kNotesSlideType =
 // The PowerPoint 2010 extension that holds p14:sectionLst.
 constexpr std::string_view kSectionExtUri = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
 constexpr std::string_view kP14Ns = "http://schemas.microsoft.com/office/powerpoint/2010/main";
+constexpr std::string_view kModernCommentsRel =
+    "http://schemas.microsoft.com/office/2018/10/relationships/comments";
 
 // Slide ids live in [256, 2^31); master and layout ids share [2^31, 2^32).
 constexpr std::uint32_t kFirstSlideId = 256;
@@ -201,11 +203,55 @@ pugi::xml_node insert_after_any(pugi::xml_node pres,
     return anchor ? pres.insert_child_after(name, anchor) : pres.prepend_child(name);
 }
 
+// Modern comments anchor to their slide by its sldId (pc:sldMk@sldId): point
+// the comments imported with `slide` at the id it has in the output.
+void renumber_comment_anchors(MergeTarget& target,
+                              const Package& source,
+                              const std::map<std::string, std::string>& imported,
+                              const SourceSlide& slide,
+                              std::uint32_t new_id) {
+    if (new_id == slide.id) {
+        return;
+    }
+    for (const auto& rel : source.relationships(slide.part)) {
+        const auto it = imported.find(rel.target);
+        if (rel.external || rel.type != kModernCommentsRel || it == imported.end()) {
+            continue;
+        }
+        pugi::xml_document doc;
+        if (!load_xml(doc, target.read_part(it->second))) {
+            continue;
+        }
+        bool changed = false;
+        for (const auto& found : doc.select_nodes("//*[local-name()='sldMk']")) {
+            auto id = found.node().attribute("sldId");
+            if (id && id.as_uint() == slide.id) {
+                id.set_value(new_id);
+                changed = true;
+            }
+        }
+        if (changed) {
+            target.replace_part(it->second, save_xml(doc));
+        }
+    }
+}
+
 std::string inches(std::int64_t emu) {
     return std::format("{:.2f}", static_cast<double>(emu) / 914400.0);
 }
 
 }  // namespace
+
+std::string add_presentation_relationship(MergeTarget& target,
+                                          std::string_view type,
+                                          const std::string& target_part) {
+    const auto pres_part = presentation_part(target.base());
+    const auto rels_part = rels_part_for(pres_part);
+    PresentationRels rels(target.read_part(rels_part));
+    auto rid = rels.add(type, pres_part, target_part);
+    target.replace_part(rels_part, rels.bytes());
+    return rid;
+}
 
 void concatenate(MergeTarget& target,
                  std::span<ConcatDeck> decks,
@@ -258,6 +304,7 @@ void concatenate(MergeTarget& target,
                 }
                 id = next_slide_id++;
                 rid = rels.add(rel_type("slide"), pres_part, it->second);
+                renumber_comment_anchors(target, *deck.source, *deck.imported, slide, id);
             }
             auto node = list.append_child("p:sldId");
             node.append_attribute("id") = id;
