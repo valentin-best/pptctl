@@ -1,13 +1,10 @@
 // integrity_broken_rid.cpp — the "broken-rid" rule: r:embed / r:id / r:link
 // not defined in the part's .rels (#130).
 
-#include <algorithm>
-#include <array>
 #include <cstddef>
 #include <format>
 #include <map>
 #include <pptctl/presentation.hpp>
-#include <pugixml.hpp>
 #include <set>
 #include <string>
 #include <string_view>
@@ -18,54 +15,6 @@
 namespace pptctl::detail {
 
 namespace {
-
-// The relationships namespace, Transitional and Strict.
-constexpr std::array<std::string_view, 2> kRelNamespaces = {
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-    "http://purl.oclc.org/ooxml/officeDocument/relationships"};
-
-bool is_relationships_ns(std::string_view uri) {
-    return std::find(kRelNamespaces.begin(), kRelNamespaces.end(), uri) != kRelNamespaces.end();
-}
-
-// The URI `prefix` is bound to at `el`: the nearest xmlns:prefix on it or an
-// ancestor. pugixml doesn't track namespaces, so this resolves them by hand.
-std::string_view namespace_of(pugi::xml_node el, std::string_view prefix) {
-    const std::string decl = "xmlns:" + std::string(prefix);
-    for (auto n = el; n; n = n.parent()) {
-        if (const auto a = n.attribute(decl.c_str())) {
-            return a.value();
-        }
-    }
-    return {};
-}
-
-// Collects every relationship-namespace attribute with a non-empty value.
-struct RefCollector : pugi::xml_tree_walker {
-    struct Ref {
-        std::string qname;
-        std::string id;
-    };
-    std::vector<Ref> refs;
-
-    bool for_each(pugi::xml_node& node) override {
-        if (node.type() != pugi::node_element) {
-            return true;
-        }
-        for (const auto& a : node.attributes()) {
-            const std::string_view name = a.name();
-            const auto colon = name.find(':');
-            if (colon == std::string_view::npos || name.starts_with("xmlns:") ||
-                *a.value() == '\0') {
-                continue;
-            }
-            if (is_relationships_ns(namespace_of(node, name.substr(0, colon)))) {
-                refs.push_back({std::string(name), a.value()});
-            }
-        }
-        return true;
-    }
-};
 
 bool is_xml_content_type(std::string_view ct) {
     return ct.ends_with("+xml") || ct.ends_with("/xml");
@@ -87,7 +36,7 @@ std::map<std::string, std::size_t, std::less<>> slide_numbers(const Package& pkg
 }  // namespace
 
 // Every reachable XML part under ppt/, one parsed at a time. Unreachable parts
-// are left to orphan-part; parts that don't parse are skipped.
+// are left to orphan-part; parts that don't parse have no references.
 void integrity_broken_rid(const Package& pkg,
                           const PartGraph& graph,
                           const LintOptions& /*opts*/,
@@ -97,15 +46,8 @@ void integrity_broken_rid(const Package& pkg,
         if (!part.starts_with("ppt/") || !is_xml_content_type(pkg.content_type(part))) {
             continue;
         }
-        const auto bytes = pkg.read_part(part);
-        pugi::xml_document doc;
-        if (!doc.load_buffer(
-                bytes.data(), bytes.size(), pugi::parse_default, pugi::encoding_utf8)) {
-            continue;
-        }
-        RefCollector collector;
-        doc.traverse(collector);
-        if (collector.refs.empty()) {
+        const auto refs = relationship_refs(pkg.read_part(part));
+        if (refs.empty()) {
             continue;
         }
         std::set<std::string, std::less<>> defined;
@@ -113,7 +55,7 @@ void integrity_broken_rid(const Package& pkg,
             defined.insert(rel.id);
         }
         const auto slide = slides.find(part);
-        for (const auto& ref : collector.refs) {
+        for (const auto& ref : refs) {
             if (defined.contains(ref.id)) {
                 continue;
             }

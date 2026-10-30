@@ -33,6 +33,22 @@
       "slide": null
     },
     {
+      "message": "chartStyle part \"ppt/charts/style1.xml\" is shared by ppt/charts/chart1.xml, ppt/charts/chart2.xml; each needs its own copy",
+      "part": "ppt/charts/style1.xml",
+      "rule": "shared-part",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
+      "message": "notesSlide part \"ppt/notesSlides/notesSlide1.xml\" is shared by ppt/slides/slide1.xml, ppt/slides/slide2.xml; each needs its own copy",
+      "part": "ppt/notesSlides/notesSlide1.xml",
+      "rule": "shared-part",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
       "part": null,
       "rule": "ctype",
@@ -52,7 +68,7 @@
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 3,
+    "errors": 5,
     "warnings": 3
   }
 }

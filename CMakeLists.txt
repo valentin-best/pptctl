@@ -258,6 +258,7 @@ add_executable(pptctl_tests
     tests/test_integrity_broken_rid.cpp
     tests/test_integrity_undeclared_ctype.cpp
     tests/test_integrity_orphan_part.cpp
+    tests/test_integrity_shared_part.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

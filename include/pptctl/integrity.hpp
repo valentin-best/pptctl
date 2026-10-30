@@ -11,7 +11,7 @@
 //   broken-rid        — an r:embed / r:id / r:link names an rId the part's .rels lacks (#130)
 //   undeclared-ctype  — a part has no content type in [Content_Types].xml (#131)
 //   orphan-part       — no relationship reaches a part (#132)
-//   shared-part       — a part that must have one owner is targeted from several (#133)
+//   shared-part       — a part that must have one owner is referenced by several (#133)
 // Every finding carries the part it is about in Diagnostic::part.
 
 #pragma once
@@ -21,6 +21,7 @@
 #include <pptctl/package.hpp>
 #include <pptctl/part_graph.hpp>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pptctl {
@@ -35,6 +36,12 @@ struct RegisteredIntegrityRule {
 
 // The built-in integrity rules, in run order.
 [[nodiscard]] const std::vector<RegisteredIntegrityRule>& integrity_rules();
+
+// True for a relationship type whose target must have a single owner (notes
+// slides, comments, tags, charts and their style/colour parts, embedded
+// packages): what shared-part checks, and what merge must copy rather than
+// de-duplicate. Media, layouts, masters, themes and fonts are shareable.
+[[nodiscard]] bool is_exclusively_owned(std::string_view rel_type);
 
 // Run every integrity rule over `package`, in run order.
 [[nodiscard]] std::vector<Diagnostic> check_integrity(const Package& package,
