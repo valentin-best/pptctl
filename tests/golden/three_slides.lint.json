@@ -2,6 +2,7 @@
   "diagnostics": [
     {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
+      "part": null,
       "rule": "ctype",
       "severity": "warning",
       "shape": null,
@@ -9,6 +10,7 @@
     },
     {
       "message": "placeholder \"Subtitle 2\" (subTitle, idx 1) is empty",
+      "part": null,
       "rule": "empty-ph",
       "severity": "warning",
       "shape": "Subtitle 2",
@@ -16,6 +18,7 @@
     },
     {
       "message": "placeholder \"Subtitle 2\" (subTitle, idx 1) is empty",
+      "part": null,
       "rule": "empty-ph",
       "severity": "warning",
       "shape": "Subtitle 2",
@@ -23,6 +26,7 @@
     },
     {
       "message": "placeholder \"Subtitle 2\" (subTitle, idx 1) is empty",
+      "part": null,
       "rule": "empty-ph",
       "severity": "warning",
       "shape": "Subtitle 2",

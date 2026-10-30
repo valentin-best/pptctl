@@ -10,6 +10,10 @@
 //   empty-ph   — placeholder shape contains no text
 //   ctype      — suspect content types (printer-settings stubs, etc.)
 //   img-bloat  — stored image resolution far exceeds display size
+//
+// Package-integrity rules (dangling-rel, broken-rid, undeclared-ctype,
+// orphan-part, shared-part) check the package itself rather than slide content;
+// see integrity.hpp. `--only integrity` selects all of them.
 
 #pragma once
 
@@ -31,6 +35,10 @@ struct Diagnostic {
     std::size_t slide_index;  // 1-based
     std::string shape_name;   // empty when not shape-specific
     std::string message;
+    // Part the finding is about (integrity rules); empty otherwise. The default
+    // initializer is what lets content rules keep their five-field aggregate
+    // initializers without -Wmissing-field-initializers.
+    std::string part = {};  // NOLINT(readability-redundant-member-init)
 };
 
 // Which platform's bundled fonts count as "safe" for the font-risk rule.
@@ -49,6 +57,11 @@ struct LintOptions {
     std::uint64_t min_image_bytes = 65'536;    // img-bloat: skip images stored under 64 KiB
     double min_font_pt = 12.0;                 // tiny-text: fire below this size
     FontTarget font_target = FontTarget::All;  // font-risk: --target
+
+    // Rule selection (CLI: --only): rule ids and group aliases ("integrity").
+    // Empty runs every rule. Default-initialized so designated initializers
+    // that omit it stay clean under gcc's -Wmissing-field-initializers.
+    std::vector<std::string> only = {};  // NOLINT(readability-redundant-member-init)
 };
 
 using LintRule = std::function<void(

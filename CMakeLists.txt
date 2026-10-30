@@ -194,6 +194,12 @@ endif()
 add_library(pptctl_lib STATIC
     src/lib/package.cpp
     src/lib/part_graph.cpp
+    src/lib/integrity.cpp
+    src/lib/integrity_dangling_rel.cpp
+    src/lib/integrity_broken_rid.cpp
+    src/lib/integrity_undeclared_ctype.cpp
+    src/lib/integrity_orphan_part.cpp
+    src/lib/integrity_shared_part.cpp
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
@@ -247,6 +253,7 @@ add_executable(pptctl_tests
     tests/test_package.cpp
     tests/test_package_write.cpp
     tests/test_part_graph.cpp
+    tests/test_integrity.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

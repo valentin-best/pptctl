@@ -3,6 +3,8 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
@@ -11,8 +13,10 @@
 #include <optional>
 #include <pptctl/image.hpp>
 #include <pptctl/lint.hpp>
+#include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
 #include <pptctl/slide.hpp>
+#include <random>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -1436,6 +1440,9 @@ TEST_CASE("golden: lint_problems.lint.json") {
 TEST_CASE("golden: lint_clean.lint.json") {
     check_lint_golden("lint_clean.pptx", "lint_clean.lint.json");
 }
+TEST_CASE("golden: integrity_problems.lint.json") {
+    check_lint_golden("integrity_problems.pptx", "integrity_problems.lint.json");
+}
 
 // The goldens above would happily freeze a regression; these pin the intent.
 
@@ -1623,4 +1630,125 @@ TEST_CASE("overflow: group offset moves an in-space child off canvas — diagnos
     REQUIRE(d.size() == 2);  // the group box itself, and the child
     CHECK(d[0].shape_name == "Group 1");
     CHECK(d[1].shape_name == "Child");
+}
+
+// ── integrity seams (#128) ────────────────────────────────────────────────────
+
+namespace pptctl::cmd {
+std::vector<std::string> lint_selectors();
+}  // namespace pptctl::cmd
+
+namespace {
+
+namespace fs = std::filesystem;
+
+// minimal.pptx with ppt/presentation.xml replaced by bytes that aren't XML,
+// written to a scratch file removed on scope exit.
+struct BrokenPresentation {
+    fs::path path;
+    BrokenPresentation() {
+        static const std::string run = std::to_string(std::random_device{}());
+        path = fs::temp_directory_path() / fs::path("pptctl_lint_" + run + "_broken.pptx");
+        pptctl::Package pkg;
+        REQUIRE(pkg.open(fixture("minimal.pptx")));
+        pptctl::PartChanges changes;
+        const std::string junk = "not xml";
+        std::vector<std::byte> bytes(junk.size());
+        std::transform(junk.begin(), junk.end(), bytes.begin(), [](char c) {
+            return static_cast<std::byte>(c);
+        });
+        changes.replaced["ppt/presentation.xml"] = std::move(bytes);
+        REQUIRE(pkg.write(path.string(), changes));
+    }
+    ~BrokenPresentation() {
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
+    BrokenPresentation(const BrokenPresentation&) = delete;
+    BrokenPresentation& operator=(const BrokenPresentation&) = delete;
+};
+
+int run_path(const std::string& path, std::string& out, const pptctl::LintOptions& opts) {
+    std::ostringstream oss;
+    const int rc = pptctl::cmd::lint_to(path, oss, opts);
+    out = oss.str();
+    return rc;
+}
+
+}  // namespace
+
+TEST_CASE("output: a part location replaces the slide number in the human line") {
+    pptctl::Diagnostic d{"dangling-rel", pptctl::Severity::Error, 0, "", "gone"};
+    d.part = "ppt/slides/_rels/slide3.xml.rels";
+    pptctl::Diagnostic on_slide{"broken-rid", pptctl::Severity::Error, 3, "", "bad id"};
+    on_slide.part = "ppt/slides/slide3.xml";
+    const auto l = lines(render({d, on_slide}).out);
+    CHECK(l[0] == "deck.pptx:ppt/slides/_rels/slide3.xml.rels: error[dangling-rel]: gone");
+    CHECK(l[1] == "deck.pptx:ppt/slides/slide3.xml: error[broken-rid]: bad id");
+}
+
+TEST_CASE("json: part is the part name, or null when the finding has none") {
+    pptctl::Diagnostic d{"orphan-part", pptctl::Severity::Warning, 0, "", "unreferenced"};
+    d.part = "ppt/media/orphan.png";
+    const auto j = nlohmann::json::parse(render({d}, {.json = true}).out);
+    CHECK(j["diagnostics"][0]["part"] == "ppt/media/orphan.png");
+    const auto k = nlohmann::json::parse(render(mixed_diags(), {.json = true}).out);
+    CHECK(k["diagnostics"][0]["part"].is_null());
+}
+
+TEST_CASE("--only: a single rule id keeps only that rule's findings") {
+    std::string out;
+    REQUIRE(run("lint_problems.pptx", out, {.json = true, .only = {"tiny-text"}}) == 0);
+    CHECK(rule_histogram(nlohmann::json::parse(out)) ==
+          std::map<std::string, int>{{"tiny-text", 1}});
+}
+
+TEST_CASE("--only: several ids, deck-level rules included") {
+    std::string out;
+    REQUIRE(run("lint_problems.pptx", out, {.json = true, .only = {"overflow", "ctype"}}) == 0);
+    CHECK(rule_histogram(nlohmann::json::parse(out)) ==
+          std::map<std::string, int>{{"ctype", 1}, {"overflow", 1}});
+}
+
+TEST_CASE("--only integrity: slide and deck content rules don't run") {
+    std::string out;
+    REQUIRE(run("lint_problems.pptx", out, {.json = true, .only = {"integrity"}}) == 0);
+    const auto h = rule_histogram(nlohmann::json::parse(out));
+    for (const auto& [rule, n] : h) {
+        CHECK_MESSAGE(rule != "ctype", rule);
+        CHECK_MESSAGE(rule != "tiny-text", rule);
+    }
+}
+
+TEST_CASE("--only: selectors cover every rule id and the integrity group") {
+    const auto sel = pptctl::cmd::lint_selectors();
+    for (const char* id : {"overflow",
+                           "tiny-text",
+                           "alt-text",
+                           "font-risk",
+                           "empty-ph",
+                           "ctype",
+                           "img-bloat",
+                           "dangling-rel",
+                           "broken-rid",
+                           "undeclared-ctype",
+                           "orphan-part",
+                           "shared-part",
+                           "integrity"}) {
+        CHECK_MESSAGE(std::find(sel.begin(), sel.end(), id) != sel.end(), id);
+    }
+}
+
+TEST_CASE("lint: an unloadable presentation.xml still gets an integrity report, exit 1") {
+    const BrokenPresentation deck;
+    std::string out;
+    CHECK(run_path(deck.path.string(), out, {.json = true}) == 1);
+    const auto j = nlohmann::json::parse(out);
+    CHECK(j["schema_version"] == 1);
+}
+
+TEST_CASE("lint --only integrity: the presentation isn't loaded, so a broken one is fine") {
+    const BrokenPresentation deck;
+    std::string out;
+    CHECK(run_path(deck.path.string(), out, {.json = true, .only = {"integrity"}}) == 0);
 }

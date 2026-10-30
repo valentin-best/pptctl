@@ -10,6 +10,7 @@
 #include <pptctl/optimize.hpp>
 #include <pptctl/print.hpp>
 #include <string>
+#include <vector>
 
 namespace pptctl::cmd {
 
@@ -21,6 +22,7 @@ int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
 int lint(const std::string& path, const LintOptions& opts);
 int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
+std::vector<std::string> lint_selectors();
 int diff(const std::string& a,
          const std::string& b,
          const DiffOptions& opts,
@@ -104,6 +106,15 @@ int main(int argc, char** argv) {
                      "must be on both Windows and macOS), windows, macos. Office fonts are "
                      "always safe")
         ->check(CLI::IsMember({"all", "windows", "macos"}));
+    lint_cmd
+        ->add_option("--only",
+                     lint_opts.only,
+                     "run only these rules: comma-separated rule ids, or the group "
+                     "'integrity' (package-integrity rules); repeatable")
+        ->delimiter(',')
+        ->expected(1)
+        ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll)
+        ->check(CLI::IsMember(pptctl::cmd::lint_selectors()));
     lint_cmd->callback([&]() {
         lint_opts.font_target = parse_font_target(lint_target);
         std::exit(pptctl::cmd::lint(lint_path, lint_opts));
