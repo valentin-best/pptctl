@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <format>
 #include <map>
+#include <optional>
 #include <pptctl/merge.hpp>
 #include <pptctl/package.hpp>
 #include <pptctl/presentation.hpp>
@@ -25,6 +26,10 @@ constexpr std::string_view kNotesMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
 constexpr std::string_view kNotesMasterRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
+constexpr std::string_view kSlideLayoutType =
+    "application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml";
+constexpr std::string_view kSlideLayoutRel =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
 constexpr std::string_view kSlideMasterRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 constexpr std::string_view kOfficeDocumentRel =
@@ -120,12 +125,19 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
     detail::MediaIndex media(target);
     // So is a slide master identical to one already there, with its closure.
     detail::MasterIndex masters(packages[base]);
-    struct MasterReuse {
-        std::map<std::string, std::string> parts;   // source part -> output part
-        std::map<std::string, std::string> master;  // source part -> its master
-        std::set<std::string> used;                 // masters a slide reached
+    // Under --theme, foreign layouts are restyled onto the base's instead, and
+    // no foreign master comes along.
+    std::optional<detail::LayoutMatcher> theme_layouts;
+    if (opts.theme != 0) {
+        theme_layouts.emplace(packages[base]);
+    }
+    struct Resolved {
+        std::map<std::string, std::string> parts;            // source part -> reused output part
+        std::map<std::string, std::string> master;           // source part -> its master
+        std::set<std::string> used;                          // reused masters a slide reached
+        std::map<std::string, detail::LayoutMatch> layouts;  // --theme: source layout -> placement
     };
-    std::vector<MasterReuse> reuse(packages.size());
+    std::vector<Resolved> resolved(packages.size());
 
     std::vector<detail::PartImporter> importers;
     importers.reserve(packages.size());
@@ -139,19 +151,28 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         }
         const auto& source = packages[i];
         auto& input = report.inputs[i];
-        auto& same_masters = reuse[i];
-        for (const auto& master : relationship_targets(source, kSlideMasterRel)) {
-            for (auto& [from, to] : masters.match(source, master)) {
-                same_masters.master.emplace(from, master);
-                same_masters.parts.emplace(from, std::move(to));
+        auto& res = resolved[i];
+        if (!theme_layouts) {
+            for (const auto& master : relationship_targets(source, kSlideMasterRel)) {
+                for (auto& [from, to] : masters.match(source, master)) {
+                    res.master.emplace(from, master);
+                    res.parts.emplace(from, std::move(to));
+                }
             }
         }
         auto& importer = importers.emplace_back(
             source,
             target,
-            [&notes_master, &media, &input, r = &same_masters, src = &source](
+            [&notes_master, &media, &input, &theme_layouts, r = &res, src = &source](
                 std::string_view part, std::string_view rel_type) -> std::optional<std::string> {
                 const std::string key(part);
+                if (theme_layouts && src->content_type(part) == kSlideLayoutType) {
+                    if (auto placed = theme_layouts->match(*src, key)) {
+                        auto out = placed->part;
+                        r->layouts.emplace(key, std::move(*placed));
+                        return out;
+                    }
+                }
                 if (const auto it = r->parts.find(key); it != r->parts.end()) {
                     r->used.insert(r->master.at(key));
                     return it->second;
@@ -170,7 +191,7 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             (void)importer.import(slide);
         }
         input.parts_added = importer.copied().size();
-        input.masters_reused = same_masters.used.size();
+        input.masters_reused = res.used.size();
         for (const auto& part : importer.copied()) {
             const auto type = source.content_type(part);
             if (type == kSlideMasterType) {
@@ -182,6 +203,18 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             }
         }
         input.warnings = importer.warnings();
+        for (std::size_t k = 0; k < slide_parts[i].size(); ++k) {
+            const auto layout = target_of_type(source, slide_parts[i][k], kSlideLayoutRel);
+            const auto it = res.layouts.find(layout);
+            if (it != res.layouts.end() && it->second.kind == detail::LayoutMatchKind::fallback) {
+                input.warnings.push_back(
+                    std::format(R"(slide {}: deck {} has no layout like "{}"; placed on "{}")",
+                                k + 1,
+                                opts.theme,
+                                it->second.source_name,
+                                it->second.target_name));
+            }
+        }
         deck.imported = &importer.mapping();
     }
 
