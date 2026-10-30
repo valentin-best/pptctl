@@ -200,6 +200,7 @@ add_library(pptctl_lib STATIC
     src/lib/integrity_undeclared_ctype.cpp
     src/lib/integrity_orphan_part.cpp
     src/lib/integrity_shared_part.cpp
+    src/lib/integrity_unlisted_part.cpp
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
@@ -266,6 +267,7 @@ add_executable(pptctl_tests
     tests/test_integrity_undeclared_ctype.cpp
     tests/test_integrity_orphan_part.cpp
     tests/test_integrity_shared_part.cpp
+    tests/test_integrity_unlisted_part.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp

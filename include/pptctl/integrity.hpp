@@ -12,6 +12,7 @@
 //   undeclared-ctype  — a part has no content type in [Content_Types].xml (#131)
 //   orphan-part       — no relationship reaches a part (#132)
 //   shared-part       — a part that must have one owner is referenced by several (#133)
+//   unlisted-part     — the presentation relates a slide or master but doesn't list it (#152)
 // Every finding carries the part it is about in Diagnostic::part.
 
 #pragma once

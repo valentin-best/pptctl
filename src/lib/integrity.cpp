@@ -58,7 +58,13 @@ struct RefCollector : pugi::xml_tree_walker {
                 continue;
             }
             if (is_relationships_ns(namespace_of(node, name.substr(0, colon)))) {
-                refs.push_back({std::string(name), a.value()});
+                const std::string_view element = node.name();
+                const auto element_colon = element.find(':');
+                refs.push_back({std::string(name),
+                                a.value(),
+                                std::string(element_colon == std::string_view::npos
+                                                ? element
+                                                : element.substr(element_colon + 1))});
             }
         }
         return true;
@@ -100,6 +106,7 @@ const std::vector<RegisteredIntegrityRule>& integrity_rules() {
         {"undeclared-ctype", detail::integrity_undeclared_ctype},
         {"orphan-part", detail::integrity_orphan_part},
         {"shared-part", detail::integrity_shared_part},
+        {"unlisted-part", detail::integrity_unlisted_part},
     };
     return rules;
 }

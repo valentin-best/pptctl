@@ -63,6 +63,9 @@ Reproducibility contract
   and Pillow (its own dependency) so the one JPEG encoder in use is too.
 - All ZIP entries are written with a fixed timestamp and in sorted order so the
   committed bytes are stable regardless of python-pptx's internal entry ordering.
+- Every fixture finally goes through list_notes_master(): python-pptx relates a
+  notes master without listing it in p:notesMasterIdLst, which Keynote refuses
+  to open (#152), and the fixtures should open everywhere.
 """
 
 from __future__ import annotations
@@ -782,7 +785,9 @@ def inject_integrity_problems(path: Path) -> None:
                         Default; and a stale Override for /ppt/slides/slide99.xml
       orphan-part       ppt/media/orphan.png, nothing references it
       shared-part       slide 2 also targets slide 1's notesSlide; both charts
-                        target one chartStyle part"""
+                        target one chartStyle part
+      unlisted-part     ppt/slides/slide9.xml, a blank slide presentation.xml
+                        relates but leaves out of p:sldIdLst"""
     with zipfile.ZipFile(path) as zf:
         parts = {n: zf.read(n) for n in zf.namelist()}
 
@@ -816,9 +821,28 @@ def inject_integrity_problems(path: Path) -> None:
     for rels in chart_rels:
         parts[rels], _ = _add_rel(parts[rels], style_rel, "style1.xml")
 
+    parts["ppt/slides/slide9.xml"] = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        b'<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+        b'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+        b'xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">'
+        b'<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/>'
+        b"</p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sld>"
+    )
+    parts["ppt/slides/_rels/slide9.xml.rels"] = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" Type="' + _REL_NS.encode() + b'/slideLayout" '
+        b'Target="../slideLayouts/slideLayout7.xml"/></Relationships>'
+    )
+    pres_rels = "ppt/_rels/presentation.xml.rels"
+    parts[pres_rels], _ = _add_rel(parts[pres_rels], f"{_REL_NS}/slide", "slides/slide9.xml")
+
     ct = parts["[Content_Types].xml"].decode("utf-8")
     ct = ct.replace(
         "</Types>",
+        '<Override PartName="/ppt/slides/slide9.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
         '<Override PartName="/ppt/charts/style1.xml" '
         'ContentType="application/vnd.ms-office.chartstyle+xml"/>'
         '<Override PartName="/ppt/slides/slide99.xml" '
@@ -827,6 +851,28 @@ def inject_integrity_problems(path: Path) -> None:
     )
     parts["[Content_Types].xml"] = ct.encode("utf-8")
 
+    _write_zip(path, parts)
+
+
+def list_notes_master(path: Path) -> None:
+    """python-pptx relates a notes master from presentation.xml.rels but never
+    lists it in p:notesMasterIdLst, and Keynote refuses to open such a deck
+    (#152). List it, reusing the relationship. A no-op for a deck without a
+    notes master or one that already lists it; run on every fixture."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    rels = parts["ppt/_rels/presentation.xml.rels"].decode("utf-8")
+    rel = re.search(r'Id="(rId\d+)" Type="[^"]*/notesMaster"', rels)
+    pres = parts["ppt/presentation.xml"].decode("utf-8")
+    if not rel or "notesMasterIdLst" in pres:
+        return
+    pres = pres.replace(
+        "</p:sldMasterIdLst>",
+        "</p:sldMasterIdLst><p:notesMasterIdLst>"
+        f'<p:notesMasterId r:id="{rel.group(1)}"/></p:notesMasterIdLst>',
+        1,
+    )
+    parts["ppt/presentation.xml"] = pres.encode("utf-8")
     _write_zip(path, parts)
 
 
@@ -1188,6 +1234,7 @@ def _build_all(dest: Path) -> None:
         p = dest / name
         for builder in builders:
             builder(p)  # type: ignore[operator]
+        list_notes_master(p)
 
 
 def main() -> None:

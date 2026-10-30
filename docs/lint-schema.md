@@ -72,6 +72,7 @@ output and decks written by other tools are verified.
 | `undeclared-ctype` | A part has neither a `Default` nor an `Override` in `[Content_Types].xml`. |
 | `orphan-part` | No relationship reaches a part. |
 | `shared-part` | A part that must have a single owner (notes, comments, tags, charts and their style parts) is targeted from several. |
+| `unlisted-part` | The presentation relates a slide, slide master, notes master or handout master but doesn't list it in the matching `p:…IdLst`. A slide left out isn't shown; a notes master left out (python-pptx output with speaker notes) makes Keynote refuse the deck. |
 
 ### Selecting rules
 

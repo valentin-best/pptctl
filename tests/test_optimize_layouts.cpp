@@ -231,8 +231,10 @@ TEST_CASE("optimize layouts: rewrites the id lists of the surviving master and p
           std::vector<std::pair<std::string, std::string>>{{"2147483648", "rId1"}});
     // Nothing else in presentation.xml moved: the slide list is intact.
     CHECK(id_list(pres, "p:presentation", "p:sldIdLst").size() == 4);
-    CHECK(pres.find("p:notesMasterIdLst") ==
-          to_string(pkg.read_part("ppt/presentation.xml")).find("p:notesMasterIdLst"));
+    const auto before = to_string(pkg.read_part("ppt/presentation.xml"));
+    CHECK(id_list(pres, "p:presentation", "p:notesMasterIdLst") ==
+          id_list(before, "p:presentation", "p:notesMasterIdLst"));
+    CHECK(id_list(pres, "p:presentation", "p:notesMasterIdLst").size() == 1);
 }
 
 TEST_CASE("optimize layouts: a second master in use survives with its theme, untouched") {
