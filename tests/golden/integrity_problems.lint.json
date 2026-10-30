@@ -9,9 +9,17 @@
       "slide": null
     },
     {
-      "message": "part \"ppt/media/extra.webp\" has no declared content type",
-      "part": null,
-      "rule": "ctype",
+      "message": "part \"ppt/media/extra.webp\" has no content type: no Default for extension \"webp\" and no Override",
+      "part": "ppt/media/extra.webp",
+      "rule": "undeclared-ctype",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
+      "message": "Override for \"/ppt/slides/slide99.xml\" names a part that does not exist",
+      "part": "[Content_Types].xml",
+      "rule": "undeclared-ctype",
       "severity": "warning",
       "shape": null,
       "slide": null
@@ -36,7 +44,7 @@
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 2,
+    "errors": 3,
     "warnings": 2
   }
 }

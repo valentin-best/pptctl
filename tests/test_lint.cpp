@@ -914,14 +914,11 @@ TEST_CASE("ctype: diagnostic message contains part name and content type") {
     CHECK(diags[0].message.find("printerSettings") != std::string::npos);
 }
 
-// ── ctype rule: fire cases — undeclared parts ─────────────────────────────────
+// ── ctype rule: undeclared parts belong to undeclared-ctype (#131) ─────────────
 
-TEST_CASE("ctype: part with no declared content type — diagnostic") {
+TEST_CASE("ctype: part with no declared content type — left to undeclared-ctype") {
     Parts parts{{"ppt/customXml/item1.xml", ""}};
-    auto diags = ctype_diags(parts);
-    REQUIRE(diags.size() == 1);
-    CHECK(diags[0].rule_id == "ctype");
-    CHECK(diags[0].message.find("item1.xml") != std::string::npos);
+    CHECK(ctype_diags(parts).empty());
 }
 
 TEST_CASE("ctype: multiple suspect parts — one diagnostic per part") {
