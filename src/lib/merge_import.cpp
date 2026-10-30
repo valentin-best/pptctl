@@ -98,6 +98,7 @@ void MergeTarget::add_part(const std::string& name,
                            const std::string& content_type) {
     changes_.replaced[name] = std::move(bytes);
     added_types_[name] = content_type;
+    added_.push_back(name);
     if (content_type.empty()) {
         return;
     }
@@ -157,12 +158,12 @@ std::string PartImporter::import(const std::string& part) {
     // Walk the closure first, naming each part as it is found, so every
     // relationship can be re-pointed once all of its targets have names.
     std::vector<std::string> pending;
-    const auto reach = [&](const std::string& p) {
+    const auto reach = [&](const std::string& p, std::string_view rel_type) {
         if (mapping_.contains(p)) {
             return true;
         }
         if (resolve_) {
-            if (auto existing = resolve_(p)) {
+            if (auto existing = resolve_(p, rel_type)) {
                 mapping_[p] = std::move(*existing);
                 return true;
             }
@@ -174,7 +175,7 @@ std::string PartImporter::import(const std::string& part) {
         pending.push_back(p);
         return true;
     };
-    if (!reach(part)) {
+    if (!reach(part, {})) {
         return {};
     }
     // `pending` grows as the walk finds parts, so no iterators into it.
@@ -182,7 +183,7 @@ std::string PartImporter::import(const std::string& part) {
     while (walked < pending.size()) {
         const auto from = pending[walked++];  // a copy: reach() may reallocate
         for (const auto& rel : source_->relationships(from)) {
-            if (!rel.external && !reach(rel.target)) {
+            if (!rel.external && !reach(rel.target, rel.type)) {
                 warnings_.push_back(std::format(
                     "{}: relationship {} targets {}, which is missing", from, rel.id, rel.target));
             }
