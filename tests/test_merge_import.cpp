@@ -290,15 +290,23 @@ TEST_CASE("PartImporter: a resolved part is referenced, not copied") {
     REQUIRE(source.open(fixture("merge_c.pptx")));
     MergeTarget target(base);
     std::vector<std::string> asked;
-    PartImporter importer(source, target, [&](std::string_view part) -> std::optional<std::string> {
-        asked.emplace_back(part);
-        if (part.starts_with("ppt/slideLayouts/")) {
-            return "ppt/slideLayouts/slideLayout2.xml";
-        }
-        return std::nullopt;
-    });
+    std::vector<std::string> types;
+    PartImporter importer(
+        source,
+        target,
+        [&](std::string_view part, std::string_view rel_type) -> std::optional<std::string> {
+            asked.emplace_back(part);
+            types.emplace_back(rel_type);
+            if (part.starts_with("ppt/slideLayouts/")) {
+                return "ppt/slideLayouts/slideLayout2.xml";
+            }
+            return std::nullopt;
+        });
     CHECK(importer.import("ppt/slides/slide1.xml") == "ppt/slides/slide4.xml");
     CHECK(asked.front() == "ppt/slides/slide1.xml");
+    CHECK(types.front().empty());  // the part import() was called with
+    CHECK(types[1] ==
+          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout");
     // The layout stands in for the source's, so neither it nor its master is copied.
     for (const auto& part : importer.copied()) {
         CHECK_FALSE(part.starts_with("ppt/slideLayouts/"));

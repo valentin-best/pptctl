@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
@@ -50,6 +51,11 @@ class MergeTarget {
     // Every part in the output: the base's, then the added ones.
     [[nodiscard]] std::vector<std::string> part_names() const;
 
+    // The added parts, in the order they were added.
+    [[nodiscard]] const std::vector<std::string>& added() const noexcept {
+        return added_;
+    }
+
     // The changes to write: the added and replaced parts, plus
     // `[Content_Types].xml` rewritten when anything needed declaring.
     [[nodiscard]] PartChanges changes() const;
@@ -65,14 +71,44 @@ class MergeTarget {
     std::map<std::string, std::string> added_defaults_;
     std::map<std::string, std::string> added_overrides_;
     std::map<std::string, std::string> added_types_;  // added part -> content type
+    std::vector<std::string> added_;                  // added parts, in add order
     PartChanges changes_;
 };
 
-// Consulted before a part is copied: the name of an existing output part that
-// stands in for it (a base layout under --theme, an identical media part), or
-// nullopt to copy it. A part resolved this way is not copied and its own
-// relationships are not followed.
-using PartResolver = std::function<std::optional<std::string>(std::string_view source_part)>;
+// Consulted before a part is copied, with the type of the relationship that
+// reached it ("" for the part import() was called with): the name of an
+// existing output part that stands in for it (a base layout under --theme, an
+// identical media part), or nullopt to copy it. A part resolved this way is
+// not copied and its own relationships are not followed.
+using PartResolver = std::function<std::optional<std::string>(std::string_view source_part,
+                                                              std::string_view rel_type)>;
+
+// The output's media parts (`ppt/media/`, where Office and python-pptx store
+// images, audio and video), for de-duplication by content (#137). Holds the
+// base's media from the start and picks up imported media as the target
+// gains them.
+class MediaIndex {
+ public:
+    explicit MediaIndex(const MergeTarget& target);
+
+    // An output media part with the same bytes as `part` of `source`, reached
+    // through a relationship of `rel_type`, or nullopt. Parts outside
+    // `ppt/media/` and parts reached through an exclusively-owned type
+    // (is_exclusively_owned) never match. Candidates are narrowed by size,
+    // then content hash, then compared byte for byte.
+    [[nodiscard]] std::optional<std::string> find(const Package& source,
+                                                  std::string_view part,
+                                                  std::string_view rel_type);
+
+ private:
+    void add(const std::string& name, std::uint64_t size);
+    void catch_up();  // index media the target added since the last call
+
+    const MergeTarget* target_;
+    std::size_t seen_ = 0;  // how many of target_->added() are indexed
+    std::map<std::uint64_t, std::vector<std::string>> by_size_;
+    std::map<std::string, std::uint64_t> hashes_;  // computed on demand
+};
 
 // Copies parts from one source package into a MergeTarget. Remembers where
 // every source part went, so a part reached from several slides (a layout,

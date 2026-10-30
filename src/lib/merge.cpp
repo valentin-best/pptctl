@@ -101,6 +101,8 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
     std::string notes_master = target_of_type(
         packages[base], target_of_type(packages[base], "", kOfficeDocumentRel), kNotesMasterRel);
     std::string imported_notes_master;
+    // Media identical to an output part already there is shared, not copied.
+    detail::MediaIndex media(target);
 
     std::vector<detail::PartImporter> importers;
     importers.reserve(packages.size());
@@ -113,19 +115,25 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             continue;
         }
         const auto& source = packages[i];
+        auto& input = report.inputs[i];
         auto& importer = importers.emplace_back(
             source,
             target,
-            [&notes_master, src = &source](std::string_view part) -> std::optional<std::string> {
+            [&notes_master, &media, &input, src = &source](
+                std::string_view part, std::string_view rel_type) -> std::optional<std::string> {
                 if (!notes_master.empty() && src->content_type(part) == kNotesMasterType) {
                     return notes_master;
                 }
-                return std::nullopt;
+                auto same = media.find(*src, part, rel_type);
+                if (same) {
+                    ++input.media_deduplicated;
+                    input.media_bytes_saved += src->part_size(part).value_or(0);
+                }
+                return same;
             });
         for (const auto& slide : slide_parts[i]) {
             (void)importer.import(slide);
         }
-        auto& input = report.inputs[i];
         input.parts_added = importer.copied().size();
         for (const auto& part : importer.copied()) {
             const auto type = source.content_type(part);
