@@ -179,7 +179,9 @@ TEST_CASE("merge: media are matched by content, whatever their names") {
     }
     std::size_t shared = 0;
     for (const auto& name : media_of(b)) {
-        shared += in_a.contains(*b.part_hash(name)) ? 1 : 0;
+        if (in_a.contains(*b.part_hash(name))) {
+            ++shared;
+        }
     }
     REQUIRE(shared > 0);
     CHECK(m.report.inputs[1].media_deduplicated == shared);
