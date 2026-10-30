@@ -4,9 +4,17 @@
 
 #pragma once
 
+#include <optional>
 #include <pptctl/integrity.hpp>
+#include <string>
+#include <string_view>
 
 namespace pptctl::detail {
+
+// The part a `.rels` part declares relationships for ("" for the package
+// root's `_rels/.rels`), or nullopt when `name` isn't a relationships part.
+// The inverse of rels_part_for.
+[[nodiscard]] std::optional<std::string> source_of_rels(std::string_view name);
 
 // #129 — an internal relationship whose target part is absent.
 void integrity_dangling_rel(const Package& pkg,

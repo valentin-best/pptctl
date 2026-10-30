@@ -2,7 +2,6 @@
 // target part is missing (#129).
 
 #include <format>
-#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -12,27 +11,6 @@
 namespace pptctl::detail {
 
 namespace {
-
-constexpr std::string_view kRelsDir = "_rels/";
-constexpr std::string_view kRelsExt = ".rels";
-
-// The part a `.rels` part declares relationships for ("" for the package
-// root's `_rels/.rels`), or nullopt when `name` isn't a relationships part.
-std::optional<std::string> source_of_rels(std::string_view name) {
-    if (!name.ends_with(kRelsExt)) {
-        return std::nullopt;
-    }
-    const auto slash = name.rfind('/');
-    const std::string_view dir = slash == std::string_view::npos ? "" : name.substr(0, slash + 1);
-    if (!dir.ends_with(kRelsDir)) {
-        return std::nullopt;
-    }
-    const std::string_view file =
-        name.substr(dir.size(), name.size() - dir.size() - kRelsExt.size());
-    std::string source(dir.substr(0, dir.size() - kRelsDir.size()));
-    source += file;
-    return source;
-}
 
 // "http://…/relationships/image" -> "image".
 std::string_view short_type(std::string_view type) {

@@ -25,6 +25,14 @@
       "slide": null
     },
     {
+      "message": "part \"ppt/media/orphan.png\" is not reachable from any relationship; `pptctl optimize` removes orphan media",
+      "part": "ppt/media/orphan.png",
+      "rule": "orphan-part",
+      "severity": "warning",
+      "shape": null,
+      "slide": null
+    },
+    {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
       "part": null,
       "rule": "ctype",
@@ -45,6 +53,6 @@
   "schema_version": 1,
   "summary": {
     "errors": 3,
-    "warnings": 2
+    "warnings": 3
   }
 }
