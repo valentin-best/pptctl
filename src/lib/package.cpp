@@ -185,7 +185,8 @@ std::string rels_part_for(std::string_view part) {
 std::vector<std::byte> rewrite_content_types(
     std::span<const std::byte> xml,
     const std::set<std::string>& removed_parts,
-    const std::map<std::string, std::string>& added_overrides) {
+    const std::map<std::string, std::string>& added_overrides,
+    const std::map<std::string, std::string>& added_defaults) {
     pugi::xml_document doc;
     if (!load_xml(doc, xml)) {
         return {};
@@ -215,6 +216,67 @@ std::vector<std::byte> rewrite_content_types(
         auto node = types.append_child("Override");
         node.append_attribute("PartName") = absolute(part).c_str();
         node.append_attribute("ContentType") = ct.c_str();
+    }
+
+    std::set<std::string> extensions;
+    pugi::xml_node last_default;
+    for (auto node : types.children("Default")) {
+        extensions.insert(to_lower(node.attribute("Extension").as_string("")));
+        last_default = node;
+    }
+    for (const auto& [ext, ct] : added_defaults) {
+        if (!extensions.insert(to_lower(ext)).second) {
+            continue;
+        }
+        auto node = last_default ? types.insert_child_after("Default", last_default)
+                                 : types.prepend_child("Default");
+        node.append_attribute("Extension") = ext.c_str();
+        node.append_attribute("ContentType") = ct.c_str();
+        last_default = node;
+    }
+    return save_xml(doc);
+}
+
+std::string relative_target(std::string_view from_part, std::string_view to_part) {
+    const std::string from_dir = dir_of(from_part);
+    std::size_t common = 0;  // length of the shared directory prefix, up to a '/'
+    for (std::size_t i = 0; i < from_dir.size() && i < to_part.size() && from_dir[i] == to_part[i];
+         ++i) {
+        if (from_dir[i] == '/') {
+            common = i + 1;
+        }
+    }
+    std::string out;
+    for (std::size_t i = common; i < from_dir.size(); ++i) {
+        if (from_dir[i] == '/') {
+            out += "../";
+        }
+    }
+    return out + std::string(to_part.substr(common));
+}
+
+std::vector<std::byte> retarget_rels(std::span<const std::byte> xml,
+                                     std::string_view source_part,
+                                     std::string_view target_part,
+                                     const std::map<std::string, std::string>& retarget) {
+    pugi::xml_document doc;
+    if (!load_xml(doc, xml)) {
+        return {};
+    }
+    auto rels = doc.child("Relationships");
+    if (!rels) {
+        return {};
+    }
+    const std::string base = dir_of(source_part);
+    for (auto node : rels.children("Relationship")) {
+        if (std::string_view(node.attribute("TargetMode").as_string("")) == "External") {
+            continue;
+        }
+        auto target = node.attribute("Target");
+        const auto it = retarget.find(resolve_target(base, target.as_string("")));
+        if (it != retarget.end()) {
+            target.set_value(relative_target(target_part, it->second).c_str());
+        }
     }
     return save_xml(doc);
 }

@@ -9,16 +9,41 @@
 #include <system_error>
 #include <utility>
 
+#include "merge_internal.hpp"
+
 namespace pptctl {
 
 namespace {
 
 namespace fs = std::filesystem;
 
-// Copy `input`'s slides into the output by adding parts to `changes`. Not
-// implemented yet (#135): the input contributes nothing and says so.
-void import_slides(const Package& /*input*/, MergeInputReport& report, PartChanges& /*changes*/) {
-    report.warnings.emplace_back("slides not imported: slide import is not implemented yet");
+constexpr std::string_view kSlideMasterType =
+    "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml";
+
+// Copy `slides` of `input`, with everything they reach, into `target`. The
+// slides aren't added to the output's slide list yet (#136).
+void import_slides(const Package& input,
+                   const std::vector<std::string>& slides,
+                   detail::MergeTarget& target,
+                   MergeInputReport& report) {
+    detail::PartImporter importer(input, target);
+    std::size_t imported = 0;
+    for (const auto& slide : slides) {
+        if (!importer.import(slide).empty()) {
+            ++imported;
+        }
+    }
+    report.parts_added = importer.copied().size();
+    for (const auto& part : importer.copied()) {
+        if (input.content_type(part) == kSlideMasterType) {
+            ++report.masters_imported;
+        }
+    }
+    report.warnings = importer.warnings();
+    report.warnings.push_back(std::format(
+        "{} imported but not added to the slide list yet: the output shows only the base "
+        "deck's slides",
+        imported == 1 ? "1 slide" : std::format("{} slides", imported)));
 }
 
 // Write `base` with `changes` to a throwaway file and return its size, for a
@@ -54,7 +79,7 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
     // Every input stays open for the whole merge: the base is written from,
     // the others are read from while their parts are imported.
     std::vector<Package> packages(in_paths.size());
-    std::vector<std::size_t> slide_counts;
+    std::vector<std::vector<std::string>> slide_parts;
     MergeReport report;
     for (std::size_t i = 0; i < in_paths.size(); ++i) {
         const auto& path = in_paths[i];
@@ -72,20 +97,21 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         input.path = path;
         std::error_code ec;
         input.bytes = fs::file_size(path, ec);
-        slide_counts.push_back(pres.slide_count());
+        slide_parts.push_back(pres.slide_parts());
         report.inputs.push_back(std::move(input));
     }
 
     const std::size_t base = opts.theme == 0 ? 0 : opts.theme - 1;
     report.inputs[base].base = true;
-    report.inputs[base].slides = slide_counts[base];
+    report.inputs[base].slides = slide_parts[base].size();
 
-    PartChanges changes;
+    detail::MergeTarget target(packages[base]);
     for (std::size_t i = 0; i < packages.size(); ++i) {
         if (i != base) {
-            import_slides(packages[i], report.inputs[i], changes);
+            import_slides(packages[i], slide_parts[i], target, report.inputs[i]);
         }
     }
+    const auto changes = target.changes();
     for (const auto& input : report.inputs) {
         report.slides += input.slides;
     }

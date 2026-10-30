@@ -189,7 +189,8 @@ TEST_CASE("Package::write: in-place write replaces the file and the package refl
 }
 
 // ---------------------------------------------------------------------------
-// Helpers: rels_part_for, rewrite_content_types, rewrite_rels
+// Helpers: rels_part_for, rewrite_content_types, rewrite_rels, relative_target,
+// retarget_rels
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -256,6 +257,63 @@ TEST_CASE("rewrite_content_types is a no-op for an empty change set") {
     const auto out = to_string(pptctl::rewrite_content_types(original, {}, {}));
     CHECK(count_of(out, "<Override ") == count_of(to_string(original), "<Override "));
     CHECK(count_of(out, "<Default ") == count_of(to_string(original), "<Default "));
+}
+
+TEST_CASE("rewrite_content_types adds a Default for a new extension, after the existing ones") {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture("three_slides.pptx")));
+    const auto original = pkg.read_part("[Content_Types].xml");
+    const auto before = to_string(original);
+    REQUIRE(before.find("Extension=\"png\"") == std::string::npos);
+
+    const auto out = to_string(pptctl::rewrite_content_types(
+        original, {}, {}, {{"png", "image/png"}, {"JPEG", "image/x-other"}}));
+    CHECK(count_of(out, "<Default ") == count_of(before, "<Default ") + 1);
+    const auto png = out.find("<Default Extension=\"png\" ContentType=\"image/png\"/>");
+    REQUIRE(png != std::string::npos);
+    CHECK(png < out.find("<Override "));
+    // jpeg already has a Default (extensions compare case-insensitively): kept as it was.
+    CHECK(out.find("image/x-other") == std::string::npos);
+}
+
+TEST_CASE("relative_target walks up from the source part's directory") {
+    CHECK(pptctl::relative_target("ppt/slides/slide4.xml", "ppt/media/image3.png") ==
+          "../media/image3.png");
+    CHECK(pptctl::relative_target("ppt/slides/slide4.xml", "ppt/slides/slide5.xml") ==
+          "slide5.xml");
+    CHECK(pptctl::relative_target("ppt/presentation.xml", "ppt/slides/slide1.xml") ==
+          "slides/slide1.xml");
+    CHECK(pptctl::relative_target("ppt/charts/chart1.xml", "ppt/embeddings/Sheet1.xlsx") ==
+          "../embeddings/Sheet1.xlsx");
+    CHECK(pptctl::relative_target("ppt/slides/slide1.xml", "ppt/slidesX/a.xml") ==
+          "../slidesX/a.xml");
+    CHECK(pptctl::relative_target("", "ppt/presentation.xml") == "ppt/presentation.xml");
+}
+
+TEST_CASE("retarget_rels re-points mapped targets relative to the copy, keeping ids") {
+    const std::string xml =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        "<Relationship Id=\"rId1\" Type=\"t\" Target=\"../slideLayouts/slideLayout2.xml\"/>"
+        "<Relationship Id=\"rId2\" Type=\"t\" Target=\"/ppt/media/image1.png\"/>"
+        "<Relationship Id=\"rId3\" Type=\"t\" Target=\"../media/image1.png\" "
+        "TargetMode=\"External\"/>"
+        "<Relationship Id=\"rId4\" Type=\"t\" Target=\"../notesSlides/notesSlide1.xml\"/>"
+        "</Relationships>";
+    const auto out = to_string(pptctl::retarget_rels(
+        to_bytes(xml),
+        "ppt/slides/slide1.xml",
+        "ppt/slides/slide7.xml",
+        {{"ppt/slideLayouts/slideLayout2.xml", "ppt/slideLayouts/slideLayout12.xml"},
+         {"ppt/media/image1.png", "ppt/media/image5.png"}}));
+    CHECK(out.find("Id=\"rId1\" Type=\"t\" Target=\"../slideLayouts/slideLayout12.xml\"") !=
+          std::string::npos);
+    CHECK(out.find("Id=\"rId2\" Type=\"t\" Target=\"../media/image5.png\"") != std::string::npos);
+    // External and unmapped targets are untouched.
+    CHECK(out.find("Id=\"rId3\" Type=\"t\" Target=\"../media/image1.png\" "
+                   "TargetMode=\"External\"") != std::string::npos);
+    CHECK(out.find("Target=\"../notesSlides/notesSlide1.xml\"") != std::string::npos);
+    CHECK(out.rfind("<?xml", 0) == 0);
 }
 
 TEST_CASE("rewrite_rels drops relationships whose target was removed and keeps other ids") {

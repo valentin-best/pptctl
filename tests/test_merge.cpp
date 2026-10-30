@@ -62,27 +62,29 @@ const std::vector<std::string>& abc() {
     return inputs;
 }
 
-// True if the packages at `a` and `b` hold the same parts with the same bytes.
-bool same_parts(const std::string& a, const std::string& b) {
-    pptctl::Package pa;
+// True if every part of the package at `base` is in the one at `out` with the
+// same bytes, except `[Content_Types].xml`, and `out` has more parts.
+bool keeps_base(const std::string& base, const std::string& out) {
     pptctl::Package pb;
-    REQUIRE(pa.open(a));
-    REQUIRE(pb.open(b));
-    if (pa.part_names() != pb.part_names()) {
-        return false;
-    }
-    for (const auto& name : pa.part_names()) {
-        if (pa.read_part(name) != pb.read_part(name)) {
+    pptctl::Package po;
+    REQUIRE(pb.open(base));
+    REQUIRE(po.open(out));
+    for (const auto& name : pb.part_names()) {
+        if (name != "[Content_Types].xml" && pb.read_part(name) != po.read_part(name)) {
             return false;
         }
     }
-    return true;
+    return po.part_count() > pb.part_count();
 }
 
-std::size_t integrity_problems(const std::string& path) {
+// Integrity diagnostics on the package at `path`, except orphan-part: the
+// imported slides aren't in the slide list yet (#136), so nothing reaches them.
+std::vector<pptctl::Diagnostic> integrity_problems(const std::string& path) {
     pptctl::Package pkg;
     REQUIRE(pkg.open(path));
-    return pptctl::check_integrity(pkg, pptctl::PartGraph::build(pkg)).size();
+    auto ds = pptctl::check_integrity(pkg, pptctl::PartGraph::build(pkg));
+    std::erase_if(ds, [](const pptctl::Diagnostic& d) { return d.rule_id == "orphan-part"; });
+    return ds;
 }
 
 }  // namespace
@@ -105,15 +107,15 @@ TEST_CASE("merge fixtures: a and c share the logo byte for byte; b has its own t
 
 // ── pipeline ──────────────────────────────────────────────────────────────────
 
-TEST_CASE("merge: with no import yet, the output is deck 1 unchanged") {
+TEST_CASE("merge: deck 1 is the base; the other decks' slides arrive as added parts") {
     ScratchDir dir;
     const auto out = (dir.path / "out.pptx").string();
     std::string error;
     const auto report = pptctl::merge(abc(), out, {}, error);
     REQUIRE(report);
     CHECK(error.empty());
-    CHECK(same_parts(fixture("merge_a.pptx"), out));
-    CHECK(integrity_problems(out) == 0);
+    CHECK(keeps_base(fixture("merge_a.pptx"), out));
+    CHECK(integrity_problems(out).empty());
     CHECK(report->output_bytes == fs::file_size(out));
     CHECK(report->slides == 3);
 
@@ -127,7 +129,8 @@ TEST_CASE("merge: with no import yet, the output is deck 1 unchanged") {
     for (const auto& input : {report->inputs[1], report->inputs[2]}) {
         CHECK_FALSE(input.base);
         CHECK(input.slides == 0);
-        CHECK(input.parts_added == 0);
+        CHECK(input.parts_added > 0);
+        CHECK(input.masters_imported == 1);
         CHECK(input.warnings.size() == 1);
     }
 }
@@ -138,7 +141,7 @@ TEST_CASE("merge: --theme=N makes deck N the base package") {
     std::string error;
     const auto report = pptctl::merge(abc(), out, {.theme = 2}, error);
     REQUIRE(report);
-    CHECK(same_parts(fixture("merge_b.pptx"), out));
+    CHECK(keeps_base(fixture("merge_b.pptx"), out));
     CHECK_FALSE(report->inputs[0].base);
     CHECK(report->inputs[1].base);
     CHECK(report->inputs[1].slides == 2);
@@ -221,7 +224,9 @@ TEST_CASE("merge command: writes -o and prints the summary") {
     CHECK(text.starts_with("merge -> " + out + "\n"));
     CHECK(text.find("  1. " + fixture("merge_a.pptx") + ": 3 slides (base)\n") !=
           std::string::npos);
-    CHECK(text.find("warning: slides not imported") != std::string::npos);
+    CHECK(text.find("  2. " + fixture("merge_b.pptx") + ": 0 slides, ") != std::string::npos);
+    CHECK(text.find("warning: 2 slides imported but not added to the slide list yet") !=
+          std::string::npos);
     CHECK(text.find("total: 3 slides, ") != std::string::npos);
 }
 
