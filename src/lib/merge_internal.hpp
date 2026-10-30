@@ -147,6 +147,47 @@ class PartImporter {
     std::vector<std::string> warnings_;
 };
 
+// The parts a slide master brings (its layouts, theme, media, ...), walked
+// from the master through internal relationships in `.rels` order, with a
+// signature that two masters share exactly when their closures have the same
+// content types and part hashes and are wired the same way. Part names don't
+// enter it, so slideMaster2.xml in one deck matches slideMaster1.xml in another.
+struct MasterClosure {
+    std::vector<std::string> parts;  // walk order, the master first
+    std::string signature;
+};
+
+[[nodiscard]] MasterClosure master_closure(const Package& pkg, const std::string& master);
+
+// The slide masters already in the output, for collapsing identical ones (#139).
+// Identity is byte equality of the whole closure: a signature match is
+// confirmed part by part. Near-identical masters (whitespace, ids, a
+// re-saved theme) don't match.
+class MasterIndex {
+ public:
+    // Index the base's slide masters (those its presentation part relates).
+    explicit MasterIndex(const Package& base);
+
+    // If `source`'s `master` is identical to one in the output: each part of
+    // its closure (source name) -> the matching output part. Empty if not.
+    [[nodiscard]] std::map<std::string, std::string> match(const Package& source,
+                                                           const std::string& master) const;
+
+    // Index `master`, imported from `source`; `mapping` is the importer's
+    // source part -> output part.
+    void add(const Package& source,
+             const std::string& master,
+             const std::map<std::string, std::string>& mapping);
+
+ private:
+    struct Entry {
+        const Package* pkg;               // where the closure's bytes are read from
+        MasterClosure closure;            // part names in *pkg
+        std::vector<std::string> output;  // the same parts' output names
+    };
+    std::vector<Entry> entries_;
+};
+
 // One input deck as concatenate() sees it.
 struct ConcatDeck {
     const Package* source = nullptr;

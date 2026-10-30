@@ -153,7 +153,20 @@ TEST_CASE("merge: many decks, including real PowerPoint output, pass every integ
 // ── masters ───────────────────────────────────────────────────────────────────
 
 TEST_CASE("merge: imported masters are registered; master and layout ids stay unique") {
-    const Merged m(abc());
+    // Three decks with three different masters: merge_b's own theme, and
+    // merge_c with one layout a byte longer than merge_a's.
+    ScratchDir dir;
+    const auto tweaked = (dir.path / "tweaked_c.pptx").string();
+    {
+        pptctl::Package c;
+        REQUIRE(c.open(fixture("merge_c.pptx")));
+        auto layout = c.read_part("ppt/slideLayouts/slideLayout7.xml");
+        layout.push_back(std::byte{' '});
+        pptctl::PartChanges changes;
+        changes.replaced["ppt/slideLayouts/slideLayout7.xml"] = std::move(layout);
+        REQUIRE(c.write(tweaked, changes));
+    }
+    const Merged m({fixture("merge_a.pptx"), fixture("merge_b.pptx"), tweaked});
     const auto doc = m.xml("ppt/presentation.xml");
     const auto masters = doc.select_nodes("//p:sldMasterIdLst/p:sldMasterId");
     REQUIRE(masters.size() == 3);
