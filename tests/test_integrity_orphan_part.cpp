@@ -35,7 +35,7 @@ TEST_CASE("orphan-part: every clean fixture is silent, bar optimize_deck's delib
     for (const auto& path : integrity_test::clean_fixtures()) {
         CAPTURE(path);
         const auto d = run_rule(kRule, path);
-        if (path.ends_with("/optimize_deck.pptx")) {
+        if (integrity_test::fs::path(path).filename() == "optimize_deck.pptx") {
             // Kept for the optimize orphans pass (#99).
             REQUIRE(d.size() == 1);
             CHECK(d[0].part == "ppt/media/orphan.png");
