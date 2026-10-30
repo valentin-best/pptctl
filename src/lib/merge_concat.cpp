@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <format>
 #include <initializer_list>
+#include <optional>
 #include <pugixml.hpp>
 #include <set>
 #include <string>
@@ -234,6 +235,35 @@ void renumber_comment_anchors(MergeTarget& target,
             target.replace_part(it->second, save_xml(doc));
         }
     }
+}
+
+// docProps/app.xml's AppVersion ("16.0000"), or "" when absent.
+std::string app_version(const Package& pkg) {
+    const auto part = target_of_type(pkg, "", rel_type("extended-properties"));
+    pugi::xml_document doc;
+    if (part.empty() || !load_xml(doc, pkg.read_part(part))) {
+        return {};
+    }
+    return doc.child("Properties").child("AppVersion").text().as_string();
+}
+
+// True if AppVersion `a` is older than `b`, comparing "major.minor" numerically.
+// An empty or malformed `b` is never newer.
+bool version_less(const std::string& a, const std::string& b) {
+    const auto parse = [](const std::string& v) -> std::optional<std::pair<long, long>> {
+        const auto dot = v.find('.');
+        char* end = nullptr;
+        const long major = std::strtol(v.c_str(), &end, 10);
+        if (end == v.c_str()) {
+            return std::nullopt;
+        }
+        const long minor =
+            dot == std::string::npos ? 0 : std::strtol(v.c_str() + dot + 1, nullptr, 10);
+        return std::pair{major, minor};
+    };
+    const auto pa = parse(a);
+    const auto pb = parse(b);
+    return pb && (!pa || *pa < *pb);
 }
 
 std::string inches(std::int64_t emu) {
@@ -470,6 +500,20 @@ void concatenate(MergeTarget& target,
     }
     if (auto node = props.child("Notes")) {
         node.text().set(std::to_string(notes).c_str());
+    }
+    // PowerPoint opens a file whose AppVersion is older than its own in
+    // compatibility mode, which changes how content it doesn't spell out is
+    // drawn (an imported chart's default colours, for one). Take the newest
+    // input's, so imported slides render as they did in their own deck.
+    if (auto node = props.child("AppVersion")) {
+        std::string newest = node.text().as_string();
+        for (const auto& deck : decks) {
+            const auto version = app_version(*deck.source);
+            if (version_less(newest, version)) {
+                newest = version;
+            }
+        }
+        node.text().set(newest.c_str());
     }
     target.replace_part(app_part, save_xml(app));
 }
