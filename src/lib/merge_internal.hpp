@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
 #include <pptctl/package.hpp>
 #include <set>
@@ -222,6 +223,43 @@ class LayoutMatcher {
     };
     std::vector<Layout> layouts_;
 };
+
+// Comment authors (#159). Comments come with their slide's closure, but the
+// authors they name live in a presentation-level part a slide never reaches:
+// legacy comments (p:cm authorId) in commentAuthors.xml, modern comments
+// (p188:cm authorId, a GUID) in authors.xml. This carries the authors over
+// and re-points the imported comments at them.
+class CommentAuthors {
+ public:
+    explicit CommentAuthors(MergeTarget& target);
+
+    // Point the comment parts imported from `source` (their output names) at
+    // the output's authors. A legacy author is matched by name and initials,
+    // else added with the next free id; each imported comment gets the next
+    // idx past its author's lastIdx, and reply links (p15:parentCm) follow.
+    // Modern authors are added by GUID when missing; their comments need no
+    // rewrite. Problems (an author the source doesn't list) go to `warnings`.
+    void import(const Package& source,
+                const std::vector<std::string>& comment_parts,
+                std::vector<std::string>& warnings);
+
+    // Write the author lists that changed, creating each part with its
+    // presentation relationship and content type when the base had none.
+    void finish();
+
+ private:
+    struct Legacy;
+    struct Modern;
+    MergeTarget* target_;
+    std::shared_ptr<Legacy> legacy_;
+    std::shared_ptr<Modern> modern_;
+};
+
+// Add a relationship of `type` from the output's presentation part to
+// `target_part`, with a fresh rId; returns the rId.
+std::string add_presentation_relationship(MergeTarget& target,
+                                          std::string_view type,
+                                          const std::string& target_part);
 
 // One input deck as concatenate() sees it.
 struct ConcatDeck {

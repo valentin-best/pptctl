@@ -56,6 +56,12 @@ Generates, next to this script:
                             its embedded workbook; an external hyperlink and a linked
                             (external) video with a poster image; a SmartArt diagram
                             (synthetic data/layout/style/colors/drawing parts).
+  - merge_comments_a.pptx   2 slides with legacy comments by Ana Lopez (author 0) and Ben
+                            Okafor (author 1); slide 2 has Ben's reply to Ana.
+  - merge_comments_b.pptx   1 slide with legacy comments by Ben Okafor (author 0 here) and
+                            Chloe Martin (author 1).
+  - merge_comments_modern.pptx 1 slide with a modern (PowerPoint 365) comment by Dana Ito,
+                            authors in ppt/authors.xml.
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -1360,6 +1366,141 @@ def add_merge_smartart(path: Path) -> None:
     _write_zip(path, parts)
 
 
+_P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+_P15_NS = "http://schemas.microsoft.com/office/powerpoint/2012/main"
+_P188_NS = "http://schemas.microsoft.com/office/powerpoint/2018/8/main"
+_XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+_PML = "application/vnd.openxmlformats-officedocument.presentationml"
+
+
+def _comment_deck(path: Path, titles: list[str]) -> None:
+    prs = Presentation()
+    for title in titles:
+        prs.slides.add_slide(prs.slide_layouts[5]).shapes.title.text = title
+    _set_core_props(prs, "pptctl merge fixture: comments")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def _add_legacy_comments(
+    path: Path,
+    authors: list[tuple[str, str, int]],
+    comments: dict[int, list[tuple[int, int, str, tuple[int, int] | None]]],
+) -> None:
+    """Legacy comments: ppt/commentAuthors.xml with `authors` (name, initials,
+    lastIdx; the id is the list position), and per slide number a
+    ppt/comments/commentN.xml of (authorId, idx, text, parent) comments, where
+    parent is the (authorId, idx) a reply answers."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    lst = "".join(
+        f'<p:cmAuthor id="{i}" name="{name}" initials="{initials}" lastIdx="{last}" clrIdx="{i}"/>'
+        for i, (name, initials, last) in enumerate(authors)
+    )
+    parts["ppt/commentAuthors.xml"] = (
+        _XML_HEAD + f'<p:cmAuthorLst xmlns:p="{_P_NS}">{lst}</p:cmAuthorLst>'
+    ).encode("utf-8")
+    pres_rels = "ppt/_rels/presentation.xml.rels"
+    parts[pres_rels], _ = _add_rel(parts[pres_rels], f"{_REL_NS}/commentAuthors", "commentAuthors.xml")
+    overrides = (
+        f'<Override PartName="/ppt/commentAuthors.xml" ContentType="{_PML}.commentAuthors+xml"/>'
+    )
+    for n, (slide, cms) in enumerate(sorted(comments.items()), start=1):
+        body = ""
+        for author, idx, text, parent in cms:
+            thread = ""
+            if parent:
+                thread = (
+                    '<p:extLst><p:ext uri="{C676402C-5697-4E1C-873F-D02D1690AC5C}">'
+                    f'<p15:threadingInfo xmlns:p15="{_P15_NS}" timeZoneBias="0">'
+                    f'<p15:parentCm authorId="{parent[0]}" idx="{parent[1]}"/>'
+                    "</p15:threadingInfo></p:ext></p:extLst>"
+                )
+            body += (
+                f'<p:cm authorId="{author}" dt="2026-10-01T10:0{idx}:00.000" idx="{idx}">'
+                f'<p:pos x="10" y="{10 * idx}"/><p:text>{text}</p:text>{thread}</p:cm>'
+            )
+        part = f"ppt/comments/comment{n}.xml"
+        parts[part] = (_XML_HEAD + f'<p:cmLst xmlns:p="{_P_NS}">{body}</p:cmLst>').encode("utf-8")
+        rels = f"ppt/slides/_rels/slide{slide}.xml.rels"
+        parts[rels], _ = _add_rel(parts[rels], f"{_REL_NS}/comments", f"../comments/comment{n}.xml")
+        overrides += f'<Override PartName="/{part}" ContentType="{_PML}.comments+xml"/>'
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    parts["[Content_Types].xml"] = ct.replace("</Types>", overrides + "</Types>").encode("utf-8")
+    _write_zip(path, parts)
+
+
+def build_merge_comments_a(path: Path) -> None:
+    _comment_deck(path, ["Comments A1", "Comments A2"])
+    _add_legacy_comments(
+        path,
+        [("Ana Lopez", "AL", 2), ("Ben Okafor", "BO", 2)],
+        {
+            1: [(0, 1, "Ana: check this number", None), (1, 1, "Ben: agreed", None)],
+            2: [(0, 2, "Ana: source?", None), (1, 2, "Ben: reply to Ana", (0, 2))],
+        },
+    )
+
+
+def build_merge_comments_b(path: Path) -> None:
+    _comment_deck(path, ["Comments B1"])
+    _add_legacy_comments(
+        path,
+        [("Ben Okafor", "BO", 1), ("Chloe Martin", "CM", 1)],
+        {1: [(0, 1, "Ben: in deck B", None), (1, 1, "Chloe: in deck B", None)]},
+    )
+
+
+def build_merge_comments_modern(path: Path) -> None:
+    """A modern comment: ppt/authors.xml, and a comment part the slide relates
+    and names in its extLst; the comment anchors to the slide by its sldId."""
+    _comment_deck(path, ["Modern comments"])
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    author = "{0D5E8A2B-6C41-4F3A-9E27-1B8C4D6A9F01}"
+    parts["ppt/authors.xml"] = (
+        _XML_HEAD + f'<p188:authorLst xmlns:p188="{_P188_NS}">'
+        f'<p188:author id="{author}" name="Dana Ito" initials="DI" userId="Dana Ito" '
+        'providerId="None"/></p188:authorLst>'
+    ).encode("utf-8")
+    pres_rels = "ppt/_rels/presentation.xml.rels"
+    parts[pres_rels], _ = _add_rel(
+        parts[pres_rels], "http://schemas.microsoft.com/office/2018/10/relationships/authors", "authors.xml"
+    )
+    sld_id = re.search(r'<p:sldId id="(\d+)"', parts["ppt/presentation.xml"].decode()).group(1)
+    parts["ppt/comments/modernComment_100_ABCDEF01.xml"] = (
+        _XML_HEAD + f'<p188:cmLst xmlns:a="{_A_NS}" xmlns:p188="{_P188_NS}">'
+        f'<p188:cm id="{{6A1F0C2E-3B4D-4E5F-8A9B-0C1D2E3F4A5B}}" authorId="{author}" '
+        'created="2026-10-01T10:00:00.000">'
+        '<pc:sldMkLst xmlns:pc="http://schemas.microsoft.com/office/powerpoint/2013/main/command">'
+        f'<pc:docMk/><pc:sldMk cId="2882800385" sldId="{sld_id}"/></pc:sldMkLst>'
+        "<p188:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Dana: modern comment</a:t></a:r>"
+        "</a:p></p188:txBody></p188:cm></p188:cmLst>"
+    ).encode("utf-8")
+    rels = "ppt/slides/_rels/slide1.xml.rels"
+    parts[rels], rid = _add_rel(
+        parts[rels],
+        "http://schemas.microsoft.com/office/2018/10/relationships/comments",
+        "../comments/modernComment_100_ABCDEF01.xml",
+    )
+    slide = parts["ppt/slides/slide1.xml"].decode("utf-8")
+    ext = (
+        '<p:extLst><p:ext uri="{6950BFC3-D8DA-4A85-94F7-54DA5524770B}">'
+        f'<p188:commentRel xmlns:p188="{_P188_NS}" r:id="{rid}"/></p:ext></p:extLst>'
+    )
+    slide = slide.replace("</p:sld>", ext + "</p:sld>", 1)
+    parts["ppt/slides/slide1.xml"] = slide.encode("utf-8")
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = ct.replace(
+        "</Types>",
+        '<Override PartName="/ppt/authors.xml" ContentType="application/vnd.ms-powerpoint.authors+xml"/>'
+        '<Override PartName="/ppt/comments/modernComment_100_ABCDEF01.xml" '
+        'ContentType="application/vnd.ms-powerpoint.comments+xml"/></Types>',
+    )
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+    _write_zip(path, parts)
+
+
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
     ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
@@ -1383,6 +1524,9 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("merge_c.pptx", [build_merge_deck_c]),
     ("merge_empty.pptx", [build_merge_empty]),
     ("merge_edge.pptx", [build_merge_edge, link_merge_video, add_merge_smartart]),
+    ("merge_comments_a.pptx", [build_merge_comments_a]),
+    ("merge_comments_b.pptx", [build_merge_comments_b]),
+    ("merge_comments_modern.pptx", [build_merge_comments_modern]),
 ]
 
 
