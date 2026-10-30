@@ -42,13 +42,22 @@ struct Relationship {
 // Rewrite `[Content_Types].xml`: drop the Override for every part in
 // `removed_parts`, then set one Override per `added_overrides` entry
 // (part name -> content type), replacing an existing Override for that part.
-// Defaults are untouched. Part names are given without a leading slash, as
-// Package::part_names reports them. The result is meant to be passed back to
-// Package::write as the replaced `[Content_Types].xml`.
+// Each `added_defaults` entry (extension without the dot -> content type) adds
+// a Default after the existing ones, unless one for that extension (compared
+// case-insensitively) is already there; existing Defaults are untouched. Part
+// names are given without a leading slash, as Package::part_names reports
+// them. The result is meant to be passed back to Package::write as the
+// replaced `[Content_Types].xml`.
 [[nodiscard]] std::vector<std::byte> rewrite_content_types(
     std::span<const std::byte> xml,
     const std::set<std::string>& removed_parts,
-    const std::map<std::string, std::string>& added_overrides);
+    const std::map<std::string, std::string>& added_overrides,
+    const std::map<std::string, std::string>& added_defaults = {});
+
+// The relationship Target that reaches `to_part` from a `.rels` owned by
+// `from_part`: relative to from_part's directory, e.g. "../media/image3.png"
+// from "ppt/slides/slide4.xml". An empty `from_part` is the package root.
+[[nodiscard]] std::string relative_target(std::string_view from_part, std::string_view to_part);
 
 // Rewrite a `.rels` part owned by `source_part`: drop every Relationship
 // whose resolved internal target is in `removed_parts`. Surviving ids are
@@ -56,6 +65,18 @@ struct Relationship {
 [[nodiscard]] std::vector<std::byte> rewrite_rels(std::span<const std::byte> xml,
                                                   std::string_view source_part,
                                                   const std::set<std::string>& removed_parts);
+
+// Rewrite a `.rels` part owned by `source_part` for a copy of that part
+// named `target_part` (in this package or another): every internal
+// Relationship whose resolved target is a key of `retarget` points at the
+// mapped part instead, written relative to target_part (relative_target).
+// Ids, types, external relationships and unmapped targets are left as they
+// are, so the copied part's body keeps resolving its r:id references.
+[[nodiscard]] std::vector<std::byte> retarget_rels(
+    std::span<const std::byte> xml,
+    std::string_view source_part,
+    std::string_view target_part,
+    const std::map<std::string, std::string>& retarget);
 
 // The edits a mutating command applies when writing a package. Everything not
 // named here is copied through untouched. A `replaced` name that doesn't exist

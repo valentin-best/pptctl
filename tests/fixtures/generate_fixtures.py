@@ -48,7 +48,8 @@ Generates, next to this script:
   - merge_b.pptx            2 slides on a restyled theme (other colors and fonts), both
                             with speaker notes; slide 2 holds a chart.
   - merge_c.pptx            2 slides on merge_a's template, showing the same logo PNG
-                            (byte-identical, for media de-duplication).
+                            (byte-identical, for media de-duplication); an external
+                            hyperlink, and a picture on slide 2 linking to slide 1.
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -1107,15 +1108,25 @@ def restyle_merge_theme(path: Path) -> None:
 
 
 def build_merge_deck_c(path: Path) -> None:
-    """merge_c.pptx: two slides on merge_a's template, both showing the logo."""
+    """merge_c.pptx: two slides on merge_a's template, both showing the logo.
+    Slide 1 has an external hyperlink; slide 2's logo links back to slide 1
+    (an internal slide-to-slide relationship)."""
     prs = Presentation()
-    s = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
-    s.shapes.title.text = "C: bullets"
-    _fill_bullets(s.placeholders[1].text_frame, ["Delta", "Epsilon"])
-    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5))
+    first = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+    first.shapes.title.text = "C: bullets"
+    _fill_bullets(first.placeholders[1].text_frame, ["Delta", "Epsilon"])
+    first.placeholders[1].text_frame.paragraphs[0].runs[0].hyperlink.address = (
+        "https://example.com/pptctl"
+    )
+    first.shapes.add_picture(
+        io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5)
+    )
     s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
     s.shapes.title.text = "C: closing"
-    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5))
+    logo = s.shapes.add_picture(
+        io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5)
+    )
+    logo.click_action.target_slide = first
     _set_core_props(prs, "pptctl merge fixture C")
     prs.save(str(path))
     _normalize_zip(path)
