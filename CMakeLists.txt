@@ -291,6 +291,7 @@ add_executable(pptctl_tests
     tests/test_merge_media.cpp
     tests/test_merge_masters.cpp
     tests/test_merge_theme.cpp
+    tests/test_merge_golden.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

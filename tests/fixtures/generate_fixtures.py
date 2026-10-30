@@ -51,6 +51,11 @@ Generates, next to this script:
   - merge_c.pptx            2 slides on merge_a's template, showing the same logo PNG
                             (byte-identical, for media de-duplication); an external
                             hyperlink, and a picture on slide 2 linking to slide 1.
+  - merge_empty.pptx        No slides at all (no p:sldIdLst), a merge edge input.
+  - merge_edge.pptx         3 slides of merge edge inputs: speaker notes and a chart with
+                            its embedded workbook; an external hyperlink and a linked
+                            (external) video with a poster image; a SmartArt diagram
+                            (synthetic data/layout/style/colors/drawing parts).
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -1205,6 +1210,156 @@ def build_merge_deck_c(path: Path) -> None:
     _normalize_zip(path)
 
 
+def build_merge_empty(path: Path) -> None:
+    """merge_empty.pptx: the default template with no slides."""
+    prs = Presentation()
+    _set_core_props(prs, "pptctl merge fixture: empty")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def build_merge_edge(path: Path) -> None:
+    """merge_edge.pptx before link_merge_video and add_merge_smartart: a chart
+    slide with notes, a hyperlink + video slide, and a slide for the diagram."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
+    s.shapes.title.text = "Edge: chart"
+    cd = ChartData()
+    cd.categories = ["X", "Y"]
+    cd.add_series("Edge", (2, 3))
+    s.shapes.add_chart(XL_CHART_TYPE.PIE, Inches(1), Inches(1.5), Inches(6), Inches(4), cd)
+    s.notes_slide.notes_text_frame.text = "Notes on the edge chart"
+
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Edge: links"
+    box = s.shapes.add_textbox(Inches(1), Inches(1.5), Inches(6), Inches(0.6))
+    box.text_frame.text = "pptctl on the web"
+    box.text_frame.paragraphs[0].runs[0].hyperlink.address = "https://example.com/edge"
+    s.shapes.add_movie(
+        io.BytesIO(b"\x00\x00\x00\x18ftypmp42"),
+        Inches(1),
+        Inches(2.5),
+        Inches(4),
+        Inches(3),
+        poster_frame_image=io.BytesIO(_png(64, 48, (30, 120, 60))),
+        mime_type="video/mp4",
+    )
+
+    s = prs.slides.add_slide(prs.slide_layouts[5])
+    s.shapes.title.text = "Edge: SmartArt"
+    _set_core_props(prs, "pptctl merge fixture: edge")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def link_merge_video(path: Path) -> None:
+    """Turn merge_edge's embedded video into a linked one: both video
+    relationships become external file:// links and the media part goes."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    rels = parts["ppt/slides/_rels/slide2.xml.rels"].decode("utf-8")
+    rels, n = re.subn(
+        r'Target="../media/media1.mp4"',
+        'Target="file:///Users/Shared/pptctl-clip.mp4" TargetMode="External"',
+        rels,
+    )
+    assert n == 2, n
+    parts["ppt/slides/_rels/slide2.xml.rels"] = rels.encode("utf-8")
+    slide = parts["ppt/slides/slide2.xml"].decode("utf-8")
+    slide = re.sub(r'(<p14:media [^>]*?)r:embed=', r"\1r:link=", slide)
+    parts["ppt/slides/slide2.xml"] = slide.encode("utf-8")
+    del parts["ppt/media/media1.mp4"]
+    _write_zip(path, parts)
+
+
+_DGM_NS = "http://schemas.openxmlformats.org/drawingml/2006/diagram"
+_DSP_NS = "http://schemas.microsoft.com/office/drawing/2008/diagram"
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def add_merge_smartart(path: Path) -> None:
+    """Give merge_edge's slide 3 a SmartArt diagram: a graphicFrame naming the
+    data, layout, quick-style and colors parts, plus the cached drawing part,
+    the way PowerPoint lays them out. The parts are minimal (one text point),
+    enough for the relationship graph merge has to carry."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    head = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    parts["ppt/diagrams/data1.xml"] = (
+        head + f'<dgm:dataModel xmlns:dgm="{_DGM_NS}" xmlns:a="{_A_NS}">'
+        '<dgm:ptLst><dgm:pt modelId="{5B1E0C3A-0000-4000-8000-000000000001}" type="doc">'
+        "<dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:p><a:r><a:t>Edge diagram</a:t></a:r>"
+        "</a:p></dgm:t></dgm:pt></dgm:ptLst><dgm:cxnLst/><dgm:bg/><dgm:whole/>"
+        "</dgm:dataModel>"
+    ).encode("utf-8")
+    parts["ppt/diagrams/layout1.xml"] = (
+        head + f'<dgm:layoutDef xmlns:dgm="{_DGM_NS}" '
+        'uniqueId="urn:microsoft.com/office/officeart/2005/8/layout/default">'
+        '<dgm:layoutNode name="diagram"/></dgm:layoutDef>'
+    ).encode("utf-8")
+    parts["ppt/diagrams/quickStyle1.xml"] = (
+        head + f'<dgm:styleDef xmlns:dgm="{_DGM_NS}" '
+        'uniqueId="urn:microsoft.com/office/officeart/2005/8/quickstyle/simple1"/>'
+    ).encode("utf-8")
+    parts["ppt/diagrams/colors1.xml"] = (
+        head + f'<dgm:colorsDef xmlns:dgm="{_DGM_NS}" '
+        'uniqueId="urn:microsoft.com/office/officeart/2005/8/colors/accent1_2"/>'
+    ).encode("utf-8")
+    parts["ppt/diagrams/drawing1.xml"] = (
+        head + f'<dsp:drawing xmlns:dsp="{_DSP_NS}" xmlns:a="{_A_NS}"><dsp:spTree>'
+        '<dsp:nvGrpSpPr><dsp:cNvPr id="0" name=""/><dsp:cNvGrpSpPr/></dsp:nvGrpSpPr>'
+        "<dsp:grpSpPr/></dsp:spTree></dsp:drawing>"
+    ).encode("utf-8")
+
+    rels_name = "ppt/slides/_rels/slide3.xml.rels"
+    rels = parts[rels_name]
+    rids = {}
+    for kind, target in (
+        ("diagramData", "data1.xml"),
+        ("diagramLayout", "layout1.xml"),
+        ("diagramQuickStyle", "quickStyle1.xml"),
+        ("diagramColors", "colors1.xml"),
+    ):
+        rels, rids[kind] = _add_rel(rels, f"{_REL_NS}/{kind}", f"../diagrams/{target}")
+    rels, _ = _add_rel(
+        rels,
+        "http://schemas.microsoft.com/office/2007/relationships/diagramDrawing",
+        "../diagrams/drawing1.xml",
+    )
+    parts[rels_name] = rels
+
+    frame = (
+        '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="9" name="Diagram 8"/>'
+        "<p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>"
+        '<p:xfrm><a:off x="914400" y="1828800"/><a:ext cx="5486400" cy="2743200"/></p:xfrm>'
+        '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/diagram">'
+        f'<dgm:relIds xmlns:dgm="{_DGM_NS}" r:dm="{rids["diagramData"]}" '
+        f'r:lo="{rids["diagramLayout"]}" r:qs="{rids["diagramQuickStyle"]}" '
+        f'r:cs="{rids["diagramColors"]}"/></a:graphicData></a:graphic></p:graphicFrame>'
+    )
+    slide = parts["ppt/slides/slide3.xml"].decode("utf-8")
+    slide = slide.replace("</p:spTree>", frame + "</p:spTree>", 1)
+    parts["ppt/slides/slide3.xml"] = slide.encode("utf-8")
+
+    base = "application/vnd.openxmlformats-officedocument.drawingml"
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    ct = ct.replace(
+        "</Types>",
+        f'<Override PartName="/ppt/diagrams/data1.xml" ContentType="{base}.diagramData+xml"/>'
+        f'<Override PartName="/ppt/diagrams/layout1.xml" ContentType="{base}.diagramLayout+xml"/>'
+        f'<Override PartName="/ppt/diagrams/quickStyle1.xml" ContentType="{base}.diagramStyle+xml"/>'
+        f'<Override PartName="/ppt/diagrams/colors1.xml" ContentType="{base}.diagramColors+xml"/>'
+        '<Override PartName="/ppt/diagrams/drawing1.xml" '
+        'ContentType="application/vnd.ms-office.drawingml.diagramDrawing+xml"/>'
+        "</Types>",
+    )
+    parts["[Content_Types].xml"] = ct.encode("utf-8")
+    _write_zip(path, parts)
+
+
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
     ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
@@ -1226,6 +1381,8 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("merge_a.pptx", [build_merge_deck_a]),
     ("merge_b.pptx", [build_merge_deck_b, restyle_merge_theme, add_merge_sections]),
     ("merge_c.pptx", [build_merge_deck_c]),
+    ("merge_empty.pptx", [build_merge_empty]),
+    ("merge_edge.pptx", [build_merge_edge, link_merge_video, add_merge_smartart]),
 ]
 
 
