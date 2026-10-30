@@ -97,18 +97,20 @@ Exit criteria: diffing two real-world decks where you made known small edits pro
 
 **Ship moment:** v0.4.0. Pitch to legal/finance communities — they care most.
 
-## Phase 5 — `pptctl optimize` (weeks 15–17)
+## Phase 5 — `pptctl optimize` (weeks 15–17) ✅
 
 Goal: make 50–90% file size reductions one command.
 
-- [ ] Recompress embedded JPEGs/PNGs at configurable quality.
-- [ ] Remove unused slide masters and layouts.
-- [ ] Strip embedded fonts (with `--keep-fonts` opt-out).
-- [ ] Strip cropped portions of images (PowerPoint stores the full image even after a crop).
-- [ ] Remove orphan media (files in `ppt/media/` with no relationships).
-- [ ] Report what was changed.
+- [x] Recompress embedded JPEGs/PNGs at configurable quality.
+- [x] Remove unused slide masters and layouts.
+- [x] Strip embedded fonts (with `--keep-fonts` opt-out).
+- [x] Strip cropped portions of images (PowerPoint stores the full image even after a crop).
+- [x] Remove orphan media (files in `ppt/media/` with no relationships).
+- [x] Report what was changed.
 
 Exit criteria: on a corpus of ten public decks, average size reduction ≥40% with no visible quality loss in PowerPoint and Keynote.
+
+Outcome: met on the full 15-deck public corpus (42.9% mean, median 43.4%, no visible quality loss), but not uniformly: the 10 university lecture decks alone average 35.8%, held back by vector metafiles, OLE embeddings and screenshots already at their displayed size. See `docs/phase5-optimize-validation.md`.
 
 **Ship moment:** v0.5.0. Nobody else does this well, and the story is concrete: "shrinks decks 40–90% without breaking them in Keynote". A natural candidate for going public (still the maintainer's call).
 

@@ -2,7 +2,7 @@
 
 > Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
-**Status:** early development, v0.4.0. `info`, `extract`, `lint` and `diff` work; the others are stubs.
+**Status:** early development, v0.5.0. `info`, `extract`, `lint`, `diff` and `optimize` work; `merge` is next.
 
 ```
 $ pptctl info deck.pptx
@@ -108,7 +108,7 @@ pptctl diff -q approved.pptx candidate.pptx || echo "deck changed"
 
 To get these diffs from `git diff` and `git log -p`, see [docs/git-integration.md](./docs/git-integration.md).
 
-Not there yet (Phase 4 is still open): table and chart contents are not compared, and the diff has not been validated on a corpus of real-world decks.
+Validated on a corpus of real-world decks: see [docs/phase4-diff-validation.md](./docs/phase4-diff-validation.md).
 
 ## `pptctl optimize`
 

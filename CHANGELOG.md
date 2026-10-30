@@ -5,6 +5,91 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [0.5.0] — 2026-10-30
+
+Phase 5: `pptctl optimize`, file-size reduction that keeps the deck the
+same deck.
+
+Over the 15-deck public validation corpus, the mean reduction is 42.9%
+(median 43.4%, from 9.7% to 90.5%). That meets the Phase 5 bar on the full
+corpus, but the 10 university lecture decks alone average 35.8%. What
+`optimize` leaves alone is often most of what remains in those decks:
+vector metafiles, OLE embeddings, and screenshots already stored at their
+displayed size. See `docs/phase5-optimize-validation.md`.
+
+### Added
+
+- `optimize` subcommand (#98): a fixed pipeline of five passes, each with an
+  opt-out, writing to `-o FILE`, `--in-place` (temp file + rename) or
+  nowhere (`--dry-run`, which still measures the result). The summary
+  groups each pass's actions by kind; `--json` emits a versioned report
+  (`docs/optimize-schema.md`). Each pass sees the package as the previous
+  one left it, and the pipeline completes every removal (the part's
+  `.rels`, inbound relationships, content-type Overrides).
+- `layouts` pass (#100): removes slide layouts no slide uses, masters left
+  with none, and what only they reached (themes, media). A deck always
+  keeps one master and a master one layout. `--no-layouts`.
+- `fonts` pass (#101): removes embedded fonts and the "embed fonts" setting
+  that would bring them back on the next save. `--keep-fonts`.
+- `crop` pass (#104): cuts the pixels outside a picture's `a:srcRect` when
+  every use of the image has the same crop, and rewrites the crop to match,
+  keeping any sub-pixel remainder so the visible region is exact. PNGs are
+  re-encoded losslessly; JPEGs are cropped losslessly in the DCT domain
+  (new `crop_jpeg` in the codec, like `jpegtran -crop`). Images shown with
+  different crops, tiled, with an SVG or effect layer, or with an EXIF
+  rotation are skipped and reported. `--no-crop`.
+- `images` pass (#103): downsamples PNG and JPEG images to their largest
+  displayed size at the target density (`--max-scale`, default 2 x 96 DPI;
+  or `--max-dpi`), by area averaging with premultiplied alpha, and
+  re-encodes them: JPEG at `--quality` (default 85, progressive, ICC and
+  EXIF orientation kept), PNG losslessly (alpha and colour chunks kept,
+  palette when lossless). A part is replaced only when that saves at least
+  1 KiB, and a same-size JPEG re-encode at least 5%. `--no-images`.
+- `orphans` pass (#99): removes media nothing references. `--no-orphans`.
+- Placeholder inheritance (#93): a placeholder without its own `a:xfrm` or
+  fill takes it from its slide layout, else the master
+  (`PlaceholderInheritance`; matched by idx, then type). `diff` compares an
+  inherited position like any other, so a nudged title reports its delta
+  and writing out the inherited geometry is no change; the `images` pass
+  sizes placeholder pictures instead of skipping them. `extract` output is
+  unchanged.
+- Package writing (#96): `Package::write` copies untouched entries raw
+  (still compressed) and replaces, adds or removes parts, writing to a temp
+  file renamed over the target; `rewrite_rels`, `rewrite_content_types` and
+  `rels_part_for` helpers.
+- `PartGraph` (#97): the parts reachable from the root relationships, and a
+  reverse index of who references each part.
+- Image codecs (#102): libjpeg-turbo and libpng via FetchContent, with a
+  strict decoder that refuses what it couldn't re-encode faithfully (CMYK
+  JPEGs, 16-bit or animated PNGs).
+- Tests: optimize goldens for five fixtures with same-deck (extract and
+  diff), idempotence and opt-out checks (#105), and the new
+  `optimize_deck.pptx` and `crop_deck.pptx` fixtures. Byte counts that
+  depend on the platform's zlib are checked as invariants instead of pinned.
+- Validation (#107): `scripts/validate_optimize.sh` and
+  `docs/phase5-optimize-validation.md`. Over the 15 public decks: 0 crashes
+  (release and ASan/UBSan), every output the same deck and stable, and
+  every output opened by PowerPoint (re-saved without repair), Keynote and
+  LibreOffice. No visible quality loss at 100% zoom.
+- Docs: README `optimize` section and `docs/optimize-schema.md` (#106).
+
+### Fixed
+
+- `diff` paired a slide whose only picture changed bytes as removed + added;
+  it now matches the slide and reports the picture replaced (#121).
+- The `images` pass left an image untouched when downsampling it didn't
+  pay off; it now falls back to a re-encode at its own size (found by #107).
+- `crop_jpeg` could read one block past a source row for a grayscale JPEG
+  declaring sampling factors above 1 (found by a security review, #104).
+
+### Changed
+
+- CI wall time cut with ccache, a working dependency cache and PR-scoped
+  clang-tidy.
+- Positioning: pptctl is static analysis and safe surgery for decks (lint,
+  diff, optimize, merge); `fill` and library extraction are deferred
+  (ROADMAP).
+
 ## [0.4.0] — 2026-09-30
 
 Phase 4: `pptctl diff`, semantic diff between two decks.
@@ -150,6 +235,7 @@ Phase 1: `pptctl info`, quick metadata.
   MSVC 2022, plus a clang-tidy job; pre-commit hook running clang-format and
   clang-tidy.
 
+[0.5.0]: https://github.com/valentin-best/pptctl/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/valentin-best/pptctl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/valentin-best/pptctl/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/valentin-best/pptctl/compare/v0.1.0...v0.2.0

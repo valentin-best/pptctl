@@ -31,7 +31,7 @@ int optimize(const std::string& in, const OptimizeOptions& opts, const OptimizeO
 
 namespace {
 
-constexpr auto kVersion = "0.4.0";
+constexpr auto kVersion = "0.5.0";
 
 pptctl::FontTarget parse_font_target(const std::string& s) {
     if (s == "windows") {
