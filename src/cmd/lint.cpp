@@ -864,9 +864,10 @@ std::vector<Diagnostic> check_font_risk(const std::set<std::string>& referenced,
     return out;
 }
 
-// One diagnostic per part whose content type is on the suspect list, plus one per
-// part with no declared content type. Infrastructure files ([Content_Types].xml,
-// relationship parts) are excluded. Input pairs are (part_name, content_type).
+// One diagnostic per part whose content type is on the suspect list.
+// Infrastructure files ([Content_Types].xml, relationship parts) are excluded.
+// A part with no declared content type is undeclared-ctype's finding (#131),
+// not this rule's. Input pairs are (part_name, content_type).
 std::vector<Diagnostic> check_ctype(const std::vector<std::pair<std::string, std::string>>& parts) {
     const auto& suspects = suspect_content_types();
     std::vector<Diagnostic> out;
@@ -874,13 +875,7 @@ std::vector<Diagnostic> check_ctype(const std::vector<std::pair<std::string, std
         if (is_infrastructure(part)) {
             continue;
         }
-        if (ct.empty()) {
-            out.push_back({"ctype",
-                           Severity::Warning,
-                           0,
-                           "",
-                           std::format(R"(part "{}" has no declared content type)", part)});
-        } else if (suspects.contains(ct)) {
+        if (suspects.contains(ct)) {
             out.push_back({"ctype",
                            Severity::Warning,
                            0,

@@ -56,7 +56,7 @@ byte-for-byte reproducible for a given deck and `pptctl` version.
 | `alt-text` | A picture has no alt text and is not marked decorative. |
 | `font-risk` | A font is referenced but neither embedded nor bundled with the target platform (`--target all\|windows\|macos`; Office-bundled fonts always count as safe). The message says where it substitutes. |
 | `empty-ph` | A content placeholder contains no text. |
-| `ctype` | A part has a suspect content type, or none declared at all. |
+| `ctype` | A part has a suspect content type (e.g. a printer-settings stub that breaks Keynote). Since v0.6.0, a part with no content type at all is `undeclared-ctype`. |
 | `img-bloat` | An image is stored at far higher resolution than it is displayed (default: above 300 DPI effective and at least 64 KiB stored; `--max-image-dpi`, `--min-image-bytes`). |
 
 #### Package-integrity rules
