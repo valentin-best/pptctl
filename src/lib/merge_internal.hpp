@@ -37,8 +37,21 @@ class MergeTarget {
                   std::vector<std::byte> bytes,
                   const std::string& content_type);
 
-    // The changes to write: the added parts, plus `[Content_Types].xml`
-    // rewritten when anything needed declaring.
+    // Replace the bytes of an existing part, base or added; its content type
+    // stays as it was.
+    void replace_part(const std::string& name, std::vector<std::byte> bytes);
+
+    // A part's current bytes: replaced or added, else the base's.
+    [[nodiscard]] std::vector<std::byte> read_part(const std::string& name) const;
+
+    // A part's content type: as added, else the base's.
+    [[nodiscard]] std::string content_type(const std::string& name) const;
+
+    // Every part in the output: the base's, then the added ones.
+    [[nodiscard]] std::vector<std::string> part_names() const;
+
+    // The changes to write: the added and replaced parts, plus
+    // `[Content_Types].xml` rewritten when anything needed declaring.
     [[nodiscard]] PartChanges changes() const;
 
     [[nodiscard]] const Package& base() const noexcept {
@@ -51,6 +64,7 @@ class MergeTarget {
     std::map<std::string, std::string> defaults_;  // extension (lowercase) -> content type
     std::map<std::string, std::string> added_defaults_;
     std::map<std::string, std::string> added_overrides_;
+    std::map<std::string, std::string> added_types_;  // added part -> content type
     PartChanges changes_;
 };
 
@@ -96,5 +110,32 @@ class PartImporter {
     std::vector<std::string> copied_;
     std::vector<std::string> warnings_;
 };
+
+// One input deck as concatenate() sees it.
+struct ConcatDeck {
+    const Package* source = nullptr;
+    std::string path;  // names the section of a deck that has none
+    // Source part -> output part for an imported deck; nullptr for the base,
+    // whose slides are already in the output.
+    const std::map<std::string, std::string>* imported = nullptr;
+    std::vector<std::string> masters;  // slide masters imported from this deck (output names)
+
+    // Filled in by concatenate():
+    std::size_t slides = 0;             // slides this deck has in the output's slide list
+    std::vector<std::string> warnings;  // e.g. a slide size that differs from the base's
+};
+
+// Assemble the output's presentation-level parts (#136) after every deck's
+// slides are imported: rebuild p:sldIdLst in deck order (the base's entries
+// kept, imported slides with fresh ids and relationships), register imported
+// slide masters with their master and layout ids renumbered into one unique
+// id space, list the notes master in p:notesMasterIdLst (`imported_notes_master`
+// when non-empty, else the base's if it has one but doesn't list it),
+// carry sections over (a deck without sections gets one named after its
+// file), warn about decks whose slide size differs from the base's, and
+// update the Slides and Notes counts in docProps/app.xml.
+void concatenate(MergeTarget& target,
+                 std::span<ConcatDeck> decks,
+                 const std::string& imported_notes_master);
 
 }  // namespace pptctl::detail

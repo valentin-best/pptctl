@@ -19,31 +19,21 @@ namespace fs = std::filesystem;
 
 constexpr std::string_view kSlideMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml";
+constexpr std::string_view kNotesMasterType =
+    "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
+constexpr std::string_view kNotesMasterRel =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
+constexpr std::string_view kOfficeDocumentRel =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 
-// Copy `slides` of `input`, with everything they reach, into `target`. The
-// slides aren't added to the output's slide list yet (#136).
-void import_slides(const Package& input,
-                   const std::vector<std::string>& slides,
-                   detail::MergeTarget& target,
-                   MergeInputReport& report) {
-    detail::PartImporter importer(input, target);
-    std::size_t imported = 0;
-    for (const auto& slide : slides) {
-        if (!importer.import(slide).empty()) {
-            ++imported;
+// The target of `source`'s first internal relationship of `type`, or "".
+std::string target_of_type(const Package& pkg, std::string_view source, std::string_view type) {
+    for (const auto& rel : pkg.relationships(source)) {
+        if (!rel.external && rel.type == type) {
+            return rel.target;
         }
     }
-    report.parts_added = importer.copied().size();
-    for (const auto& part : importer.copied()) {
-        if (input.content_type(part) == kSlideMasterType) {
-            ++report.masters_imported;
-        }
-    }
-    report.warnings = importer.warnings();
-    report.warnings.push_back(std::format(
-        "{} imported but not added to the slide list yet: the output shows only the base "
-        "deck's slides",
-        imported == 1 ? "1 slide" : std::format("{} slides", imported)));
+    return {};
 }
 
 // Write `base` with `changes` to a throwaway file and return its size, for a
@@ -103,13 +93,59 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
 
     const std::size_t base = opts.theme == 0 ? 0 : opts.theme - 1;
     report.inputs[base].base = true;
-    report.inputs[base].slides = slide_parts[base].size();
 
     detail::MergeTarget target(packages[base]);
+
+    // A presentation has one notes master: imported notes slides use the
+    // base's, or the first one imported when the base has none.
+    std::string notes_master = target_of_type(
+        packages[base], target_of_type(packages[base], "", kOfficeDocumentRel), kNotesMasterRel);
+    std::string imported_notes_master;
+
+    std::vector<detail::PartImporter> importers;
+    importers.reserve(packages.size());
+    std::vector<detail::ConcatDeck> decks(packages.size());
     for (std::size_t i = 0; i < packages.size(); ++i) {
-        if (i != base) {
-            import_slides(packages[i], slide_parts[i], target, report.inputs[i]);
+        auto& deck = decks[i];
+        deck.source = &packages[i];
+        deck.path = in_paths[i];
+        if (i == base) {
+            continue;
         }
+        const auto& source = packages[i];
+        auto& importer = importers.emplace_back(
+            source,
+            target,
+            [&notes_master, src = &source](std::string_view part) -> std::optional<std::string> {
+                if (!notes_master.empty() && src->content_type(part) == kNotesMasterType) {
+                    return notes_master;
+                }
+                return std::nullopt;
+            });
+        for (const auto& slide : slide_parts[i]) {
+            (void)importer.import(slide);
+        }
+        auto& input = report.inputs[i];
+        input.parts_added = importer.copied().size();
+        for (const auto& part : importer.copied()) {
+            const auto type = source.content_type(part);
+            if (type == kSlideMasterType) {
+                ++input.masters_imported;
+                deck.masters.push_back(importer.mapping().at(part));
+            } else if (type == kNotesMasterType && notes_master.empty()) {
+                notes_master = imported_notes_master = importer.mapping().at(part);
+            }
+        }
+        input.warnings = importer.warnings();
+        deck.imported = &importer.mapping();
+    }
+
+    detail::concatenate(target, decks, imported_notes_master);
+    for (std::size_t i = 0; i < decks.size(); ++i) {
+        auto& input = report.inputs[i];
+        input.slides = decks[i].slides;
+        input.warnings.insert(
+            input.warnings.end(), decks[i].warnings.begin(), decks[i].warnings.end());
     }
     const auto changes = target.changes();
     for (const auto& input : report.inputs) {

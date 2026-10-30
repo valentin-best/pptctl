@@ -219,6 +219,7 @@ add_library(pptctl_lib STATIC
     src/lib/optimize_orphans.cpp
     src/lib/merge.cpp
     src/lib/merge_import.cpp
+    src/lib/merge_concat.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -281,6 +282,7 @@ add_executable(pptctl_tests
     tests/test_optimize_golden.cpp
     tests/test_merge.cpp
     tests/test_merge_import.cpp
+    tests/test_merge_concat.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

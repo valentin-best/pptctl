@@ -11,6 +11,7 @@
 #include <pptctl/package.hpp>
 #include <pptctl/part_graph.hpp>
 #include <random>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -63,28 +64,29 @@ const std::vector<std::string>& abc() {
 }
 
 // True if every part of the package at `base` is in the one at `out` with the
-// same bytes, except `[Content_Types].xml`, and `out` has more parts.
+// same bytes, except the package-level parts a merge rewrites, and `out` has
+// more parts.
 bool keeps_base(const std::string& base, const std::string& out) {
+    const std::set<std::string> rewritten{"[Content_Types].xml",
+                                          "ppt/presentation.xml",
+                                          "ppt/_rels/presentation.xml.rels",
+                                          "docProps/app.xml"};
     pptctl::Package pb;
     pptctl::Package po;
     REQUIRE(pb.open(base));
     REQUIRE(po.open(out));
     for (const auto& name : pb.part_names()) {
-        if (name != "[Content_Types].xml" && pb.read_part(name) != po.read_part(name)) {
+        if (!rewritten.contains(name) && pb.read_part(name) != po.read_part(name)) {
             return false;
         }
     }
     return po.part_count() > pb.part_count();
 }
 
-// Integrity diagnostics on the package at `path`, except orphan-part: the
-// imported slides aren't in the slide list yet (#136), so nothing reaches them.
 std::vector<pptctl::Diagnostic> integrity_problems(const std::string& path) {
     pptctl::Package pkg;
     REQUIRE(pkg.open(path));
-    auto ds = pptctl::check_integrity(pkg, pptctl::PartGraph::build(pkg));
-    std::erase_if(ds, [](const pptctl::Diagnostic& d) { return d.rule_id == "orphan-part"; });
-    return ds;
+    return pptctl::check_integrity(pkg, pptctl::PartGraph::build(pkg));
 }
 
 }  // namespace
@@ -117,7 +119,7 @@ TEST_CASE("merge: deck 1 is the base; the other decks' slides arrive as added pa
     CHECK(keeps_base(fixture("merge_a.pptx"), out));
     CHECK(integrity_problems(out).empty());
     CHECK(report->output_bytes == fs::file_size(out));
-    CHECK(report->slides == 3);
+    CHECK(report->slides == 7);
 
     REQUIRE(report->inputs.size() == 3);
     const auto& a = report->inputs[0];
@@ -128,10 +130,10 @@ TEST_CASE("merge: deck 1 is the base; the other decks' slides arrive as added pa
     CHECK(a.warnings.empty());
     for (const auto& input : {report->inputs[1], report->inputs[2]}) {
         CHECK_FALSE(input.base);
-        CHECK(input.slides == 0);
+        CHECK(input.slides == 2);
         CHECK(input.parts_added > 0);
         CHECK(input.masters_imported == 1);
-        CHECK(input.warnings.size() == 1);
+        CHECK(input.warnings.empty());
     }
 }
 
@@ -145,7 +147,7 @@ TEST_CASE("merge: --theme=N makes deck N the base package") {
     CHECK_FALSE(report->inputs[0].base);
     CHECK(report->inputs[1].base);
     CHECK(report->inputs[1].slides == 2);
-    CHECK(report->slides == 2);
+    CHECK(report->slides == 7);
 }
 
 TEST_CASE("merge: a dry run measures the output and writes nothing") {
@@ -224,10 +226,9 @@ TEST_CASE("merge command: writes -o and prints the summary") {
     CHECK(text.starts_with("merge -> " + out + "\n"));
     CHECK(text.find("  1. " + fixture("merge_a.pptx") + ": 3 slides (base)\n") !=
           std::string::npos);
-    CHECK(text.find("  2. " + fixture("merge_b.pptx") + ": 0 slides, ") != std::string::npos);
-    CHECK(text.find("warning: 2 slides imported but not added to the slide list yet") !=
-          std::string::npos);
-    CHECK(text.find("total: 3 slides, ") != std::string::npos);
+    CHECK(text.find("  2. " + fixture("merge_b.pptx") + ": 2 slides, ") != std::string::npos);
+    CHECK(text.find("warning:") == std::string::npos);
+    CHECK(text.find("total: 7 slides, ") != std::string::npos);
 }
 
 TEST_CASE("merge command: --dry-run --json reports without writing") {
@@ -242,7 +243,7 @@ TEST_CASE("merge command: --dry-run --json reports without writing") {
     CHECK(j["output"].is_null());
     CHECK(j["dry_run"] == true);
     CHECK(j["theme"] == 3);
-    CHECK(j["slides"] == 2);
+    CHECK(j["slides"] == 7);
     REQUIRE(j["inputs"].size() == 3);
     CHECK(j["inputs"][2]["base"] == true);
     CHECK(j["inputs"][2]["path"] == fixture("merge_c.pptx"));

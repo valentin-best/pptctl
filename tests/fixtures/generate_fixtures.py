@@ -46,7 +46,8 @@ Generates, next to this script:
   - merge_a.pptx            3 slides on the default template (title, bullets, picture),
                             two of them showing the shared logo PNG.
   - merge_b.pptx            2 slides on a restyled theme (other colors and fonts), both
-                            with speaker notes; slide 2 holds a chart.
+                            with speaker notes; slide 2 holds a chart. Two sections,
+                            "Intro" and "Data", one slide each.
   - merge_c.pptx            2 slides on merge_a's template, showing the same logo PNG
                             (byte-identical, for media de-duplication); an external
                             hyperlink, and a picture on slide 2 linking to slide 1.
@@ -1107,6 +1108,32 @@ def restyle_merge_theme(path: Path) -> None:
     _write_zip(path, parts)
 
 
+def add_merge_sections(path: Path) -> None:
+    """Split merge_b.pptx into two PowerPoint 2010 sections, "Intro" (slide 1)
+    and "Data" (slide 2); python-pptx has no API for sections."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    pres = parts["ppt/presentation.xml"].decode("utf-8")
+    ids = re.findall(r'<p:sldId id="(\d+)"', pres)
+    sections = "".join(
+        f'<p14:section name="{name}" id="{guid}"><p14:sldIdLst><p14:sldId id="{sid}"/>'
+        "</p14:sldIdLst></p14:section>"
+        for name, guid, sid in (
+            ("Intro", "{6F1A3C52-0B7E-4D8A-9C21-5E4B7A2D9F10}", ids[0]),
+            ("Data", "{A93E7D04-2C5B-4F61-8E3A-1B7C9D0E2F43}", ids[1]),
+        )
+    )
+    ext = (
+        '<p:extLst><p:ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}">'
+        '<p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">'
+        f"{sections}</p14:sectionLst></p:ext></p:extLst>"
+    )
+    parts["ppt/presentation.xml"] = pres.replace("</p:presentation>", ext + "</p:presentation>").encode(
+        "utf-8"
+    )
+    _write_zip(path, parts)
+
+
 def build_merge_deck_c(path: Path) -> None:
     """merge_c.pptx: two slides on merge_a's template, both showing the logo.
     Slide 1 has an external hyperlink; slide 2's logo links back to slide 1
@@ -1151,7 +1178,7 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ("charts_deck_v2.pptx", [build_charts_deck_v2]),
     ("integrity_problems.pptx", [build_integrity_deck, inject_integrity_problems]),
     ("merge_a.pptx", [build_merge_deck_a]),
-    ("merge_b.pptx", [build_merge_deck_b, restyle_merge_theme]),
+    ("merge_b.pptx", [build_merge_deck_b, restyle_merge_theme, add_merge_sections]),
     ("merge_c.pptx", [build_merge_deck_c]),
 ]
 

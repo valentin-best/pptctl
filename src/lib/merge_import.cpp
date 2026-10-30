@@ -97,6 +97,7 @@ void MergeTarget::add_part(const std::string& name,
                            std::vector<std::byte> bytes,
                            const std::string& content_type) {
     changes_.replaced[name] = std::move(bytes);
+    added_types_[name] = content_type;
     if (content_type.empty()) {
         return;
     }
@@ -112,6 +113,28 @@ void MergeTarget::add_part(const std::string& name,
     } else if (it->second != content_type) {
         added_overrides_[name] = content_type;
     }
+}
+
+void MergeTarget::replace_part(const std::string& name, std::vector<std::byte> bytes) {
+    changes_.replaced[name] = std::move(bytes);
+}
+
+std::vector<std::byte> MergeTarget::read_part(const std::string& name) const {
+    const auto it = changes_.replaced.find(name);
+    return it != changes_.replaced.end() ? it->second : base_->read_part(name);
+}
+
+std::string MergeTarget::content_type(const std::string& name) const {
+    const auto it = added_types_.find(name);
+    return it != added_types_.end() ? it->second : base_->content_type(name);
+}
+
+std::vector<std::string> MergeTarget::part_names() const {
+    auto names = base_->part_names();
+    for (const auto& [name, type] : added_types_) {
+        names.push_back(name);
+    }
+    return names;
 }
 
 PartChanges MergeTarget::changes() const {
