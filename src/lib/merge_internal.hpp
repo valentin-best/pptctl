@@ -188,6 +188,41 @@ class MasterIndex {
     std::vector<Entry> entries_;
 };
 
+// How a foreign slide layout was placed on the --theme deck's layouts (#138).
+enum class LayoutMatchKind {
+    type,      // same sldLayout@type (not "cust", which says nothing)
+    name,      // same layout name (p:cSld@name)
+    fallback,  // neither: the "Title and Content" (obj) layout, else the first
+};
+
+struct LayoutMatch {
+    std::string part;  // the --theme deck's layout
+    LayoutMatchKind kind = LayoutMatchKind::fallback;
+    std::string source_name;  // the foreign layout's name
+    std::string target_name;  // the chosen layout's name
+};
+
+// The --theme deck's slide layouts, in master then sldLayoutIdLst order, for
+// restyling foreign slides onto them.
+class LayoutMatcher {
+ public:
+    explicit LayoutMatcher(const Package& base);
+
+    // Where `layout` of `source` goes: the first base layout of the same type,
+    // else of the same name, else the fallback. nullopt if the base has no
+    // layouts at all.
+    [[nodiscard]] std::optional<LayoutMatch> match(const Package& source,
+                                                   const std::string& layout) const;
+
+ private:
+    struct Layout {
+        std::string part;
+        std::string type;
+        std::string name;
+    };
+    std::vector<Layout> layouts_;
+};
+
 // One input deck as concatenate() sees it.
 struct ConcatDeck {
     const Package* source = nullptr;
