@@ -4,10 +4,13 @@
 
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <pptctl/integrity.hpp>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace pptctl::detail {
 
@@ -15,6 +18,18 @@ namespace pptctl::detail {
 // root's `_rels/.rels`), or nullopt when `name` isn't a relationships part.
 // The inverse of rels_part_for.
 [[nodiscard]] std::optional<std::string> source_of_rels(std::string_view name);
+
+// One relationship-id use in a part's XML: an attribute in the relationships
+// namespace (Transitional or Strict), e.g. r:embed="rId4".
+struct RelationshipRef {
+    std::string qname;  // attribute name as written, e.g. "r:embed"
+    std::string id;     // its value, e.g. "rId4"
+};
+
+// Every relationship-id use in `xml`, in document order. The namespace is
+// matched by URI through the in-scope xmlns: declarations, not by the "r:"
+// prefix; empty values aren't references. Empty if `xml` doesn't parse.
+[[nodiscard]] std::vector<RelationshipRef> relationship_refs(std::span<const std::byte> xml);
 
 // #129 — an internal relationship whose target part is absent.
 void integrity_dangling_rel(const Package& pkg,
