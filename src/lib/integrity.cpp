@@ -1,10 +1,36 @@
 // integrity.cpp — the package-integrity rule registry.
 
+#include <optional>
 #include <pptctl/integrity.hpp>
+#include <string>
+#include <string_view>
 
 #include "integrity_internal.hpp"
 
 namespace pptctl {
+
+namespace {
+
+constexpr std::string_view kRelsDir = "_rels/";
+constexpr std::string_view kRelsExt = ".rels";
+
+}  // namespace
+
+std::optional<std::string> detail::source_of_rels(std::string_view name) {
+    if (!name.ends_with(kRelsExt)) {
+        return std::nullopt;
+    }
+    const auto slash = name.rfind('/');
+    const std::string_view dir = slash == std::string_view::npos ? "" : name.substr(0, slash + 1);
+    if (!dir.ends_with(kRelsDir)) {
+        return std::nullopt;
+    }
+    const std::string_view file =
+        name.substr(dir.size(), name.size() - dir.size() - kRelsExt.size());
+    std::string source(dir.substr(0, dir.size() - kRelsDir.size()));
+    source += file;
+    return source;
+}
 
 const std::vector<RegisteredIntegrityRule>& integrity_rules() {
     static const std::vector<RegisteredIntegrityRule> rules = {
