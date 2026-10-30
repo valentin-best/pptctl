@@ -23,12 +23,20 @@
       "severity": "warning",
       "shape": null,
       "slide": null
+    },
+    {
+      "message": "r:embed=\"rId99\" is not defined in ppt/slides/_rels/slide1.xml.rels",
+      "part": "ppt/slides/slide1.xml",
+      "rule": "broken-rid",
+      "severity": "error",
+      "shape": null,
+      "slide": 1
     }
   ],
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "warnings": 2
   }
 }
