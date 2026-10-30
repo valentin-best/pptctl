@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.5.0) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`); `merge` and `fill` are stubs that print "not yet implemented".
+`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.5.0) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`). `merge` is being built in Phase 6: the pipeline (`src/lib/merge.cpp`) runs end to end but doesn't import slides yet, so its output is the base deck; `fill` is a stub that prints "not yet implemented".
 
 ## Project workflow & status
 

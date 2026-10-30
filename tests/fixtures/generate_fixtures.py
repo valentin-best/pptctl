@@ -43,6 +43,12 @@ Generates, next to this script:
   - diff_table_edit.pptx    diff_base with one table cell edited and one row added.
   - charts_deck_v2.pptx     charts_deck.pptx with one value changed, one series added
                             and one chart title changed.
+  - merge_a.pptx            3 slides on the default template (title, bullets, picture),
+                            two of them showing the shared logo PNG.
+  - merge_b.pptx            2 slides on a restyled theme (other colors and fonts), both
+                            with speaker notes; slide 2 holds a chart.
+  - merge_c.pptx            2 slides on merge_a's template, showing the same logo PNG
+                            (byte-identical, for media de-duplication).
 
 python-pptx has no API for a second slide master, so notes_and_masters.pptx is
 built normally and then post-processed at the package (ZIP/parts) level to inject
@@ -1019,6 +1025,102 @@ def inject_second_master(path: Path) -> None:
     _write_zip(path, parts)
 
 
+# The logo merge_a and merge_c share: identical bytes in both packages.
+_MERGE_LOGO = (96, 48, (20, 90, 160))
+
+
+def build_merge_deck_a(path: Path) -> None:
+    """merge_a.pptx: a title slide, then two slides showing the shared logo."""
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[0])  # Title Slide
+    s.shapes.title.text = "Deck A"
+    s.placeholders[1].text_frame.text = "The first deck to merge"
+    s = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+    s.shapes.title.text = "A: bullets"
+    _fill_bullets(s.placeholders[1].text_frame, ["Alpha", "Beta", "Gamma"])
+    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5))
+    s = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
+    s.shapes.add_textbox(Inches(1), Inches(0.3), Inches(6), Inches(0.6)).text_frame.text = (
+        "A: picture"
+    )
+    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(1), Inches(1), height=Inches(2))
+    _set_core_props(prs, "pptctl merge fixture A")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def build_merge_deck_b(path: Path) -> None:
+    """merge_b.pptx before restyle_merge_theme: two slides with speaker notes,
+    the second holding a clustered-bar chart."""
+    from pptx.chart.data import ChartData
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+    s.shapes.title.text = "B: bullets"
+    _fill_bullets(s.placeholders[1].text_frame, ["One", "Two"])
+    s.notes_slide.notes_text_frame.text = "Notes for B, slide 1"
+    s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
+    s.shapes.title.text = "B: chart"
+    cd = ChartData()
+    cd.categories = ["Q1", "Q2", "Q3"]
+    cd.add_series("Sales", (4, 7, 5))
+    s.shapes.add_chart(
+        XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(1), Inches(1.5), Inches(8), Inches(5), cd
+    )
+    s.notes_slide.notes_text_frame.text = "Notes for B, slide 2"
+    _set_core_props(prs, "pptctl merge fixture B")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
+def restyle_merge_theme(path: Path) -> None:
+    """Give merge_b.pptx's theme its own name, colors and fonts, so a merge can
+    tell its slides' formatting from the default template's."""
+    with zipfile.ZipFile(path) as zf:
+        parts = {n: zf.read(n) for n in zf.namelist()}
+    theme = parts["ppt/theme/theme1.xml"].decode("utf-8")
+    theme = theme.replace('name="Office Theme"', 'name="pptctl Contrast"', 1)
+    theme = theme.replace('<a:clrScheme name="Office"', '<a:clrScheme name="pptctl Contrast"', 1)
+    theme = theme.replace('<a:fontScheme name="Office"', '<a:fontScheme name="pptctl Contrast"', 1)
+    accents = {
+        "accent1": "C0392B",
+        "accent2": "D35400",
+        "accent3": "16A085",
+        "accent4": "8E44AD",
+        "accent5": "2C3E50",
+        "accent6": "F39C12",
+    }
+    for slot, rgb in accents.items():
+        theme = re.sub(
+            rf"<a:{slot}><a:srgbClr val=\"[0-9A-F]{{6}}\"/></a:{slot}>",
+            f'<a:{slot}><a:srgbClr val="{rgb}"/></a:{slot}>',
+            theme,
+        )
+    # Major (headings) then minor (body) Latin typefaces.
+    latin = iter(("Georgia", "Verdana"))
+    theme = re.sub(
+        r'<a:latin typeface="Calibri"', lambda _: f'<a:latin typeface="{next(latin)}"', theme, count=2
+    )
+    parts["ppt/theme/theme1.xml"] = theme.encode("utf-8")
+    _write_zip(path, parts)
+
+
+def build_merge_deck_c(path: Path) -> None:
+    """merge_c.pptx: two slides on merge_a's template, both showing the logo."""
+    prs = Presentation()
+    s = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+    s.shapes.title.text = "C: bullets"
+    _fill_bullets(s.placeholders[1].text_frame, ["Delta", "Epsilon"])
+    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5))
+    s = prs.slides.add_slide(prs.slide_layouts[5])  # Title Only
+    s.shapes.title.text = "C: closing"
+    s.shapes.add_picture(io.BytesIO(_png(*_MERGE_LOGO)), Inches(8), Inches(0.2), height=Inches(0.5))
+    _set_core_props(prs, "pptctl merge fixture C")
+    prs.save(str(path))
+    _normalize_zip(path)
+
+
 _FIXTURES: list[tuple[str, list[object]]] = [
     ("images_deck.pptx", [build_images_deck]),
     ("images_deck_v2.pptx", [build_images_deck_v2, rename_media_parts]),
@@ -1037,6 +1139,9 @@ _FIXTURES: list[tuple[str, list[object]]] = [
     ],
     ("charts_deck_v2.pptx", [build_charts_deck_v2]),
     ("integrity_problems.pptx", [build_integrity_deck, inject_integrity_problems]),
+    ("merge_a.pptx", [build_merge_deck_a]),
+    ("merge_b.pptx", [build_merge_deck_b, restyle_merge_theme]),
+    ("merge_c.pptx", [build_merge_deck_c]),
 ]
 
 
