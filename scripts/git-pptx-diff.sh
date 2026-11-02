@@ -15,6 +15,14 @@
 # Always exits 0: git treats a non-zero exit from a diff driver as an error
 # and aborts the whole diff, while pptctl exits 1 whenever the decks differ.
 
+# `git difftool` works by running `git diff` with GIT_EXTERNAL_DIFF set to its
+# helper, but a diff driver's command takes precedence over GIT_EXTERNAL_DIFF:
+# without this, `git difftool` on a .pptx would print this text diff instead
+# of starting the tool. Hand the same seven arguments to the helper.
+if [ "${GIT_EXTERNAL_DIFF:-}" = git-difftool--helper ]; then
+    exec git difftool--helper "$@"
+fi
+
 path=$1
 old=$2
 new=$5
