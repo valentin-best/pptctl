@@ -33,6 +33,9 @@
 
 namespace pptctl::cmd {
 int lint_to(const std::string& path, std::ostream& os, const pptctl::LintOptions& opts);
+int lint_files(const std::vector<std::string>& paths,
+               std::ostream& os,
+               const pptctl::LintOptions& opts);
 int report(const std::string& path,
            std::vector<pptctl::Diagnostic> diagnostics,
            const pptctl::LintOptions& opts,
@@ -1369,6 +1372,40 @@ TEST_CASE("output: integration — three_slides.pptx --json parses with 4 diagno
 TEST_CASE("output: integration — unreadable file still exits 1 (distinct from --strict's 2)") {
     std::ostringstream oss;
     CHECK(pptctl::cmd::lint_to(fixture("does_not_exist.pptx"), oss, {.strict = true}) == 1);
+}
+
+// ── several files (#170) ──────────────────────────────────────────────────────
+//
+// pre-commit passes every staged deck in one call, so `lint` takes several files:
+// each is reported as if linted alone, and the exit code is the worst of them.
+
+TEST_CASE("lint_files: reports every file in order") {
+    std::ostringstream oss;
+    const int rc = pptctl::cmd::lint_files(
+        {fixture("lint_clean.pptx"), fixture("lint_problems.pptx")}, oss, {});
+    CHECK(rc == 0);
+    const std::string out = oss.str();
+    const auto clean = out.find("lint_clean.pptx: no issues found");
+    const auto problems = out.find("lint_problems.pptx:");
+    REQUIRE(clean != std::string::npos);
+    REQUIRE(problems != std::string::npos);
+    CHECK(clean < problems);
+}
+
+TEST_CASE("lint_files: --strict exits 2 when any file has findings") {
+    std::ostringstream oss;
+    CHECK(pptctl::cmd::lint_files({fixture("lint_clean.pptx")}, oss, {.strict = true}) == 0);
+    CHECK(pptctl::cmd::lint_files({fixture("lint_problems.pptx"), fixture("lint_clean.pptx")},
+                                  oss,
+                                  {.strict = true}) == 2);
+}
+
+TEST_CASE("lint_files: an unreadable file exits 1 but the others are still linted") {
+    std::ostringstream oss;
+    const int rc = pptctl::cmd::lint_files(
+        {fixture("does_not_exist.pptx"), fixture("lint_problems.pptx")}, oss, {.strict = true});
+    CHECK(rc == 1);
+    CHECK(oss.str().find("lint_problems.pptx:") != std::string::npos);
 }
 
 // ── golden tests (#47) ────────────────────────────────────────────────────────
