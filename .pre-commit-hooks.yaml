@@ -1,0 +1,26 @@
+# pre-commit hooks for decks: https://pre-commit.com (prek reads this too).
+# Usage and options: docs/pre-commit.md.
+#
+# `args` replaces the defaults below, so a config that sets its own args has to
+# repeat --strict: without it `pptctl lint` exits 0 and the hook never blocks.
+
+# pptctl from PATH (Homebrew, a release archive, a source build).
+- id: pptctl-lint
+  name: pptctl lint
+  description: Lint .pptx decks with the pptctl on PATH.
+  entry: pptctl lint
+  language: system
+  files: (?i)\.pptx$
+  args: [--strict]
+
+# The same check, but downloads the pptctl release matching the hook's `rev`
+# (into ~/.cache/pptctl) when pptctl isn't on PATH. Needs bash, which Git for
+# Windows provides.
+- id: pptctl-lint-fetch
+  name: pptctl lint
+  description: Lint .pptx decks, downloading the pinned pptctl release if needed.
+  entry: scripts/pre-commit-lint.sh
+  language: script
+  files: (?i)\.pptx$
+  args: [--strict]
+  require_serial: true
