@@ -58,7 +58,7 @@ git commit -q -am v2
 
 # Recipe 2: git diff runs the driver, a semantic diff under the repo path.
 git diff HEAD~1 HEAD -- deck.pptx > driver.out
-check "driver: header names the repo path" grep -q '^--- a/deck.pptx$' driver.out
+check "driver: header names the repo path" grep -q '^--- a/deck.pptx' driver.out
 check "driver: slide hunk" grep -q '^@@ slide [0-9].*changed' driver.out
 
 # Recipe 1: git log -p (no --ext-diff) falls back to textconv.
@@ -77,6 +77,8 @@ cp "$fixtures/minimal.pptx" added.pptx
 git add added.pptx
 git difftool -y -t pptx --cached -- '*.pptx' > added.out
 check "difftool: added deck gets one line" grep -qx 'pptctl diff: new file added.pptx' added.out
+git diff --cached -- added.pptx > added-driver.out
+check "driver: added deck gets one line" grep -qx 'pptctl diff: new file added.pptx' added-driver.out
 
 if [ $failures -gt 0 ]; then
     echo "$failures failure(s)" >&2

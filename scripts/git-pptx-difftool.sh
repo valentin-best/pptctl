@@ -17,11 +17,12 @@ local_file=$1
 remote_file=$2
 path=${3:-$2}
 
-if [ "$local_file" = /dev/null ]; then
+# An added or deleted file is /dev/null, or nul with Git for Windows.
+if [ "$local_file" = /dev/null ] || [ "$local_file" = nul ]; then
     printf 'pptctl diff: new file %s\n' "$path"
     exit 0
 fi
-if [ "$remote_file" = /dev/null ]; then
+if [ "$remote_file" = /dev/null ] || [ "$remote_file" = nul ]; then
     printf 'pptctl diff: deleted file %s\n' "$path"
     exit 0
 fi

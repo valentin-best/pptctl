@@ -27,18 +27,21 @@ path=$1
 old=$2
 new=$5
 
-if [ "$old" = /dev/null ]; then
+# An added or deleted file is /dev/null, or nul with Git for Windows.
+if [ "$old" = /dev/null ] || [ "$old" = nul ]; then
     printf 'pptctl diff: new file %s\n' "$path"
     exit 0
 fi
-if [ "$new" = /dev/null ]; then
+if [ "$new" = /dev/null ] || [ "$new" = nul ]; then
     printf 'pptctl diff: deleted file %s\n' "$path"
     exit 0
 fi
 
 # Unified output names the temporary files git hands us; show the repo path
-# instead. The other formats do not match and pass through untouched.
+# instead. The other formats do not match and pass through untouched. The
+# trailing [[:space:]]* keeps the CR of pptctl.exe's CRLF line endings.
 # shellcheck disable=SC2086  # word-splitting $PPTCTL_DIFF_ARGS is intended
 pptctl diff $PPTCTL_DIFF_ARGS "$old" "$new" |
-    sed -e "s|^--- $old\$|--- a/$path|" -e "s|^+++ $new\$|+++ b/$path|"
+    sed -e "s|^--- $old\([[:space:]]*\)\$|--- a/$path\1|" \
+        -e "s|^+++ $new\([[:space:]]*\)\$|+++ b/$path\1|"
 exit 0
