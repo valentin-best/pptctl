@@ -5,6 +5,69 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [0.6.0] — 2026-11-02
+
+Phase 6: `pptctl merge`, and package-integrity lint rules that serve as its
+test oracle and as a verifier for decks other tools write.
+
+Ten decks from six producers (PowerPoint 2007–16, Keynote, Google Slides,
+python-pptx, an unknown generator) merge into a 75-slide deck that passes
+every integrity rule and opens in PowerPoint, Keynote, LibreOffice and
+Google Slides, with 73 of 75 slides pixel-identical to their sources in each
+renderer. See `docs/phase6-merge-validation.md`.
+
+### Added
+
+- `merge` subcommand (#134): combines decks in input order into `-o FILE`
+  (or nowhere, with `--dry-run`); `--json` emits a versioned report
+  (`docs/merge-schema.md`). The output is built on the base deck (the
+  `--theme` deck, else the first), whose parts are copied byte for byte.
+- Part import (#135): each slide's closure of parts (layout, master, theme,
+  media, charts with their workbooks, SmartArt, notes, comments) is copied
+  under fresh names, with every relationship and content type rewritten.
+- Concatenation (#136): the slide list, masters, notes master (listed in
+  `p:notesMasterIdLst`, which Keynote needs) and sections; a deck without
+  sections gets one named after its file when another input has some.
+- Media de-duplication by content hash (#137) and collapsing of
+  byte-identical slide masters (#139).
+- `--theme=N` (#138): restyles every slide onto deck N's layouts, matched by
+  type, then name, then Title and Content; the report names each fallback.
+- Comment authors (#159): classic authors matched by name and initials,
+  PowerPoint 365 authors by id.
+- Integrity rules for `lint`, in `src/lib/integrity_<rule>.cpp`:
+  `dangling-rel` (#129), `broken-rid` (#130), `undeclared-ctype` (#131),
+  `orphan-part` (#132), `shared-part` (#133) and `unlisted-part` (#152).
+  `--only` takes rule ids and the group `integrity` (#128); the integrity
+  rules never parse slide content, so they run on decks whose
+  `presentation.xml` is broken. Findings carry the `part` they are about
+  (additive to the lint JSON schema).
+- Tests: merge goldens, integrity, semantic preservation (diff and extract),
+  determinism and edge inputs (#140), with new `merge_*` fixtures.
+- Validation (#142): `scripts/validate_merge.sh`,
+  `scripts/compare_slide_renders.swift` and
+  `docs/phase6-merge-validation.md`.
+- Docs: README `merge` and integrity sections, `docs/merge-schema.md` (#141).
+
+### Fixed
+
+- A merge kept the base deck's `AppVersion`, so PowerPoint opened a merge
+  onto an Office 2007 deck in compatibility mode and redrew newer decks'
+  charts differently; it now takes the newest input's (found by #142).
+
+### Changed
+
+- `lint`'s `ctype` rule no longer reports parts with no content type at all;
+  that is now `undeclared-ctype`.
+- CI: clang-tidy runs on the files a changed header reaches instead of every
+  file (#157).
+
+### Known limitations
+
+- Text relying on the deck-wide default text style takes the base deck's
+  (#163).
+- Keeping each deck's formatting, Keynote draws hyperlinks and Google Slides
+  draws charts in the first deck's theme colours.
+
 ## [0.5.0] — 2026-10-30
 
 Phase 5: `pptctl optimize`, file-size reduction that keeps the deck the
@@ -235,6 +298,7 @@ Phase 1: `pptctl info`, quick metadata.
   MSVC 2022, plus a clang-tidy job; pre-commit hook running clang-format and
   clang-tidy.
 
+[0.6.0]: https://github.com/valentin-best/pptctl/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/valentin-best/pptctl/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/valentin-best/pptctl/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/valentin-best/pptctl/compare/v0.2.0...v0.3.0

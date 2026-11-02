@@ -2,7 +2,7 @@
 
 > Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
-**Status:** early development, v0.5.0. `info`, `extract`, `lint`, `diff` and `optimize` work; `merge` and the package-integrity lint rules are on `main` for v0.6.0.
+**Status:** early development, v0.6.0. `info`, `extract`, `lint` (content and package-integrity rules), `diff`, `optimize` and `merge` work.
 
 ```
 $ pptctl info deck.pptx
@@ -53,7 +53,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `lint` | Static analysis: overflow, tiny text, alt-text, font risk, empty placeholders, content types, image bloat, and package integrity (broken relationships, undeclared parts, orphans, shared or unlisted parts); `--json`, `--strict`, `--only <rules>` | ✅ Implemented |
 | `optimize` | Shrink a deck without changing what it shows: unused layouts/masters, embedded fonts, cropped-out image regions, oversized images, orphan media; `--dry-run`, `--json` | ✅ Implemented |
 | `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented |
-| `merge` | Combine decks in order without breaking pictures, charts, notes or comments: each keeps its own theme, or `--theme=N` restyles all onto one; identical media and masters stored once; `--dry-run`, `--json` | ✅ On `main` (v0.6.0) |
+| `merge` | Combine decks in order without breaking pictures, charts, notes or comments: each keeps its own theme, or `--theme=N` restyles all onto one; identical media and masters stored once; `--dry-run`, `--json` | ✅ Implemented |
 | `fill` | Template-fill from a `.pptx` template + JSON data | Deferred (see [ROADMAP.md](./ROADMAP.md)) |
 
 ## `pptctl lint`
