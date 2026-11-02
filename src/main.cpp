@@ -21,7 +21,7 @@ namespace pptctl::cmd {
 int info(const std::string& path, bool json);
 int extract(const std::string& path, const std::string& format);
 int extract_to(const std::string& path, const std::string& format, std::ostream& os);
-int lint(const std::string& path, const LintOptions& opts);
+int lint(const std::vector<std::string>& paths, const LintOptions& opts);
 int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts);
 std::vector<std::string> lint_selectors();
 int diff(const std::string& a,
@@ -83,12 +83,18 @@ int main(int argc, char** argv) {
     extract_cmd->callback([&]() { std::exit(pptctl::cmd::extract(extract_path, extract_format)); });
 
     // --- lint ----------------------------------------------------------------
-    std::string lint_path;
+    std::vector<std::string> lint_paths;
     pptctl::LintOptions lint_opts;
     std::string lint_target = "all";
     auto* lint_cmd = app.add_subcommand("lint", "Static analysis for .pptx files");
-    lint_cmd->add_option("file", lint_path, "path to .pptx")->required()->check(CLI::ExistingFile);
-    lint_cmd->add_flag("--json", lint_opts.json, "emit machine-readable JSON");
+    lint_cmd
+        ->add_option("files",
+                     lint_paths,
+                     "paths to .pptx; several are linted in turn, and the exit code is the "
+                     "worst of theirs")
+        ->required()
+        ->check(CLI::ExistingFile);
+    lint_cmd->add_flag("--json", lint_opts.json, "emit machine-readable JSON (one file only)");
     lint_cmd->add_flag("--strict", lint_opts.strict, "exit 2 if any diagnostic is reported");
     lint_cmd
         ->add_option("--max-image-dpi",
@@ -118,10 +124,17 @@ int main(int argc, char** argv) {
         ->delimiter(',')
         ->expected(1)
         ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll)
+        // A vector option otherwise swallows the deck paths after it:
+        // `--only integrity a.pptx b.pptx` is how pre-commit calls lint.
+        ->allow_extra_args(false)
         ->check(CLI::IsMember(pptctl::cmd::lint_selectors()));
     lint_cmd->callback([&]() {
+        // The JSON report is one document per deck (docs/lint-schema.md).
+        if (lint_opts.json && lint_paths.size() > 1) {
+            throw CLI::ValidationError("--json", "takes one file; run lint once per deck");
+        }
         lint_opts.font_target = parse_font_target(lint_target);
-        std::exit(pptctl::cmd::lint(lint_path, lint_opts));
+        std::exit(pptctl::cmd::lint(lint_paths, lint_opts));
     });
 
     // --- optimize ------------------------------------------------------------

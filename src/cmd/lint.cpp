@@ -1013,8 +1013,22 @@ int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) 
     return report(path, std::move(diagnostics), opts, os);
 }
 
-int lint(const std::string& path, const LintOptions& opts) {
-    return lint_to(path, std::cout, opts);
+// Lint each file in turn, as if each were linted alone, and return the worst
+// exit code: 1 if any file couldn't be read, else 2 if --strict tripped on any.
+// A file that can't be read doesn't stop the rest from being linted.
+int lint_files(const std::vector<std::string>& paths, std::ostream& os, const LintOptions& opts) {
+    int worst = 0;
+    for (const auto& path : paths) {
+        const int rc = lint_to(path, os, opts);
+        if (rc == 1 || (rc == 2 && worst == 0)) {
+            worst = rc;
+        }
+    }
+    return worst;
+}
+
+int lint(const std::vector<std::string>& paths, const LintOptions& opts) {
+    return lint_files(paths, std::cout, opts);
 }
 
 std::vector<Diagnostic> lint_slide(const Slide& slide,

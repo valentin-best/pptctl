@@ -114,6 +114,16 @@ jobs:
           .\build\${{ matrix.preset }}\pptctl.exe --version
           .\build\${{ matrix.preset }}\pptctl.exe info tests\fixtures\three_slides.pptx
 
+      # Commits clean and failing decks through both hooks in .pre-commit-hooks.yaml.
+      # The fetch hook downloads the release named in CMakeLists.txt.
+      - name: pre-commit hooks
+        if: matrix.name != 'linux-clang18'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRE_COMMIT: pipx run pre-commit==4.7.0
+        run: scripts/test-pre-commit.sh build/${{ matrix.preset }}
+
   lint:
     name: lint (clang-tidy)
     runs-on: ubuntu-24.04
