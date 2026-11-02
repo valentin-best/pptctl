@@ -95,13 +95,15 @@ EOF
     grep -q 'lint_problems.pptx:2: warning\[tiny-text\]' out.log ||
         fail "$hook: findings missing from the output"
     commit block "deck with integrity errors" integrity_problems.pptx
-    "${pre_commit[@]}" run --all-files > out.log 2>&1 ||
-        fail "$hook: run --all-files on the committed clean deck failed"
+    if ! "${pre_commit[@]}" run --all-files > out.log 2>&1 || ! grep -q Passed out.log; then
+        fail "$hook: run --all-files on the committed clean deck didn't pass"
+        cat out.log >&2
+    fi
     if [ "$hook" = pptctl-lint ]; then
         # pre-commit passes every staged deck in one call. (The fetch hook runs
         # the released pptctl, which takes several files from v0.7.0 on.)
         git rm -q lint_clean.pptx
-        git commit -q -m "drop clean deck"
+        git commit -q -m "drop clean deck" > /dev/null
         commit block "clean and bad deck together" lint_clean.pptx lint_problems.pptx
         if ! grep -q 'lint_clean.pptx: no issues found' out.log ||
             ! grep -q 'lint_problems.pptx: ' out.log; then
