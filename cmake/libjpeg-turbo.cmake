@@ -40,6 +40,15 @@ else()
     set(_ljt_c_flags "${CMAKE_C_FLAGS} -w")
 endif()
 
+# Link against the same C run-time as the rest of pptctl, or the two clash at
+# link time: the DLL one by default, the static one when the build asks for it
+# with CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded (the release binaries do).
+if(DEFINED CMAKE_MSVC_RUNTIME_LIBRARY AND NOT CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "DLL")
+    set(_ljt_crt_dll OFF)
+else()
+    set(_ljt_crt_dll ON)
+endif()
+
 set(_ljt_args
     -G "${CMAKE_GENERATOR}"
     "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
@@ -58,9 +67,7 @@ set(_ljt_args
     -DWITH_TESTS=OFF
     -DWITH_SIMD=ON
     -DREQUIRE_SIMD=OFF
-    # Link against the same (DLL) C run-time as the rest of pptctl; the default
-    # static CRT would clash with it at link time.
-    -DWITH_CRT_DLL=ON
+    "-DWITH_CRT_DLL=${_ljt_crt_dll}"
 )
 if(CMAKE_OSX_ARCHITECTURES)
     list(APPEND _ljt_args "-DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}")
