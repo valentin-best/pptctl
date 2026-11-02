@@ -9,20 +9,21 @@ Phase 6 exit criteria:
 - every integrity finding over the real-world corpus is triaged, and false
   positives are fixed before release.
 
-**Verdict: met for PowerPoint and Keynote; LibreOffice and Google Slides not
-checked** (neither is available on the validation machine, see
-[Not covered](#not-covered)).
+**Verdict: met in all four renderers.**
 
 - **Integrity:** ten decks from six producers merge into a 75-slide deck that
   passes every integrity rule, both keeping each deck's formatting and with
-  `--theme=1`. So does a 428-slide merge of the whole 15-deck corpus.
+  `--theme=1`. So does a 428-slide merge of the whole 15-deck corpus, and a
+  12-deck merge that adds two decks written by LibreOffice.
 - **Same slides:** the diff engine pairs every input slide with its slot in
   the output, unchanged.
-- **Renderers:** PowerPoint and Keynote open every output (75 and 428 slides)
-  without a repair prompt. Rendered to PDF and compared pixel by pixel with
-  each input rendered on its own, **73 of 75 slides are identical in
-  PowerPoint, and 73 of 75 in Keynote**. The four differences are explained
-  [below](#rendering-differences); none is a missing or broken image.
+- **Renderers:** PowerPoint, Keynote, LibreOffice and Google Slides open the
+  75-slide merge without a repair prompt; the 428-slide one was opened in the
+  first three (not uploaded to Google Slides). Rendered to PDF and compared pixel by pixel
+  with each input rendered on its own, **73 of 75 slides are identical in each
+  of PowerPoint, Keynote, LibreOffice and Google Slides**. The eight
+  differences are explained [below](#rendering-differences); none is a missing
+  or broken image.
 - **Corpus triage:** the integrity rules find **nothing** in any of the 15
   real-world decks, so there was nothing to triage and no false positive.
 - **Memory safety:** 0 crashes and no AddressSanitizer/UBSan report on the
@@ -32,9 +33,11 @@ Validation found **one defect**, fixed in the same PR: the merged deck kept the
 base deck's `AppVersion`, so PowerPoint opened a merge onto an Office 2007 deck
 in compatibility mode and redrew a newer deck's chart with different colours
 ([below](#defect-found-compatibility-mode-from-the-base-deck)). It also found
-one fidelity gap, proposed as a follow-up: text that relies on the deck-wide
-default text style picks up the base deck's
-([below](#rendering-differences)).
+one fidelity gap, filed as #163: text that relies on the deck-wide default
+text style picks up the base deck's ([below](#rendering-differences)). And it
+found two renderer quirks that are not merge defects: Google Slides draws every
+chart in the presentation's first theme, and Keynote refuses LibreOffice's
+speaker notes ([below](#libreoffice-as-a-producer)).
 
 ## How to reproduce
 
@@ -58,6 +61,12 @@ The two `producers/` decks are made with the apps themselves, through
 - `powerpoint365_resave.pptx`: the `merge_c.pptx` fixture opened in PowerPoint
   for Mac (16.x) and saved with `save p in … as save as Open XML presentation`.
 
+Two more, for the [LibreOffice producer check](#libreoffice-as-a-producer), are
+re-saved by LibreOffice 26.8:
+`soffice --headless --convert-to 'pptx:Impress MS PowerPoint 2007 XML'` of the
+`merge_edge.pptx` fixture (`libreoffice_resave_edge.pptx`) and of
+`edu_csun_intro_jira.pptx` (`libreoffice_resave_csun.pptx`).
+
 `validate_merge.sh` (needs `jq`) merges the decks twice, keeping each deck's
 formatting and with `--theme=1`, and for each output:
 1. `pptctl merge --json`, timed: slides, parts added, dedupe, warnings.
@@ -67,11 +76,19 @@ formatting and with `--theme=1`, and for each output:
    Keeping each deck's formatting, it must also be unchanged. Under `--theme`
    changed slides are counted, not failed: taking deck 1's layouts is the point.
 
-Rendering: each input and the merged deck were exported to PDF by Keynote and
-by PowerPoint, and `scripts/compare_slide_renders.swift MERGED.pdf SOURCE.pdf
+Rendering: each input and the merged deck were exported to PDF by each
+renderer, and `scripts/compare_slide_renders.swift MERGED.pdf SOURCE.pdf
 OFFSET` compared each input's pages with its slice of the merged PDF. Slides
 merged onto a larger canvas keep their geometry, so a source page is compared
-with the top-left region of the merged page.
+with the top-left region of the merged page. The exports:
+- Keynote: `export d to … as PDF`; PowerPoint: `save p in … as save as PDF`
+  (both through `osascript`).
+- LibreOffice 26.8: `soffice --headless --convert-to pdf`. Its PDF export
+  leaves out hidden slides, so the whole-corpus merge gives 422 pages: 428
+  slides less the 6 hidden ones in `edu_uva_virtualization`.
+- Google Slides: each deck uploaded to Drive through the Drive v3 API with
+  conversion to Google Slides, then exported as PDF through the file's
+  `exportLinks`. The uploads were trashed afterwards.
 
 ## Inputs
 
@@ -95,6 +112,8 @@ with the top-left region of the merged page.
 | Keep each deck's formatting | 75 | 30.4 MiB | 1.4 s | clean | 75/75 paired, unchanged |
 | `--theme=1` | 75 | 30.1 MiB | 1.3 s | clean | 75/75 paired; 38 restyled |
 | Whole corpus (15 decks) | 428 | 46.4 MiB | 3.2 s, 145 MB peak RSS | clean | — |
+| 12 decks, keep formatting (adds the two LibreOffice re-saves) | 83 | 30.4 MiB | 1.5 s | clean | 83/83 paired, unchanged |
+| 12 decks, `--theme=1` | 83 | 30.1 MiB | 1.3 s | clean | 83/83 paired, one in its twin's slot (see [below](#libreoffice-as-a-producer)); 38 restyled |
 
 The keep-formatting merge imports 9 masters and reuses one: `merge_comments_a`
 is on the same template as `merge_edge`. The PowerPoint 365 re-save of
@@ -108,14 +127,46 @@ plus UTSA's "Title, Text, and Content".
 
 ## Rendering differences
 
-Keeping each deck's formatting, the pixel comparison found four differing
-slides out of 150 (75 per renderer):
+Keeping each deck's formatting, the pixel comparison found eight differing
+slides out of 300 (75 per renderer):
 
 | Renderer | Slide | Cause | Merge at fault? |
 |---|---|---|---|
 | Keynote | 2 slides of `keynote_export` | Hyperlinks are drawn in the base deck's theme `hlink` colour (orange) instead of their own theme's (blue). The merged slide does reference its own theme, whose `hlink` is blue, and PowerPoint draws it blue. | No: Keynote takes hyperlink colour from the presentation's first theme. |
-| PowerPoint | 1 slide of `keynote_export` | One text box wraps one line differently. It has no explicit size or spacing, so it inherits `presentation.xml`'s `p:defaultTextStyle`, which comes from the base deck (18 pt, kerned) rather than its own (14 pt). | Yes, a fidelity gap; proposed as a follow-up. |
+| PowerPoint | 1 slide of `keynote_export` | One text box wraps one line differently. It has no explicit size or spacing, so it inherits `presentation.xml`'s `p:defaultTextStyle`, which comes from the base deck (18 pt, kerned) rather than its own (14 pt). | Yes, a fidelity gap: #163. |
 | PowerPoint | 1 slide of `sample_getsamplefiles_3` | A full-bleed photo differs by a few levels (mean 3.4/255); visually identical. PowerPoint re-compresses photos in its PDF export. | No: export noise. |
+| LibreOffice | 2 slides of `sample_getsamplefiles_3` | A text box's lorem ipsum is larger and wraps differently. It is an orphan placeholder (`idx="4294967295"`) with no size of its own, so it falls back to `p:defaultTextStyle`, the base deck's 18 pt. | Yes: the same gap, #163. |
+| Google Slides | the chart slides of `merge_b` and `merge_edge` | The bars and pie slices are drawn in the base deck's `accent1`/`accent2` (brown) and its minor font (Garamond) instead of their own theme's. The charts set no colours, so they inherit the theme's. | No: Google Slides resolves every chart against the presentation's first theme. Merging `merge_edge` then `merge_b` draws `merge_b`'s red bars in `merge_edge`'s blue, while the slide's own title keeps its theme font. |
+
+The other three renderers resolve charts against their slide's own theme. For
+Google Slides, `merge` could write the resolved colours into the charts it
+imports; that would be a change to chart parts, so it is left for after v0.6.0.
+
+## LibreOffice as a producer
+
+Both re-saved decks pass every integrity rule on their own. In the 12-deck
+merge their 8 slides render identically to the decks on their own, in
+PowerPoint, Keynote and LibreOffice.
+
+**Keynote refuses LibreOffice's speaker notes.** `libreoffice_resave_edge.pptx`
+does not open in Keynote at all, before any merge (`open` returns no document).
+Bisecting points to its one notes slide: LibreOffice writes `p:notes` without
+`p:clrMapOvr`. The schema makes that element optional, and PowerPoint and
+LibreOffice accept it. Adding
+`<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>` makes the deck open, and the
+merge containing it then opens too. `merge` copies the notes slide as it is, so
+the merged deck inherits the problem from its input; the Keynote checks above
+used the patched copy. It is the same family as the missing
+`p:notesMasterIdLst` in python-pptx decks (#136), which no integrity rule
+catches either.
+
+**`--theme=1` harness note.** `merge_edge` is in the set twice in effect: once
+as itself and once as LibreOffice's re-save, with the same content. Restyled
+onto deck 1's layouts, the two copies of its chart slide are indistinguishable
+to `pptctl diff` (similarity 1.0 each), so `validate_merge.sh` saw one paired
+with its twin's slot and counted it out of place. The slide in its own slot is
+the right one (`pptctl extract` output identical to the source); the script
+only treats a deck given twice by path as a repeat.
 
 ## Defect found: compatibility mode from the base deck
 
@@ -135,15 +186,11 @@ while the base deck's own slides stayed pixel-identical. Merge now raises
 `pptctl lint --only integrity` over the 15 real-world decks (PowerPoint
 2007–2016 for Windows and Mac, three Google Slides exports, two from an
 unknown generator) reports **no findings**. The two decks made for this
-validation, the Keynote export and the PowerPoint 365 re-save, are clean too.
+validation, the Keynote export, the PowerPoint 365 re-save and the two
+LibreOffice re-saves, are clean too.
 
 ## Not covered
 
-- **Renderers:** LibreOffice and Google Slides. LibreOffice is not installed on
-  the validation machine, and checking Google Slides needs a Google account to
-  upload to.
-- **Producers:** LibreOffice and OfficeCLI, for the same reason.
-
-Keynote's export and two PowerPoint generations stand in for part of that
-variety. These remain open before the claim "opens in all four renderers" can
-be made for `merge`.
+- **Producers:** OfficeCLI. Decks it writes were not part of the merge set.
+- **Google Slides at scale:** the 428-slide whole-corpus merge was not
+  uploaded; the 75-slide merge (30 MB) was.
