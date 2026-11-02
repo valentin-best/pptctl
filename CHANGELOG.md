@@ -5,6 +5,16 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [Unreleased]
+
+### Added
+
+- Prebuilt release binaries (#168): every `v*` tag publishes archives for
+  Linux x86_64 and aarch64 (static, musl), macOS arm64 (13.3+) and Windows
+  x86_64 (static C run-time), with `SHA256SUMS` and the version's changelog
+  section as the release notes (`.github/workflows/release.yml`). Each
+  archive also carries `git-pptx-diff.sh`.
+
 ## [0.6.0] — 2026-11-02
 
 Phase 6: `pptctl merge`, and package-integrity lint rules that serve as its

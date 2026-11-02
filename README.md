@@ -225,6 +225,22 @@ Limitations, by design for now:
 
 Exit codes: `0` merged (or measured), `1` when an input can't be read, `--theme` is out of range, `-o` names an input, or the output can't be written. Command-line errors (a missing file, fewer than two inputs) are rejected by the argument parser with a non-zero code.
 
+## Installing
+
+Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh`, the git diff driver from [`docs/git-integration.md`](docs/git-integration.md).
+
+```bash
+# Pick one: linux-x86_64, linux-aarch64, macos-arm64 (windows-x86_64 is a .zip)
+target=macos-arm64
+gh release download --repo valentin-best/pptctl \
+    --pattern "pptctl-*-$target.tar.gz" --pattern SHA256SUMS
+shasum -a 256 --check --ignore-missing SHA256SUMS    # sha256sum on Linux
+tar -xzf pptctl-*-"$target".tar.gz
+install pptctl-*-"$target"/pptctl ~/.local/bin/
+```
+
+With no tag, `gh release download` takes the newest release; name one (`gh release download v0.7.0 …`) to pin it. The macOS binary is not notarized: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.
+
 ## Building
 
 Requires **CMake ≥ 3.24**, **Ninja**, and a **C++20 compiler with `std::format`**:

@@ -1,0 +1,155 @@
+name: release
+
+# Builds the release archives and, for a tag, publishes them as that tag's
+# GitHub Release with a SHA256SUMS file and the tag's CHANGELOG section.
+#
+# - Pushing a v* tag publishes.
+# - A pull request that touches the release pipeline builds and uploads the
+#   archives as workflow artifacts, and publishes nothing. So does a manual run
+#   on a branch.
+# - A manual run on a tag (gh workflow run release.yml --ref v0.7.0) rebuilds
+#   that tag with its own copy of this workflow and replaces the assets.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+      - scripts/release/**
+      - cmake/**
+      - CMakePresets.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            os: ubuntu-24.04
+          - target: linux-aarch64
+            os: ubuntu-24.04-arm
+          - target: macos-arm64
+            os: macos-15
+          - target: windows-x86_64
+            os: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Static against musl, in Alpine: runs on any distribution, whatever
+      # its glibc. See the script for the static-link check.
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: docker run --rm -v "$PWD":/src -w /src alpine:3.22 scripts/release/build-linux.sh
+
+      # 13.3 is the oldest macOS whose libc++ has std::format.
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake ninja || true
+          cmake --preset macos-release -B build/dist -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3
+          cmake --build build/dist --parallel
+          ctest --test-dir build/dist --output-on-failure
+          strip build/dist/pptctl
+
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # NASM turns on libjpeg-turbo's x86 SIMD; CI's plain C fallback is fine
+      # for tests but not for what users run.
+      - name: Set up NASM (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      # Static C run-time, so the .exe doesn't need the Visual C++
+      # Redistributable. CMP0091 lets the run-time setting reach dependencies
+      # that ask for an older CMake policy level.
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake --preset windows-release -B build/dist `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build/dist --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build/dist --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $deps = dumpbin /dependents build\dist\pptctl.exe | Out-String
+          Write-Output $deps
+          if ($deps -match 'VCRUNTIME|MSVCP') {
+            Write-Output "::error::pptctl.exe depends on the Visual C++ run-time DLLs"
+            exit 1
+          }
+
+      # On Linux this runs the Alpine-built binary on the Ubuntu host, which
+      # is the point: it needs nothing from the system it lands on.
+      - name: Smoke test
+        shell: bash
+        run: |
+          bin=build/dist/pptctl
+          [ "$RUNNER_OS" = Windows ] && bin=$bin.exe
+          "$bin" --version
+          "$bin" info tests/fixtures/three_slides.pptx
+          "$bin" lint --strict --only integrity tests/fixtures/three_slides.pptx
+          echo "BIN=$bin" >> "$GITHUB_ENV"
+
+      - name: Package
+        shell: bash
+        run: scripts/release/package.sh "$BIN" ${{ matrix.target }} dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # The archive names come from each binary's --version, so this also
+      # catches a tag pushed without bumping the version in CMakeLists.txt.
+      - name: Check archives and write checksums
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          for target in linux-x86_64 linux-aarch64 macos-arm64; do
+            test -f "dist/pptctl-$version-$target.tar.gz"
+          done
+          test -f "dist/pptctl-$version-windows-x86_64.zip"
+          set -- dist/*
+          [ $# -eq 4 ] || { printf '%s\n' "$@"; exit 1; }
+          (cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/release/notes.sh "${GITHUB_REF_NAME#v}" > notes.md
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag \
+              --title "pptctl $GITHUB_REF_NAME" --notes-file notes.md
+          fi
