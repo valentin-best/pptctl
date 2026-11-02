@@ -15,22 +15,36 @@
 # Always exits 0: git treats a non-zero exit from a diff driver as an error
 # and aborts the whole diff, while pptctl exits 1 whenever the decks differ.
 
+# `git difftool` works by running `git diff` with GIT_EXTERNAL_DIFF set to its
+# helper, but a diff driver's command takes precedence over GIT_EXTERNAL_DIFF:
+# without this, `git difftool` on a .pptx would print this text diff instead
+# of starting the tool. Hand the same seven arguments to the helper.
+if [ "${GIT_EXTERNAL_DIFF:-}" = git-difftool--helper ]; then
+    exec git difftool--helper "$@"
+fi
+
 path=$1
 old=$2
 new=$5
 
-if [ "$old" = /dev/null ]; then
+# An added or deleted file is /dev/null, or nul with Git for Windows.
+if [ "$old" = /dev/null ] || [ "$old" = nul ]; then
     printf 'pptctl diff: new file %s\n' "$path"
     exit 0
 fi
-if [ "$new" = /dev/null ]; then
+if [ "$new" = /dev/null ] || [ "$new" = nul ]; then
     printf 'pptctl diff: deleted file %s\n' "$path"
     exit 0
 fi
 
-# Unified output names the temporary files git hands us; show the repo path
-# instead. The other formats do not match and pass through untouched.
+# Unified output starts with two lines naming the temporary files git hands
+# us; show the repo path instead. They are replaced by position, not by
+# matching the temporary paths (on Windows those can hold backslashes), and
+# keep pptctl.exe's CRLF. The other formats pass through untouched.
 # shellcheck disable=SC2086  # word-splitting $PPTCTL_DIFF_ARGS is intended
 pptctl diff $PPTCTL_DIFF_ARGS "$old" "$new" |
-    sed -e "s|^--- $old\$|--- a/$path|" -e "s|^+++ $new\$|+++ b/$path|"
+    awk -v path="$path" '
+        NR == 1 && /^--- / { print "--- a/" path ($0 ~ /\r$/ ? "\r" : ""); next }
+        NR == 2 && /^\+\+\+ / { print "+++ b/" path ($0 ~ /\r$/ ? "\r" : ""); next }
+        { print }'
 exit 0

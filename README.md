@@ -144,7 +144,7 @@ Exit codes follow `git diff`: `0` identical, `1` differences found, `2` error (a
 pptctl diff -q approved.pptx candidate.pptx || echo "deck changed"
 ```
 
-To get these diffs from `git diff` and `git log -p`, see [docs/git-integration.md](./docs/git-integration.md).
+To get these diffs from `git diff` and `git log -p`, or the HTML page from `git difftool`, see [docs/git-integration.md](./docs/git-integration.md).
 
 Validated on a corpus of real-world decks: see [docs/phase4-diff-validation.md](./docs/phase4-diff-validation.md).
 
@@ -261,7 +261,7 @@ Narrowing the rules, and the hook's other options: [docs/pre-commit.md](./docs/p
 
 ## Installing
 
-Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh`, the git diff driver from [`docs/git-integration.md`](docs/git-integration.md).
+Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh` and `git-pptx-difftool.sh`, the git diff driver and difftool from [`docs/git-integration.md`](docs/git-integration.md).
 
 ```bash
 # Pick one: linux-x86_64, linux-aarch64, macos-arm64 (windows-x86_64 is a .zip)
@@ -271,6 +271,7 @@ gh release download --repo valentin-best/pptctl \
 shasum -a 256 --check --ignore-missing SHA256SUMS    # sha256sum on Linux
 tar -xzf pptctl-*-"$target".tar.gz
 install pptctl-*-"$target"/pptctl ~/.local/bin/
+install pptctl-*-"$target"/git-pptx-diff*.sh ~/.local/bin/    # optional: git diff driver and difftool
 ```
 
 With no tag, `gh release download` takes the newest release; name one (`gh release download v0.7.0 …`) to pin it. The macOS binary is not notarized: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.

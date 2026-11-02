@@ -124,6 +124,12 @@ jobs:
           PRE_COMMIT: pipx run pre-commit==4.7.0
         run: scripts/test-pre-commit.sh build/${{ matrix.preset }}
 
+      # The git recipes in docs/git-integration.md: driver, textconv, difftool.
+      - name: git integration
+        if: matrix.name != 'linux-clang18'
+        shell: bash
+        run: scripts/test-git-integration.sh build/${{ matrix.preset }}
+
   lint:
     name: lint (clang-tidy)
     runs-on: ubuntu-24.04
