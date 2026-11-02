@@ -97,7 +97,7 @@ an empty diff.
 | `lint-args` | none | Extra `pptctl lint` arguments, e.g. `--only integrity` or `--target windows`. |
 | `diff-args` | none | Extra `pptctl diff` arguments, e.g. `--strict-text` or `--format json`. |
 | `fail-on` | `error` | `error`: fail on any lint error, or a deck that can't be read. `warning`: also on warnings. `never`: report only. |
-| `html-diff` | `false` | Also upload `pptctl diff --format html` pages, one per diffed deck, as the `pptctl-diff` workflow artifact. |
+| `html-diff` | `false` | Also upload `pptctl diff --format html` pages, one per deck whose slides changed, as the `pptctl-diff` workflow artifact. |
 | `working-directory` | `.` | The repository to review, when it isn't checked out at the workspace root. |
 | `token` | `github.token` | Token for downloading the pptctl release. |
 
