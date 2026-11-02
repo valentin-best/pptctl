@@ -124,6 +124,9 @@ int main(int argc, char** argv) {
         ->delimiter(',')
         ->expected(1)
         ->multi_option_policy(CLI::MultiOptionPolicy::TakeAll)
+        // A vector option otherwise swallows the deck paths after it:
+        // `--only integrity a.pptx b.pptx` is how pre-commit calls lint.
+        ->allow_extra_args(false)
         ->check(CLI::IsMember(pptctl::cmd::lint_selectors()));
     lint_cmd->callback([&]() {
         // The JSON report is one document per deck (docs/lint-schema.md).

@@ -109,6 +109,12 @@ EOF
             ! grep -q 'lint_problems.pptx: ' out.log; then
             fail "$hook: both decks should be reported"
         fi
+
+        # Hook args come before the file names: `--only integrity` must not
+        # take a deck as a second rule id.
+        printf '        args: [--strict, --only, integrity]\n' >> .pre-commit-config.yaml
+        git commit -q -am "integrity only" > /dev/null 2>&1
+        commit pass "content findings, integrity rules only" lint_clean.pptx lint_problems.pptx
     fi
     cd "$root"
 done
