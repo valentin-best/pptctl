@@ -16,6 +16,8 @@
 #   ACTION_PATH      the Action's checkout, for the source build
 # plus RUNNER_OS, RUNNER_ARCH, RUNNER_TEMP and GITHUB_PATH from the runner.
 
+# Empty arrays expand as ${a[@]+"${a[@]}"}: bash 3.2 (macOS runners) treats
+# "${a[@]}" of an empty array as unbound under set -u.
 set -euo pipefail
 
 if [ -z "${PPTCTL_VERSION:-}" ] && [[ ${ACTION_REF:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -37,7 +39,7 @@ download() {
     local work args=()
     work=$(mktemp -d)
     [ -n "${PPTCTL_VERSION:-}" ] && args+=("$PPTCTL_VERSION")
-    gh release download "${args[@]}" --repo "$PPTCTL_REPO" --dir "$work" \
+    gh release download ${args[@]+"${args[@]}"} --repo "$PPTCTL_REPO" --dir "$work" \
         --pattern "pptctl-*-$target.*" --pattern SHA256SUMS || return 1
 
     (
@@ -58,7 +60,7 @@ download() {
 build_from_source() {
     local build=$RUNNER_TEMP/pptctl-build generator=()
     command -v ninja > /dev/null && generator=(-G Ninja)
-    cmake -S "$ACTION_PATH" -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=Release
+    cmake -S "$ACTION_PATH" -B "$build" ${generator[@]+"${generator[@]}"} -DCMAKE_BUILD_TYPE=Release
     cmake --build "$build" --target pptctl --parallel
     cp "$build/pptctl" "$bin_dir/"
 }
