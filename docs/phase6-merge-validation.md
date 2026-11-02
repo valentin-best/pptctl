@@ -140,7 +140,8 @@ slides out of 300 (75 per renderer):
 
 The other three renderers resolve charts against their slide's own theme. For
 Google Slides, `merge` could write the resolved colours into the charts it
-imports; that would be a change to chart parts, so it is left for after v0.6.0.
+imports; that would be a change to chart parts, so it is left for after
+v0.6.0 (#167).
 
 ## LibreOffice as a producer
 
@@ -157,8 +158,8 @@ LibreOffice accept it. Adding
 merge containing it then opens too. `merge` copies the notes slide as it is, so
 the merged deck inherits the problem from its input; the Keynote checks above
 used the patched copy. It is the same family as the missing
-`p:notesMasterIdLst` in python-pptx decks (#136), which no integrity rule
-catches either.
+`p:notesMasterIdLst` in python-pptx decks (#136), which `unlisted-part` now
+catches. A lint rule and a merge fix for this one are proposed in #166.
 
 **`--theme=1` harness note.** `merge_edge` is in the set twice in effect: once
 as itself and once as LibreOffice's re-save, with the same content. Restyled

@@ -66,7 +66,9 @@ renderer. See `docs/phase6-merge-validation.md`.
 - Text relying on the deck-wide default text style takes the base deck's
   (#163).
 - Keeping each deck's formatting, Keynote draws hyperlinks and Google Slides
-  draws charts in the first deck's theme colours.
+  draws charts (#167) in the first deck's theme colours.
+- Keynote refuses decks whose notes slides lack `p:clrMapOvr`, as LibreOffice
+  writes them; merge copies such notes as they are (#166).
 
 ## [0.5.0] — 2026-10-30
 
