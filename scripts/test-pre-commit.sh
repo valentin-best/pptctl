@@ -103,7 +103,7 @@ EOF
         # pre-commit passes every staged deck in one call. (The fetch hook runs
         # the released pptctl, which takes several files from v0.7.0 on.)
         git rm -q lint_clean.pptx
-        git commit -q -m "drop clean deck" > /dev/null
+        git commit -q -m "drop clean deck" > /dev/null 2>&1
         commit block "clean and bad deck together" lint_clean.pptx lint_problems.pptx
         if ! grep -q 'lint_clean.pptx: no issues found' out.log ||
             ! grep -q 'lint_problems.pptx: ' out.log; then
