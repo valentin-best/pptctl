@@ -62,13 +62,13 @@ jobs:
 
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
       # NASM turns on libjpeg-turbo's x86 SIMD; CI's plain C fallback is fine
       # for tests but not for what users run.
       - name: Set up NASM (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/setup-nasm@v1
+        uses: ilammy/setup-nasm@72793074d3c8cdda771dba85f6deafe00623038b # v1.5.2
 
       # Static C run-time, so the .exe doesn't need the Visual C++
       # Redistributable. CMP0091 lets the run-time setting reach dependencies
