@@ -114,24 +114,27 @@ Outcome: met on the full 15-deck public corpus (42.9% mean, median 43.4%, no vis
 
 **Ship moment:** v0.5.0. Nobody else does this well, and the story is concrete: "shrinks decks 40–90% without breaking them in Keynote". A natural candidate for going public (still the maintainer's call).
 
-## Phase 6 — `pptctl merge` + package integrity (weeks 18–21)
+## Phase 6 — `pptctl merge` + package integrity (weeks 18–21) ✅
 
 The one with the most subtle bugs. Save it for when you have your sea legs.
 
 Package-integrity lint rules come first: they are the test oracle for `merge`, and they make `pptctl lint` the verifier for decks written by other tools (OfficeCLI, python-pptx, agents).
 
-- [ ] Lint: **dangling relationship** — a rel whose internal target part does not exist.
-- [ ] Lint: **shared part** — one part targeted from two places that must own it exclusively (tags, notes, charts' style/color parts; see OfficeCLI #540, #541).
-- [ ] Lint: **undeclared content type** — a part with neither a `Default` extension nor an `Override` in `[Content_Types].xml`.
-- [ ] Lint: **orphan part** — a part no relationship reaches (also feeds `optimize`).
-- [ ] Lint: **broken r:id** — an `r:embed` / `r:id` / `r:link` in slide XML that the part's `.rels` does not define.
-- [ ] Concatenate slides from multiple decks.
-- [ ] Rewrite all relationship IDs.
-- [ ] De-duplicate media (same image hash → single file).
-- [ ] Theme merge strategy (use first deck's theme, or `--theme=N` to pick).
-- [ ] Slide master de-duplication.
+- [x] Lint: **dangling relationship** — a rel whose internal target part does not exist.
+- [x] Lint: **shared part** — one part targeted from two places that must own it exclusively (tags, notes, charts' style/color parts; see OfficeCLI #540, #541).
+- [x] Lint: **undeclared content type** — a part with neither a `Default` extension nor an `Override` in `[Content_Types].xml`.
+- [x] Lint: **orphan part** — a part no relationship reaches (also feeds `optimize`).
+- [x] Lint: **broken r:id** — an `r:embed` / `r:id` / `r:link` in slide XML that the part's `.rels` does not define.
+- [x] Concatenate slides from multiple decks.
+- [x] Rewrite all relationship IDs.
+- [x] De-duplicate media (same image hash → single file).
+- [x] Theme merge strategy (use first deck's theme, or `--theme=N` to pick).
+- [x] Slide master de-duplication.
+- [x] Lint: **unlisted part** — a slide or master related but left out of its list (found while building `merge`: Keynote refuses python-pptx decks with notes).
 
 Exit criteria: merge ten 5-slide decks; output passes `pptctl lint --strict` on the integrity rules and opens in PowerPoint, Keynote, LibreOffice, and Google Slides with all images intact.
+
+Outcome: met. Ten decks from six producers merge into a 75-slide deck that passes every integrity rule and opens in all four renderers, with 73 of 75 slides pixel-identical to their sources in each. The differences are one fidelity gap (#163, text inheriting the base deck's default text style) and renderers that read one theme for the whole deck (Keynote hyperlinks, Google Slides charts). See `docs/phase6-merge-validation.md`.
 
 **Ship moment:** v0.6.0. "Merge decks without corrupting them" — the headline feature.
 
