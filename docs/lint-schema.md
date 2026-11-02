@@ -2,7 +2,8 @@
 
 **Current version: 1**
 
-`pptctl lint --json FILE` emits a single JSON object to stdout. This document
+`pptctl lint --json FILE` emits a single JSON object to stdout. `--json`
+takes one file; `pptctl lint` without it accepts several. This document
 is the authoritative spec for that output. Downstream tools (CI gates, editor
 integrations, golden tests) should key off `schema_version` to guard against
 breaking changes.
@@ -100,6 +101,10 @@ Exit codes are the same with and without `--json`.
 | `0` | Deck was read. Without `--strict`, this is returned even when diagnostics were emitted. |
 | `1` | The file could not be opened as a ZIP (nothing is written to stdout), or its `presentation.xml` could not be loaded. In the second case the integrity rules have still run and, when any is selected, their report is written to stdout; the content rules are skipped. With only integrity rules selected (`--only integrity`), `presentation.xml` is never loaded. |
 | `2` | `--strict` was given and at least one diagnostic was emitted. |
+
+Given several files (text output only), `lint` reports each in turn as if
+linted alone and exits with the worst code among them: `1` if any could not be
+read (the rest are still linted), else `2` if `--strict` tripped on any.
 
 ---
 

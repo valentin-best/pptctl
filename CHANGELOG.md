@@ -15,6 +15,15 @@ ROADMAP phase and a GitHub milestone.
   lint errors by default (`fail-on`); `paths`, `lint-args`, `diff-args`,
   `html-diff` and the version are configurable. Downloads the release
   binary, or builds from source when it can't. See `docs/github-action.md`.
+- pre-commit hooks (#170): `pptctl-lint` runs the `pptctl` on PATH;
+  `pptctl-lint-fetch` runs the release matching the hook's `rev`, downloaded
+  and checked against `SHA256SUMS` on first use. Both run `lint --strict` on
+  staged `.pptx` files. See `docs/pre-commit.md`.
+
+### Changed
+
+- `pptctl lint` takes several files (#170) and exits with the worst of their
+  codes. `--json` still takes one; its schema is unchanged.
 
 ## [0.6.1] — 2026-11-02
 

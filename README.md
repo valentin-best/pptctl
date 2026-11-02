@@ -92,7 +92,7 @@ broken.pptx: 2 warnings, 6 errors
 pptctl lint --strict --only integrity generated.pptx
 ```
 
-`--json` emits a versioned report; see [docs/lint-schema.md](./docs/lint-schema.md). Exit codes: `0` read (findings or not), `1` unreadable, `2` findings under `--strict`.
+Several decks can be linted in one call (`pptctl lint --strict decks/*.pptx`); each is reported as if linted alone. `--json` emits a versioned report for one deck; see [docs/lint-schema.md](./docs/lint-schema.md). Exit codes: `0` read (findings or not), `1` unreadable, `2` findings under `--strict`; with several decks, the worst of theirs.
 
 ## `pptctl diff`
 
@@ -242,6 +242,22 @@ jobs:
 ```
 
 Inputs (`paths`, `lint-args`, `fail-on`, `html-diff`, …), outputs and an example summary: [docs/github-action.md](./docs/github-action.md).
+
+## Before a commit: pre-commit
+
+With [pre-commit](https://pre-commit.com) (or [prek](https://github.com/j178/prek)), `git commit` lints every staged deck and stops if anything is found:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/valentin-best/pptctl
+    rev: v0.7.0
+    hooks:
+      - id: pptctl-lint          # pptctl from PATH
+      # - id: pptctl-lint-fetch  # or: download the v0.7.0 release on first use
+```
+
+Narrowing the rules, and the hook's other options: [docs/pre-commit.md](./docs/pre-commit.md).
 
 ## Installing
 
