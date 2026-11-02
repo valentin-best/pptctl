@@ -2,7 +2,7 @@
 
 > Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
-**Status:** early development, v0.6.0. `info`, `extract`, `lint` (content and package-integrity rules), `diff`, `optimize` and `merge` work.
+**Status:** early development, v0.6.1. `info`, `extract`, `lint` (content and package-integrity rules), `diff`, `optimize` and `merge` work.
 
 ```
 $ pptctl info deck.pptx

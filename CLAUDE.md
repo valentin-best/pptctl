@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.6.0) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`). `merge` (Phase 6, v0.6.0, documented in README and `docs/merge-schema.md`) combines decks in input order, each keeping its own masters (pipeline in `src/lib/merge.cpp`, closure import in `merge_import.cpp`, presentation-level parts in `merge_concat.cpp`); identical media and identical slide masters are stored once (`merge_media.cpp`, `merge_masters.cpp`), `--theme=N` restyles every slide onto deck N's layouts (`merge_theme.cpp`), and comment authors are carried over (`merge_comments.cpp`); `fill` is a stub that prints "not yet implemented".
+`pptctl` is a C++20 CLI for `.pptx` (OOXML) files: inspect, lint, diff, optimize, merge, extract. Early development (v0.6.1) — `info`, `extract`, `lint`, `diff` and `optimize` are implemented (optimize's five passes live in `src/lib/optimize_<pass>.cpp`). `merge` (Phase 6, v0.6.0, documented in README and `docs/merge-schema.md`) combines decks in input order, each keeping its own masters (pipeline in `src/lib/merge.cpp`, closure import in `merge_import.cpp`, presentation-level parts in `merge_concat.cpp`); identical media and identical slide masters are stored once (`merge_media.cpp`, `merge_masters.cpp`), `--theme=N` restyles every slide onto deck N's layouts (`merge_theme.cpp`), and comment authors are carried over (`merge_comments.cpp`); `fill` is a stub that prints "not yet implemented".
 
 ## Project workflow & status
 
@@ -10,7 +10,7 @@ Work is planned in `ROADMAP.md` / `PLAN.md` and tracked in GitHub **milestones**
 
 - **To see where things stand and what to do next, run `/next`** — it reports the current phase, its open issues, and a recommended next task. Prefer it over re-deriving status by hand.
 - Work issue-by-issue within the current phase. Reference the issue number in commits/PRs.
-- Phases 0–6 are done and tagged (v0.1.0 … v0.6.0; see `CHANGELOG.md`). Phases 7–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
+- Phases 0–6 are done and tagged (v0.1.0 … v0.6.0, plus v0.6.1 with the first prebuilt binaries; see `CHANGELOG.md`). Phases 7–8 are single **epic** tracking issues (label `epic`) — break an epic into granular issues when its phase becomes current.
 - **Positioning (since 2026-10-28):** pptctl is static analysis and safe surgery for decks — `lint`, `diff`, `optimize`, `merge` — not a general deck editor (that's OfficeCLI's ground). Phase 6 adds package-integrity lint rules alongside `merge`; Phase 7 is integrations (GitHub Action, pre-commit, agent skill); `fill` and library extraction are deferred. See the Positioning section of `ROADMAP.md`.
 - Don't publish the roadmap, make the repo public, or post launch content until something has actually shipped (a deliberate choice — see `ROADMAP.md`).
 
