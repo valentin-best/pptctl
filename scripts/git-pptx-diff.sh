@@ -37,11 +37,14 @@ if [ "$new" = /dev/null ] || [ "$new" = nul ]; then
     exit 0
 fi
 
-# Unified output names the temporary files git hands us; show the repo path
-# instead. The other formats do not match and pass through untouched. The
-# trailing [[:space:]]* keeps the CR of pptctl.exe's CRLF line endings.
+# Unified output starts with two lines naming the temporary files git hands
+# us; show the repo path instead. They are replaced by position, not by
+# matching the temporary paths (on Windows those can hold backslashes), and
+# keep pptctl.exe's CRLF. The other formats pass through untouched.
 # shellcheck disable=SC2086  # word-splitting $PPTCTL_DIFF_ARGS is intended
 pptctl diff $PPTCTL_DIFF_ARGS "$old" "$new" |
-    sed -e "s|^--- $old\([[:space:]]*\)\$|--- a/$path\1|" \
-        -e "s|^+++ $new\([[:space:]]*\)\$|+++ b/$path\1|"
+    awk -v path="$path" '
+        NR == 1 && /^--- / { print "--- a/" path ($0 ~ /\r$/ ? "\r" : ""); next }
+        NR == 2 && /^\+\+\+ / { print "+++ b/" path ($0 ~ /\r$/ ? "\r" : ""); next }
+        { print }'
 exit 0

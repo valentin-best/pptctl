@@ -58,7 +58,8 @@ git commit -q -am v2
 
 # Recipe 2: git diff runs the driver, a semantic diff under the repo path.
 git diff HEAD~1 HEAD -- deck.pptx > driver.out
-check "driver: header names the repo path" grep -q '^--- a/deck.pptx' driver.out
+check "driver: header names the repo path" grep -q '^--- a/deck.pptx' driver.out ||
+    head -n 2 driver.out | od -c | head -n 8 >&2
 check "driver: slide hunk" grep -q '^@@ slide [0-9].*changed' driver.out
 
 # Recipe 1: git log -p (no --ext-diff) falls back to textconv.

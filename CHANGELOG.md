@@ -31,8 +31,8 @@ ROADMAP phase and a GitHub milestone.
 - `git-pptx-diff.sh` hands over to `git difftool` when run inside it (#171).
   Git prefers a diff driver to the difftool, so before this `git difftool`
   on a `.pptx` printed the text diff when the driver was configured. On
-  Windows it now also names the repo path in the header (it missed it on
-  `pptctl.exe`'s CRLF output) and recognises an added or deleted deck (`nul`).
+  Windows it now also names the repo path in the header (the temporary
+  paths it matched could hold backslashes) and recognises an added or deleted deck (`nul`).
 - `pptctl lint` takes several files (#170) and exits with the worst of their
   codes. `--json` still takes one; its schema is unchanged.
 
