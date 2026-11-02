@@ -1,0 +1,108 @@
+name: action
+
+# Self-test for the pptctl GitHub Action (action.yml): runs it with `uses: ./`
+# on a scratch repository of fixture decks (scripts/action/make-test-repo.sh)
+# and checks its outputs, its summary and its exit status.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - action.yml
+      - scripts/action/**
+      - .github/workflows/action-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make the scratch repository
+        id: repo
+        shell: bash
+        run: |
+          dir=$RUNNER_TEMP/decks-repo
+          scripts/action/make-test-repo.sh "$dir"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "base=$(git -C "$dir" rev-parse HEAD~1)" >> "$GITHUB_OUTPUT"
+
+      - name: Review (fail-on never)
+        id: review
+        uses: ./
+        with:
+          working-directory: ${{ steps.repo.outputs.dir }}
+          base: ${{ steps.repo.outputs.base }}
+          fail-on: never
+          html-diff: true
+
+      - name: Check outputs
+        shell: bash
+        env:
+          CHANGED: ${{ steps.review.outputs.decks-changed }}
+          ERRORS: ${{ steps.review.outputs.lint-errors }}
+          WARNINGS: ${{ steps.review.outputs.lint-warnings }}
+        run: |
+          echo "decks-changed=$CHANGED lint-errors=$ERRORS lint-warnings=$WARNINGS"
+          [ "$CHANGED" = 5 ] && [ "$ERRORS" = 6 ] && [ "$WARNINGS" = 5 ]
+
+      # The step summary isn't readable from a later step, so render it again
+      # into a file (pptctl is on PATH from the review above) and check it.
+      - name: Check the summary
+        shell: bash
+        working-directory: ${{ steps.repo.outputs.dir }}
+        env:
+          PPTCTL_WORK: ${{ runner.temp }}/summary-check
+          PPTCTL_BASE: ${{ steps.repo.outputs.base }}
+          GITHUB_STEP_SUMMARY: ${{ runner.temp }}/summary.md
+          GITHUB_OUTPUT: ${{ runner.temp }}/outputs.txt
+        run: |
+          review=$GITHUB_WORKSPACE/scripts/action/review.sh
+          "$review" detect
+          "$review" review > "$RUNNER_TEMP/annotations.txt"
+          cat "$GITHUB_STEP_SUMMARY"
+          check() { grep -qF -- "$1" "$2" || { echo "::error::missing from $2: $1"; exit 1; }; }
+          check "| \`decks/a.pptx\` | modified | 1 warning |" "$GITHUB_STEP_SUMMARY"
+          check "| \`decks/gone.pptx\` | deleted | — |" "$GITHUB_STEP_SUMMARY"
+          check "renamed from \`decks/old name.pptx\`" "$GITHUB_STEP_SUMMARY"
+          check "| \`decks/Bad.PPTX\` | added | 6 errors, 3 warnings |" "$GITHUB_STEP_SUMMARY"
+          check '--- a/decks/a.pptx' "$GITHUB_STEP_SUMMARY"
+          check '+Review of this quarter' "$GITHUB_STEP_SUMMARY"
+          check 'No changes to slide content.' "$GITHUB_STEP_SUMMARY"
+          check '::error file=decks/Bad.PPTX,title=pptctl lint%3A dangling-rel::' "$RUNNER_TEMP/annotations.txt"
+          if grep -q notes.txt "$GITHUB_STEP_SUMMARY"; then echo "::error::notes.txt reviewed"; exit 1; fi
+
+      - name: Review (fail-on error)
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: ${{ steps.repo.outputs.dir }}
+          base: ${{ steps.repo.outputs.base }}
+
+      - name: Review (no decks under paths)
+        id: none
+        uses: ./
+        with:
+          working-directory: ${{ steps.repo.outputs.dir }}
+          base: ${{ steps.repo.outputs.base }}
+          paths: no-such-dir/
+
+      - name: Check fail-on and the no-deck case
+        shell: bash
+        env:
+          STRICT: ${{ steps.strict.outcome }}
+          NONE: ${{ steps.none.outputs.decks-changed }}
+          NONE_ERRORS: ${{ steps.none.outputs.lint-errors }}
+        run: |
+          echo "strict=$STRICT none=$NONE none-errors=$NONE_ERRORS"
+          [ "$STRICT" = failure ] && [ "$NONE" = 0 ] && [ "$NONE_ERRORS" = 0 ]
