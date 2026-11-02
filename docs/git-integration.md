@@ -9,8 +9,10 @@ index 8cbd07b..54336be 100644
 Binary files a/deck.pptx and b/deck.pptx differ
 ```
 
-Two recipes fix that. Both hang off a git diff driver named `pptx`, assigned
-to `.pptx` files with one line in `.gitattributes`:
+Three recipes fix that: a text diff (textconv), the full `pptctl diff` in the
+terminal (an external diff driver), and the HTML diff in a browser (a
+difftool). The first two hang off a git diff driver named `pptx`, assigned to
+`.pptx` files with one line in `.gitattributes`:
 
 ```
 *.pptx diff=pptx
@@ -18,7 +20,8 @@ to `.pptx` files with one line in `.gitattributes`:
 
 Commit that file to the repo. The driver itself is per-user configuration
 (`git config`, add `--global` to apply it to every repo), and `pptctl` has to
-be on `PATH` when git runs.
+be on `PATH` when git runs. To set up all three at once, see
+[Setup in one go](#setup-in-one-go).
 
 All output below comes from a scratch repo with two commits of `deck.pptx`:
 `tests/fixtures/three_slides.pptx`, then a copy of it with slide 3 moved to
@@ -76,12 +79,17 @@ git config diff.pptx.cachetextconv true
 
 ## Recipe 2: external diff driver, full semantic diff
 
-Point the driver at [`scripts/git-pptx-diff.sh`](../scripts/git-pptx-diff.sh)
-(an absolute path, or copy it somewhere on `PATH`):
+Point the driver at [`scripts/git-pptx-diff.sh`](../scripts/git-pptx-diff.sh).
+Every release archive carries a copy next to the `pptctl` binary; install both
+somewhere on `PATH` (see [Installing](../README.md#installing)) and name the
+script alone:
 
 ```bash
-git config diff.pptx.command "$PWD/scripts/git-pptx-diff.sh"
+git config diff.pptx.command git-pptx-diff.sh
 ```
+
+From a checkout of this repo instead, give the absolute path:
+`git config diff.pptx.command "$PWD/scripts/git-pptx-diff.sh"`.
 
 Git calls the script with seven arguments (`path old-file old-hex old-mode
 new-file new-hex new-mode`); the script runs `pptctl diff` on `old-file` and
@@ -133,6 +141,61 @@ GIT_EXTERNAL_DIFF="$PWD/scripts/git-pptx-diff.sh" git diff HEAD~1 HEAD -- deck.p
 `GIT_EXTERNAL_DIFF` applies to every path in the diff, not only `.pptx`
 files, so limit it with a pathspec (`-- '*.pptx'`) in a mixed repo.
 
+## Recipe 3: difftool, the HTML diff in a browser
+
+`pptctl diff --format html` renders a side-by-side page of every changed slide.
+[`scripts/git-pptx-difftool.sh`](../scripts/git-pptx-difftool.sh), also in the
+release archives, makes it a `git difftool`:
+
+```bash
+git config difftool.pptx.cmd 'git-pptx-difftool.sh "$LOCAL" "$REMOTE" "$MERGED"'
+```
+
+```
+$ git difftool -y -t pptx HEAD~1 -- '*.pptx'
+deck.pptx: /var/folders/…/T/pptctl-difftool/deck.KQ9WyZ.html
+```
+
+and the page opens in the default browser: `open` on macOS, `xdg-open` on
+Linux, `start` on Windows. Set `PPTCTL_OPEN` to use another command
+(`PPTCTL_OPEN=firefox`), or `PPTCTL_OPEN=none` to print the path only. The page
+names the deck by its path in the repo, with `a/` and `b/` in front.
+
+Things to know:
+
+- **Keep the `-- '*.pptx'` pathspec.** `git difftool -t pptx` runs the tool on
+  every changed file, and `pptctl` can't diff a `.md`.
+- `-y` skips git's "Launch 'pptx'?" prompt for each file;
+  `git config difftool.prompt false` does that for good.
+- Pages are kept in `$TMPDIR/pptctl-difftool/` (each one is self-contained),
+  because git deletes its temporary copies of the decks as soon as the tool
+  returns. The system's temp-file cleanup removes them eventually.
+- An added or deleted deck prints one line and opens nothing.
+- `PPTCTL_DIFF_ARGS` passes options to `pptctl diff`, as for the driver.
+- Unlike the other two recipes this needs no `.gitattributes` line: the tool
+  is chosen with `-t pptx` on the command line.
+- It works alongside the Recipe 2 driver. Git gives a diff driver precedence
+  over any difftool, so `git-pptx-diff.sh` notices when it runs inside
+  `git difftool` and hands over to the tool. Copies of the driver from v0.6.1
+  and earlier don't; with one of those, `git difftool` prints the text diff
+  instead, so update it.
+
+## Setup in one go
+
+With `pptctl`, `git-pptx-diff.sh` and `git-pptx-difftool.sh` on `PATH`
+(they come in the same release archive):
+
+```bash
+git config --global diff.pptx.textconv "pptctl extract --format txt"
+git config --global diff.pptx.command git-pptx-diff.sh
+git config --global difftool.pptx.cmd 'git-pptx-difftool.sh "$LOCAL" "$REMOTE" "$MERGED"'
+echo '*.pptx diff=pptx' >> .gitattributes    # in each repo, then commit it
+```
+
+Drop `--global` to keep it to one repo. To undo it, run
+`git config --global --remove-section diff.pptx` and the same for
+`difftool.pptx`.
+
 ## Which one should I use
 
 Both, and let git pick. When `textconv` and `command` are both set on the
@@ -147,6 +210,10 @@ git command, so it is the better default for a repo where most people only
 skim what changed. The external driver is the one to reach for when
 slides get reordered, or when images and layout matter as much as the words.
 
-Neither recipe affects GitHub, GitLab or other hosted viewers; they run
-their own diff. For a review there, attach the output of
-`pptctl diff --format html old.pptx new.pptx > diff.html` to the pull request.
+The difftool is for when you want to *look*: a slide-by-slide view in the
+browser, on demand, for the commits you ask about.
+
+None of the recipes affect GitHub, GitLab or other hosted viewers; they run
+their own diff. For pull requests on GitHub, use the
+[GitHub Action](github-action.md), which puts the diff in the job summary and
+can upload the HTML pages as an artifact.
