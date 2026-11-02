@@ -1,0 +1,122 @@
+name: pptctl review
+description: >-
+  Lint the .pptx decks a pull request changes and show a semantic slide diff
+  of each in the job summary.
+author: valentin-best
+branding:
+  icon: file-text
+  color: orange
+
+inputs:
+  version:
+    description: >-
+      pptctl release to use, as a tag (v0.6.1). Default: the Action's own tag
+      when it is a release tag, else the newest release.
+    default: ''
+  paths:
+    description: >-
+      Git pathspecs, one per line, limiting which decks are reviewed (for
+      example `decks/`). Default: the whole repository.
+    default: ''
+  base:
+    description: >-
+      Commit to compare against. Default: the pull request's base, or the
+      commit before a push. Without one, every deck is linted and none diffed.
+    default: ${{ github.event.pull_request.base.sha || github.event.before }}
+  head:
+    description: 'Commit to review. Default: the checked-out commit.'
+    default: HEAD
+  lint-args:
+    description: Extra arguments for `pptctl lint`, for example `--only integrity`.
+    default: ''
+  diff-args:
+    description: Extra arguments for `pptctl diff`, for example `--strict-text`.
+    default: ''
+  fail-on:
+    description: >-
+      Fail the step on lint findings of this severity or worse: `error`,
+      `warning` or `never`.
+    default: error
+  html-diff:
+    description: Also upload `pptctl diff --format html` pages as the `pptctl-diff` artifact.
+    default: 'false'
+  working-directory:
+    description: The repository to review, when it is not checked out at the workspace root.
+    default: .
+  token:
+    description: Token for downloading the pptctl release.
+    default: ${{ github.token }}
+
+outputs:
+  decks-changed:
+    description: Number of .pptx files added, modified, renamed or deleted.
+    value: ${{ steps.detect.outputs.count }}
+  lint-errors:
+    description: Lint findings with severity `error`, plus decks that could not be read.
+    value: ${{ steps.review.outputs.errors || '0' }}
+  lint-warnings:
+    description: Lint findings with severity `warning`.
+    value: ${{ steps.review.outputs.warnings || '0' }}
+
+runs:
+  using: composite
+  steps:
+    # First, so a change without decks skips the download entirely.
+    - id: detect
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PPTCTL_WORK: ${{ runner.temp }}/pptctl-review
+        PPTCTL_BASE: ${{ inputs.base }}
+        PPTCTL_HEAD: ${{ inputs.head }}
+        PPTCTL_PATHS: ${{ inputs.paths }}
+      run: '"$GITHUB_ACTION_PATH/scripts/action/review.sh" detect'
+
+    - if: steps.detect.outputs.count != '0'
+      shell: bash
+      env:
+        PPTCTL_VERSION: ${{ inputs.version }}
+        PPTCTL_REPO: valentin-best/pptctl
+        ACTION_REF: ${{ github.action_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: '"$GITHUB_ACTION_PATH/scripts/action/install.sh"'
+
+    - id: review
+      if: steps.detect.outputs.count != '0'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PPTCTL_WORK: ${{ runner.temp }}/pptctl-review
+        PPTCTL_BASE: ${{ inputs.base }}
+        PPTCTL_HEAD: ${{ inputs.head }}
+        PPTCTL_LINT_ARGS: ${{ inputs.lint-args }}
+        PPTCTL_DIFF_ARGS: ${{ inputs.diff-args }}
+        PPTCTL_HTML_DIR: ${{ inputs.html-diff == 'true' && format('{0}/pptctl-review/html', runner.temp) || '' }}
+      run: '"$GITHUB_ACTION_PATH/scripts/action/review.sh" review'
+
+    - if: steps.detect.outputs.count != '0' && inputs.html-diff == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: pptctl-diff
+        path: ${{ runner.temp }}/pptctl-review/html
+        if-no-files-found: ignore
+
+    # Last, so the summary and the HTML artifact exist even when this fails.
+    - if: steps.detect.outputs.count != '0'
+      shell: bash
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+        ERRORS: ${{ steps.review.outputs.errors }}
+        WARNINGS: ${{ steps.review.outputs.warnings }}
+      run: |
+        case $FAIL_ON in
+          error) bad=$ERRORS ;;
+          warning) bad=$((ERRORS + WARNINGS)) ;;
+          never) bad=0 ;;
+          *) echo "::error title=pptctl::fail-on must be error, warning or never, not '$FAIL_ON'"; exit 1 ;;
+        esac
+        if [ "$bad" -gt 0 ]; then
+          echo "::error title=pptctl::lint found $ERRORS error(s) and $WARNINGS warning(s) (fail-on: $FAIL_ON)"
+          exit 1
+        fi

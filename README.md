@@ -225,6 +225,24 @@ Limitations, by design for now:
 
 Exit codes: `0` merged (or measured), `1` when an input can't be read, `--theme` is out of range, `-o` names an input, or the output can't be written. Command-line errors (a missing file, fewer than two inputs) are rejected by the argument parser with a non-zero code.
 
+## In pull requests: the GitHub Action
+
+One workflow file gives every pull request that touches a `.pptx` a job summary with a `pptctl diff` of each changed deck against the base and its lint findings, plus an annotation per finding; lint errors fail the check.
+
+```yaml
+# .github/workflows/decks.yml
+name: decks
+on: pull_request
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: valentin-best/pptctl@main
+```
+
+Inputs (`paths`, `lint-args`, `fail-on`, `html-diff`, …), outputs and an example summary: [docs/github-action.md](./docs/github-action.md).
+
 ## Installing
 
 Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh`, the git diff driver from [`docs/git-integration.md`](docs/git-integration.md).

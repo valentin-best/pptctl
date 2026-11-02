@@ -5,6 +5,17 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [Unreleased]
+
+### Added
+
+- GitHub Action (#169): `uses: valentin-best/pptctl@…` lints every `.pptx`
+  a pull request adds, modifies or renames, diffs it against the base, and
+  writes both to the job summary, with an annotation per finding. Fails on
+  lint errors by default (`fail-on`); `paths`, `lint-args`, `diff-args`,
+  `html-diff` and the version are configurable. Downloads the release
+  binary, or builds from source when it can't. See `docs/github-action.md`.
+
 ## [0.6.1] — 2026-11-02
 
 The first release with prebuilt binaries. No change to what `pptctl` does.
