@@ -259,9 +259,20 @@ repos:
 
 Narrowing the rules, and the hook's other options: [docs/pre-commit.md](./docs/pre-commit.md).
 
+## For coding agents: the pptctl skill
+
+[`skills/pptctl/SKILL.md`](skills/pptctl/SKILL.md) is an [Agent Skill](https://agentskills.io) that teaches an agent writing or editing decks (with python-pptx, PptxGenJS, OfficeCLI, …) to run `pptctl lint --strict --only integrity` before calling a deck done. It also covers how to read the findings and fix the usual causes, diffing an edit, shrinking and merging, and which exit codes are not errors. Install it for Claude Code by copying the folder (it is also in every release archive):
+
+```bash
+cp -R skills/pptctl ~/.claude/skills/          # every project
+cp -R skills/pptctl .claude/skills/            # or one project
+```
+
+`pptctl` itself has to be on `PATH`.
+
 ## Installing
 
-Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh` and `git-pptx-difftool.sh`, the git diff driver and difftool from [`docs/git-integration.md`](docs/git-integration.md).
+Each release ships prebuilt binaries for Linux (x86_64, aarch64), macOS (arm64, 13.3 or later) and Windows (x86_64), plus a `SHA256SUMS` file. The Linux binaries are statically linked and run on any distribution; the Windows one doesn't need the Visual C++ Redistributable. Every archive also holds `git-pptx-diff.sh` and `git-pptx-difftool.sh`, the git diff driver and difftool from [`docs/git-integration.md`](docs/git-integration.md), and the agent skill in `skills/pptctl/`.
 
 ```bash
 # Pick one: linux-x86_64, linux-aarch64, macos-arm64 (windows-x86_64 is a .zip)
