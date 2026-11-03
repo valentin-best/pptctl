@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "about": "Decks for scripts/renderer_compat.py (#173). Downloaded decks are verified by sha256 and not committed; see docs/renderer-compat.md for attribution.",
+  "decks": [
+    {
+      "name": "ppt-preprints-report",
+      "producer": "Microsoft Office PowerPoint",
+      "licence": "CC-BY-4.0",
+      "title": "Practices, drivers and impediments in the use of preprints (Phase 1 report)",
+      "creators": [
+        "Chiarelli, Andrea",
+        "Johnson, Rob",
+        "Pinfield, Stephen",
+        "Richens, Emma"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.2654832",
+      "url": "https://zenodo.org/records/2654832/files/Practices%2C%20drivers%20and%20impediments%20in%20the%20use%20of%20preprints%20%28Phase%201%20report%29.pptx?download=1",
+      "file": "Practices, drivers and impediments in the use of preprints (Phase 1 report).pptx",
+      "sha256": "6e6e05dc37aef3598b40dbe21ff9f4a7fb8673ef46e91f358b2e4b34e300c36f",
+      "bytes": 1139421
+    },
+    {
+      "name": "ppt-conference-charts",
+      "producer": "Microsoft Office PowerPoint",
+      "licence": "CC-BY-4.0",
+      "title": "2nd Basque Conference on Cyber Physical Systems and Artificial Intelligence 2023",
+      "creators": [
+        "Manuel Graña"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.10037767",
+      "url": "https://zenodo.org/records/10037767/files/Rocio%20Angulo%20Donosti.pptx?download=1",
+      "file": "Rocio Angulo Donosti.pptx",
+      "sha256": "afe0f0783cec7519cab2753fb9d2d5f74c6fd66a5b02b535fe63eaabc13b172d",
+      "bytes": 2822554
+    },
+    {
+      "name": "ppt-training-smartart",
+      "producer": "Microsoft Office PowerPoint",
+      "licence": "CC-BY-SA-4.0",
+      "title": "Materialien zur Zusatzausbildung \"Referenzperson für schulisches Handeln im Kontext sexuellen Kindesmissbrauchs\" (RP SKM)",
+      "creators": [
+        "Bayer, Lennart",
+        "Cigelski, Maike",
+        "Eilfgang, Justine",
+        "Mensing, Frieda",
+        "Pülschen, Simone"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.17091645",
+      "url": "https://zenodo.org/records/17091645/files/02_Grundlagen.pptx?download=1",
+      "file": "02_Grundlagen.pptx",
+      "sha256": "d813c60d8eeffa09294ece14d2ecd4e0fb4849cd592faab9eef0e6f0e38ab4bf",
+      "bytes": 2973588
+    },
+    {
+      "name": "ppt-figure-odd-size",
+      "producer": "Microsoft Office PowerPoint",
+      "licence": "CC-BY-4.0",
+      "title": "S-allylmercaptocysteine improves alcoholic liver disease partly through a direct modulation of insulin receptor signaling",
+      "creators": [
+        "Luo Pingping",
+        "Zheng Ming",
+        "Zhang Rui",
+        "Zhang Hong",
+        "Liu Yingxia",
+        "Li Wei",
+        "Sun Xiaoming",
+        "Yu Qian",
+        "Tipoe George Lim",
+        "Xiao Jia"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.3676958",
+      "url": "https://zenodo.org/records/3676958/files/Figure%203.pptx?download=1",
+      "file": "Figure 3.pptx",
+      "sha256": "b48be8ae7feb2ca12e41d9ec293f872521a2b2fd0a48af49c1f85bca2bd19d2c",
+      "bytes": 2489800
+    },
+    {
+      "name": "pptmac-smartart",
+      "producer": "Microsoft Macintosh PowerPoint",
+      "licence": "CC-BY-4.0",
+      "title": "Definieren, identifizieren, fördern. Fair-OA-Aktivitäten monitoren",
+      "creators": [
+        "Voigt, Michaela"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.13711901",
+      "url": "https://zenodo.org/records/13711901/files/oat24_fair-oa_voigt.pptx?download=1",
+      "file": "oat24_fair-oa_voigt.pptx",
+      "sha256": "193b3261cae9a9c5276efa5b5371f6800f0ac85424000d163a200f8b136b30c1",
+      "bytes": 1432602
+    },
+    {
+      "name": "pptmac-notes",
+      "producer": "Microsoft Macintosh PowerPoint",
+      "licence": "CC-BY-4.0",
+      "title": "DPN Digital Preservation Curriculum",
+      "creators": [
+        "AVPreserve"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.1183284",
+      "url": "https://zenodo.org/records/1183284/files/Module-1-%E2%80%94-Programmatic-Digital-Preservation.pptx?download=1",
+      "file": "Module-1-—-Programmatic-Digital-Preservation.pptx",
+      "sha256": "0e9bcdbda15b7347b9997ce6e8e6cf0c97ae13de56be39a62e2fa254d31cbce5",
+      "bytes": 433493
+    },
+    {
+      "name": "gslides-notes",
+      "producer": "Google Slides",
+      "licence": "CC-BY-4.0",
+      "title": "A first Introduction to Open Science",
+      "creators": [
+        "Melanie Imming",
+        "Anke Versteeg",
+        "Sander Bosch",
+        "Jeroen Sondervan",
+        "Carlos Martinez-Ortiz Netherlands eScience Center ;",
+        "Loek Brinkman",
+        "Esther Plomp",
+        "Maria Cruz",
+        "Ingeborg Verheul"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.4529129",
+      "url": "https://zenodo.org/records/4529129/files/Info-sheet%20ACOS%20A%20First%20Introduction%20to%20Open%20Science.pptx?download=1",
+      "file": "Info-sheet ACOS A First Introduction to Open Science.pptx",
+      "sha256": "bd7b1241938c34c62c0bb49e8ac5423bf817b4f45ac39edbe32dd58479a260a1",
+      "bytes": 905194
+    },
+    {
+      "name": "gslides-portrait-cards",
+      "producer": "Microsoft Office PowerPoint (from Google Slides)",
+      "licence": "CC-BY-4.0",
+      "title": "Fresque des données de recherche",
+      "creators": [
+        "León y Barella, Alicia",
+        "Larre-Perez, Margaux",
+        "Michel-Rodriguez, Monica"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.18834925",
+      "url": "https://zenodo.org/records/18834925/files/cartes-fresque-donnees-recherche_2026.pptx?download=1",
+      "file": "cartes-fresque-donnees-recherche_2026.pptx",
+      "sha256": "c8ee79a10f5627a165af9dd9c4903a6fc7fa74df8360d952797a1a264618d465",
+      "bytes": 4789490
+    },
+    {
+      "name": "gslides-three-masters",
+      "producer": "Google Slides",
+      "licence": "CC-BY-4.0",
+      "title": "Introduction to  Semantic Artefacts",
+      "creators": [
+        "Coen, Gerard"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.3549375",
+      "url": "https://zenodo.org/records/3549375/files/Coen_IntrotoSemanticArtifacts_RDAP14.pptx?download=1",
+      "file": "Coen_IntrotoSemanticArtifacts_RDAP14.pptx",
+      "sha256": "cda0e4225d63d48d8c7f85524ce1b007f6950ae44d667b8a1cffde35d14c6287",
+      "bytes": 1482804
+    },
+    {
+      "name": "libreoffice-linked-art",
+      "producer": "LibreOffice/6.0.7.3",
+      "licence": "CC-BY-4.0",
+      "title": "Linked Open Greek Pottery:  Kerameikos.org and Linked Art",
+      "creators": [
+        "Gruber, Ethan"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.3463596",
+      "url": "https://zenodo.org/records/3463596/files/Kerameikos%20-%20Linked%20Art.pptx?download=1",
+      "file": "Kerameikos - Linked Art.pptx",
+      "sha256": "255fe5d182a65737af914b04455bfc405a7792d3e8ef2ba652edc60d67086ec6",
+      "bytes": 1965269
+    },
+    {
+      "name": "libreoffice-workshop",
+      "producer": "LibreOffice/25.2.7.2",
+      "licence": "CC-BY-4.0",
+      "title": "Workshop \"Naming Files and Folders - Best Practices at the Microscope\" from CRC TRR 384 IN-CODE",
+      "creators": [
+        "Lampe, André",
+        "Giuliani, Claudia",
+        "Binder, Harald",
+        "Schmoranzer, Jan"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.19680929",
+      "url": "https://zenodo.org/records/19680929/files/Workshop%20Naming%20Files%20and%20Folders%20-%20Best%20Practice%20at%20the%20Microscop%20IN-CODE%20v1.0_PPTX.pptx?download=1",
+      "file": "Workshop Naming Files and Folders - Best Practice at the Microscop IN-CODE v1.0_PPTX.pptx",
+      "sha256": "36a652b77bca6b4d305825fd9e4d0efa1201ac099c2bc3498c5789f4a2aba8c1",
+      "bytes": 3870922
+    },
+    {
+      "name": "libreoffice-from-gslides",
+      "producer": "LibreOffice/7.6.0.3 (from Google Slides)",
+      "licence": "CC-BY-4.0",
+      "title": "Gioacchino Volpe nello specchio del suo archivio",
+      "creators": [
+        "Grilli Lorenzo"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.13926610",
+      "url": "https://zenodo.org/records/13926610/files/LAquila-15-12-2023_%20Il%20Medioevo%20di%20Volpe%20nella%20Italia%20repubblicana.pptx?download=1",
+      "file": "LAquila-15-12-2023_ Il Medioevo di Volpe nella Italia repubblicana.pptx",
+      "sha256": "61623a3dcb55dcacf5dfbc9d91490dba1695d09dda870d57ad8586c0552c74db",
+      "bytes": 228778
+    },
+    {
+      "name": "onlyoffice-hardware",
+      "producer": "onlyoffice/7.3.3.49",
+      "licence": "CC-BY-4.0",
+      "title": "OSI² Build Workshop 22.09.2023 | Slides",
+      "creators": [
+        "Winter, Lukas",
+        "O'Reilly, Tom",
+        "de Gans, Danny",
+        "Pellicer-Guridi, Ruben",
+        "Littin, Sebastian",
+        "Teeuwisse, Wouter",
+        "Prier, Marcus",
+        "Schote, David",
+        "Frintz, Jan",
+        "Schüncke, Patrick",
+        "Häuer, Martin"
+      ],
+      "source": "https://doi.org/10.5281/zenodo.10079661",
+      "url": "https://zenodo.org/records/10079661/files/Console%20Hardware%20-%20Red%20Pitaya%20and%20OCRA1%20-%20Jan%20Frintz.pptx?download=1",
+      "file": "Console Hardware - Red Pitaya and OCRA1 - Jan Frintz.pptx",
+      "sha256": "fad1af3f34f5607689a917a00147e802432be5c204a4bf038aa8f42150d9a228",
+      "bytes": 3102447
+    },
+    {
+      "name": "keynote-charts",
+      "producer": "Keynote 14.5 (export)",
+      "licence": "MIT (this repository)",
+      "title": "tests/fixtures/charts_deck.pptx exported by Keynote 14.5",
+      "creators": [
+        "pptctl"
+      ],
+      "path": "tests/corpus/keynote_charts.pptx",
+      "sha256": "57d648056db5e5cc75e587c058d7f4b65b1175bbd67761d061d1457ccce505df",
+      "bytes": 40222
+    },
+    {
+      "name": "python-pptx-notes-masters",
+      "producer": "python-pptx 1.0.2",
+      "licence": "MIT (this repository)",
+      "title": "Synthetic fixture: speaker notes and a second slide master",
+      "creators": [
+        "pptctl"
+      ],
+      "path": "tests/fixtures/notes_and_masters.pptx",
+      "sha256": "eddc2d27b4073738d52e1de974a961b1a3fc889b7394ad424ec8973c5d755180",
+      "bytes": 44087
+    },
+    {
+      "name": "python-pptx-comments",
+      "producer": "python-pptx 1.0.2",
+      "licence": "MIT (this repository)",
+      "title": "Synthetic fixture: legacy comments",
+      "creators": [
+        "pptctl"
+      ],
+      "path": "tests/fixtures/merge_comments_a.pptx",
+      "sha256": "bc3bd32382ce431efbb25ee9955d33accc73932958408053fa8ae5e43a1f9769",
+      "bytes": 30266
+    }
+  ]
+}

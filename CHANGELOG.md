@@ -33,6 +33,17 @@ ROADMAP phase and a GitHub milestone.
   problems in every python-pptx deck (unlisted notes master, printer
   settings). It ships in the release archives.
 
+- Renderer-compatibility check (#173): `scripts/renderer_compat.py` optimizes
+  16 decks from 7 producers (PowerPoint for Windows and Mac, Google Slides,
+  LibreOffice 6–25, ONLYOFFICE, Keynote, python-pptx) and merges them in
+  pairs. It checks that headless LibreOffice converts every output with the
+  same page count as its sources, and that lint finds no new integrity
+  problems. The corpus is `tests/corpus/manifest.json`: openly licensed
+  decks from Zenodo, pinned by SHA-256. It runs in
+  `.github/workflows/renderer-compat.yml` weekly, by hand, and on pull
+  requests that touch optimize or merge; the latest result (32 of 32 pass) is
+  in `docs/renderer-compat.md`.
+
 ### Changed
 
 - `git-pptx-diff.sh` hands over to `git difftool` when run inside it (#171).
