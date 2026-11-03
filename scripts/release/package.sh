@@ -19,6 +19,7 @@ name="pptctl-$version-$target"
 stage=$(mktemp -d)
 mkdir "$stage/$name"
 cp "$bin" scripts/git-pptx-diff.sh scripts/git-pptx-difftool.sh LICENSE README.md CHANGELOG.md "$stage/$name/"
+cp -R skills "$stage/$name/"
 
 cd "$stage"
 case $bin in

@@ -26,6 +26,13 @@ ROADMAP phase and a GitHub milestone.
   archives next to `git-pptx-diff.sh`; `docs/git-integration.md` gains the
   recipe and a one-block setup for all three git recipes.
 
+- Agent skill (#172): `skills/pptctl/SKILL.md` teaches coding agents to lint
+  every deck they write or edit before calling it done, and to diff, shrink
+  and merge with pptctl instead of hand-editing XML. It includes the exit codes
+  that aren't errors, each rule's usual fix, and a helper that fixes the two
+  problems in every python-pptx deck (unlisted notes master, printer
+  settings). It ships in the release archives.
+
 ### Changed
 
 - `git-pptx-diff.sh` hands over to `git difftool` when run inside it (#171).
