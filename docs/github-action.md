@@ -26,11 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: valentin-best/pptctl@main
+      - uses: valentin-best/pptctl@v0.7.0
 ```
 
-Nothing else is needed. The Action is new on `main`; pin a release tag
-(`@v0.7.0` and later) once one includes it.
+Nothing else is needed. Pinning a release tag (`@v0.7.0`) pins pptctl to
+that release too; `@main` follows development.
 
 `actions/checkout`'s default depth of 1 is fine: the Action fetches the base
 commit itself.
@@ -90,7 +90,7 @@ an empty diff.
 
 | Input | Default | |
 |---|---|---|
-| `version` | the Action's tag, if it is a release tag; else the newest release | pptctl release to download, e.g. `v0.6.1`. |
+| `version` | the Action's tag, if it is a release tag; else the newest release | pptctl release to download, e.g. `v0.7.0`. |
 | `paths` | whole repository | Git pathspecs, one per line, limiting which decks are reviewed (`decks/`, `slides/*.pptx`). |
 | `base` | the pull request's base, or the commit before a push | Commit to compare against. Without one (a push that creates a branch), every deck under `paths` is linted and none is diffed. |
 | `head` | `HEAD` | Commit to review. |
