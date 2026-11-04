@@ -41,6 +41,18 @@ else
     pre_commit=(uvx pre-commit)
 fi
 
+# The fetch hook downloads the release CMakeLists.txt names. On a release
+# commit that release doesn't exist until the tag is pushed: use the newest
+# published one instead, which the hook then fetches the same way.
+if [ -z "${PPTCTL_VERSION:-}" ] && command -v gh > /dev/null; then
+    want=v$(sed -n 's/^ *VERSION \([0-9][0-9.]*\)$/\1/p' "$root/CMakeLists.txt" | head -n 1)
+    if ! gh release view "$want" --repo valentin-best/pptctl > /dev/null 2>&1; then
+        PPTCTL_VERSION=$(gh release view --repo valentin-best/pptctl --json tagName -q .tagName)
+        export PPTCTL_VERSION
+        echo "note: $want isn't released yet; the fetch hook uses $PPTCTL_VERSION"
+    fi
+fi
+
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 export PATH="$build:$PATH"
