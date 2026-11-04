@@ -166,6 +166,19 @@ per call. From v0.7.0 on, `rev: v0.7.0` fetches a pptctl that takes several.
 
 ## After the v0.7.0 tag
 
-A short re-check once the release exists: `uses: valentin-best/pptctl@v0.7.0`
-on #1 (the Action then pins pptctl 0.7.0), and `pptctl-lint-fetch` at
-`rev: v0.7.0` with two decks in one commit.
+Re-checked on 2026-11-04, once the release workflow had published v0.7.0
+(4 archives and `SHA256SUMS`, all four builds green):
+
+- **Release archive:** the macOS archive matches `SHA256SUMS`. It holds
+  `pptctl` (reports `0.7.0`), `git-pptx-diff.sh`, `git-pptx-difftool.sh`,
+  `skills/pptctl/SKILL.md`, the licence, README and changelog. Its `lint`
+  takes several files.
+- **Action at `@v0.7.0`:** #1 with `uses: valentin-best/pptctl@v0.7.0`
+  resolved to the tagged commit (`98ba271`) and passed with the same single
+  `ctype` annotation and summary as before. It built pptctl 0.7.0 from that
+  source in 163 s, still the private-repository fallback.
+- **`pptctl-lint-fetch` at `rev: v0.7.0`**, no pptctl on `PATH`, fresh
+  caches: it downloaded and checked pptctl 0.7.0. A clean deck and a deck with
+  warnings committed together were linted in one call and the commit was
+  blocked (`a-clean.pptx: no issues found`, `b-draft.pptx: 7 warnings`). Two
+  clean decks together committed.
