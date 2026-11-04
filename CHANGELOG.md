@@ -53,6 +53,19 @@ ROADMAP phase and a GitHub milestone.
   paths it matched could hold backslashes) and recognises an added or deleted deck (`nul`).
 - `pptctl lint` takes several files (#170) and exits with the worst of their
   codes. `--json` still takes one; its schema is unchanged.
+- The workflow snippets in the README and `docs/github-action.md` use
+  `actions/checkout@v7` (#174); `@v4` triggers GitHub's Node.js 20
+  deprecation warning on every run.
+
+### Validated
+
+- Phase 7 exit criteria (#174): in a fresh private repository whose only setup
+  is the README's workflow, eight pull requests (deck modified, added,
+  deleted, broken, none, and `fail-on: warning` / `never`) each got the
+  expected result, with a slide diff and lint findings in the job summary and
+  an annotation per finding on the deck. A pull request with no decks
+  finished in 19 s. Both pre-commit hooks blocked bad decks in the same
+  repository. See `docs/phase7-integrations-validation.md`.
 
 ## [0.6.1] — 2026-11-02
 
