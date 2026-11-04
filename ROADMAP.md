@@ -142,11 +142,11 @@ Outcome: met. Ten decks from six producers merge into a 75-slide deck that passe
 
 Meet users where decks already flow: pull requests, git, and agent pipelines. Distribution, not new subcommands.
 
-- [ ] GitHub Action: `lint` and `diff` decks changed in a PR, post the diff as a job summary.
-- [ ] pre-commit hook definition (`.pre-commit-hooks.yaml`).
-- [ ] Git setup docs/command for `diff.pptx.textconv` and a difftool.
-- [ ] Agent skill file (`SKILL.md`): "after generating a deck, run `pptctl lint --strict`". A usage guide for agents, not an AI subcommand.
-- [ ] Renderer-compatibility corpus: public decks + CI job that opens `optimize`/`merge` output headlessly in LibreOffice; published results table.
+- [x] GitHub Action: `lint` and `diff` decks changed in a PR, post the diff as a job summary.
+- [x] pre-commit hook definition (`.pre-commit-hooks.yaml`).
+- [x] Git setup docs/command for `diff.pptx.textconv` and a difftool.
+- [x] Agent skill file (`SKILL.md`): "after generating a deck, run `pptctl lint --strict`". A usage guide for agents, not an AI subcommand.
+- [x] Renderer-compatibility corpus: public decks + CI job that opens `optimize`/`merge` output headlessly in LibreOffice; published results table.
 
 Exit criteria: a sample repo where a PR touching a `.pptx` gets lint findings and a readable diff with no manual setup beyond adding the Action.
 
