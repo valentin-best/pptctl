@@ -118,7 +118,8 @@ Slides come out in input order. Each deck keeps its own look by default;
 `--theme=N` (1-based) puts every slide on deck N's layouts so the result looks
 like one deck, at the cost of fonts, colours and placeholder positions
 changing on the others. Report the `warnings` the command prints (different
-slide sizes, layout fallbacks, a different default text style) to the user. `--dry-run` measures without
+slide sizes, layout fallbacks, a different default text style, charts Google
+Slides will recolour) to the user. `--dry-run` measures without
 writing; `--json` gives a per-input report.
 
 Use `pptctl merge` instead of copying slide XML between decks yourself with

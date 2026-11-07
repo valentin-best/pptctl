@@ -138,8 +138,9 @@ TEST_CASE("merge notes: imported notes slides without p:clrMapOvr get it, and a 
     const auto report = merge_ok({fixture("merge_a.pptx"), b}, out);
     CHECK(notes_clrmap_findings(out) == 0);
     CHECK_FALSE(mentions_clrmap(report.inputs[0]));
-    REQUIRE(report.inputs[1].warnings.size() == 1);
-    CHECK(report.inputs[1].warnings[0] ==
+    // Its other warning is about b's chart (#167).
+    REQUIRE(report.inputs[1].warnings.size() == 2);
+    CHECK(report.inputs[1].warnings[1] ==
           "added p:clrMapOvr to 2 notes slides that lacked it "
           "(Keynote refuses to open a deck without it)");
 }

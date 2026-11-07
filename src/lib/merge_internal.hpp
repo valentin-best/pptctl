@@ -297,4 +297,20 @@ void concatenate(MergeTarget& target,
 // were changed.
 std::size_t add_notes_clr_map_ovr(MergeTarget& target, std::span<const std::string> notes);
 
+// What a chart can take from a theme: its scheme colours and its major and
+// minor Latin fonts, as a comparable string; "" if `theme` is missing or
+// doesn't parse. Theme names and effects don't enter it (#167).
+[[nodiscard]] std::string theme_look(const Package& pkg, const std::string& theme);
+
+// theme_look() of the theme of the first master `pkg`'s presentation lists:
+// the one Google Slides draws every chart in.
+[[nodiscard]] std::string first_theme_look(const Package& pkg);
+
+// How many charts (chart and chartEx parts) the `slides` of `source` show on a
+// slide whose theme looks different from `first_look`: Google Slides draws
+// those in the first theme's colours and fonts (#167).
+[[nodiscard]] std::size_t charts_off_theme(const Package& source,
+                                           std::span<const std::string> slides,
+                                           const std::string& first_look);
+
 }  // namespace pptctl::detail

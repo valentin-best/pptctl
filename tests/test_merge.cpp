@@ -132,8 +132,14 @@ TEST_CASE("merge: deck 1 is the base; the other decks' slides arrive as added pa
         CHECK_FALSE(input.base);
         CHECK(input.slides == 2);
         CHECK(input.parts_added > 0);
-        CHECK(input.warnings.empty());
     }
+    // b's chart is on b's own theme (#167); c brings no chart.
+    CHECK(
+        report->inputs[1].warnings ==
+        std::vector<std::string>{
+            "1 chart on slides with another theme than the first deck's: Google Slides draws it in "
+            "the first deck's theme colours and fonts"});
+    CHECK(report->inputs[2].warnings.empty());
     // b brings its own theme; c is on a's template and reuses a's master.
     CHECK(report->inputs[1].masters_imported == 1);
     CHECK(report->inputs[2].masters_imported == 0);
@@ -230,7 +236,10 @@ TEST_CASE("merge command: writes -o and prints the summary") {
     CHECK(text.find("  1. " + fixture("merge_a.pptx") + ": 3 slides (base)\n") !=
           std::string::npos);
     CHECK(text.find("  2. " + fixture("merge_b.pptx") + ": 2 slides, ") != std::string::npos);
-    CHECK(text.find("warning:") == std::string::npos);
+    // The one warning: b's chart is on b's own theme (#167).
+    const auto warning = text.find("warning: 1 chart on slides with another theme");
+    CHECK(warning != std::string::npos);
+    CHECK(text.find("warning:", warning + 1) == std::string::npos);
     CHECK(text.find("total: 7 slides, ") != std::string::npos);
 }
 
