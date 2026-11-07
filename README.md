@@ -2,7 +2,7 @@
 
 > Static analysis and safe surgery for `.pptx` files: lint, diff, optimize, merge — with output that opens cleanly in PowerPoint, Keynote, LibreOffice and Google Slides. Plus `info` and `extract` for quick inspection.
 
-**Status:** early development, v0.7.0. `info`, `extract`, `lint` (content and package-integrity rules), `diff`, `optimize` and `merge` work.
+**Status:** early development, v0.8.0. `info`, `extract`, `lint` (content and package-integrity rules), `diff`, `optimize` and `merge` work.
 
 ```
 $ pptctl info deck.pptx
@@ -242,7 +242,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: valentin-best/pptctl@v0.7.0
+      - uses: valentin-best/pptctl@v0.8.0
 ```
 
 Inputs (`paths`, `lint-args`, `fail-on`, `html-diff`, …), outputs and an example summary: [docs/github-action.md](./docs/github-action.md).
@@ -255,10 +255,10 @@ With [pre-commit](https://pre-commit.com) (or [prek](https://github.com/j178/pre
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/valentin-best/pptctl
-    rev: v0.7.0
+    rev: v0.8.0
     hooks:
       - id: pptctl-lint          # pptctl from PATH
-      # - id: pptctl-lint-fetch  # or: download the v0.7.0 release on first use
+      # - id: pptctl-lint-fetch  # or: download the v0.8.0 release on first use
 ```
 
 Narrowing the rules, and the hook's other options: [docs/pre-commit.md](./docs/pre-commit.md).
@@ -289,7 +289,7 @@ install pptctl-*-"$target"/pptctl ~/.local/bin/
 install pptctl-*-"$target"/git-pptx-diff*.sh ~/.local/bin/    # optional: git diff driver and difftool
 ```
 
-With no tag, `gh release download` takes the newest release; name one (`gh release download v0.7.0 …`) to pin it. The macOS binary is not notarized: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.
+With no tag, `gh release download` takes the newest release; name one (`gh release download v0.8.0 …`) to pin it. The macOS binary is not notarized: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.
 
 ## Building
 

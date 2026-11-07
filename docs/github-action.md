@@ -26,10 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: valentin-best/pptctl@v0.7.0
+      - uses: valentin-best/pptctl@v0.8.0
 ```
 
-Nothing else is needed. Pinning a release tag (`@v0.7.0`) pins pptctl to
+Nothing else is needed. Pinning a release tag (`@v0.8.0`) pins pptctl to
 that release too; `@main` follows development.
 
 `actions/checkout`'s default depth of 1 is fine: the Action fetches the base
@@ -90,7 +90,7 @@ an empty diff.
 
 | Input | Default | |
 |---|---|---|
-| `version` | the Action's tag, if it is a release tag; else the newest release | pptctl release to download, e.g. `v0.7.0`. |
+| `version` | the Action's tag, if it is a release tag; else the newest release | pptctl release to download, e.g. `v0.8.0`. |
 | `paths` | whole repository | Git pathspecs, one per line, limiting which decks are reviewed (`decks/`, `slides/*.pptx`). |
 | `base` | the pull request's base, or the commit before a push | Commit to compare against. Without one (a push that creates a branch), every deck under `paths` is linted and none is diffed. |
 | `head` | `HEAD` | Commit to review. |
@@ -123,7 +123,7 @@ up. Narrow it with `lint-args` (`--only integrity`) if that is noise.
 The Action downloads the release archive for the runner (Linux x86_64 and
 arm64, macOS arm64, Windows x86_64), checks it against the release's
 `SHA256SUMS` and puts `pptctl` on `PATH` for the rest of the job. Pinning the
-Action to a release tag (`uses: valentin-best/pptctl@v0.7.0`) pins pptctl to
+Action to a release tag (`uses: valentin-best/pptctl@v0.8.0`) pins pptctl to
 the same release; otherwise set the `version` input.
 
 When there is no archive for the runner, or the download is refused, the
