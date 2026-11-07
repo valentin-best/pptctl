@@ -10,7 +10,9 @@
 #include <optional>
 #include <pugixml.hpp>
 #include <set>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "merge_internal.hpp"
@@ -118,7 +120,30 @@ struct DeckLayout {
     bool has_sections = false;
     std::int64_t cx = 0;
     std::int64_t cy = 0;
+    std::string text_style;      // p:defaultTextStyle as serialized; "" if absent
+    std::int32_t text_size = 0;  // its level-1 run size, hundredths of a point; 0 if unset
+    std::string text_font;       // its level-1 Latin typeface ("+mn-lt", "Arial"); "" if unset
 };
+
+// `style` (a p:defaultTextStyle) serialized for comparison, without what
+// doesn't change how text looks: the proofing language (lang, altLang) and the
+// default tab spacing (defTabSz), which PowerPoint versions and locales vary.
+std::string comparable_text_style(const pugi::xml_node& style) {
+    pugi::xml_document copy;
+    copy.append_copy(style);
+    struct Strip : pugi::xml_tree_walker {
+        bool for_each(pugi::xml_node& node) override {
+            for (const char* name : {"lang", "altLang", "defTabSz"}) {
+                node.remove_attribute(name);
+            }
+            return true;
+        }
+    } strip;
+    copy.traverse(strip);
+    std::ostringstream xml;
+    copy.print(xml, "", pugi::format_raw);
+    return std::move(xml).str();
+}
 
 DeckLayout read_layout(const Package& pkg) {
     DeckLayout out;
@@ -135,6 +160,12 @@ DeckLayout read_layout(const Package& pkg) {
     const auto size = pres.child("p:sldSz");
     out.cx = size.attribute("cx").as_llong(0);
     out.cy = size.attribute("cy").as_llong(0);
+    if (const auto style = pres.child("p:defaultTextStyle")) {
+        out.text_style = comparable_text_style(style);
+        const auto run = style.child("a:lvl1pPr").child("a:defRPr");
+        out.text_size = run.attribute("sz").as_int(0);
+        out.text_font = run.child("a:latin").attribute("typeface").as_string("");
+    }
     for (const auto& ext : pres.child("p:extLst").children("p:ext")) {
         if (ext.attribute("uri").as_string("") != kSectionExtUri) {
             continue;
@@ -264,6 +295,50 @@ bool version_less(const std::string& a, const std::string& b) {
     const auto pa = parse(a);
     const auto pb = parse(b);
     return pb && (!pa || *pa < *pb);
+}
+
+// A level-1 typeface as the merge report names it.
+std::string font_name(std::string_view typeface) {
+    if (typeface.starts_with("+mj")) {
+        return "the theme's heading font";
+    }
+    if (typeface.starts_with("+mn")) {
+        return "the theme's body font";
+    }
+    return std::string(typeface);
+}
+
+// The level-1 size and font of two default text styles, where both set them
+// and they differ, as " (level 1: 14 pt vs 18 pt; …)"; "" if neither does.
+std::string text_style_difference(const DeckLayout& deck, const DeckLayout& base) {
+    std::string out;
+    const auto add = [&out](const std::string& what) {
+        out += out.empty() ? " (level 1: " : "; ";
+        out += what;
+    };
+    if (deck.text_size > 0 && base.text_size > 0 && deck.text_size != base.text_size) {
+        add(std::format("{:g} pt vs {:g} pt", deck.text_size / 100.0, base.text_size / 100.0));
+    }
+    if (!deck.text_font.empty() && !base.text_font.empty() && deck.text_font != base.text_font) {
+        add(std::format("{} vs {}", font_name(deck.text_font), font_name(base.text_font)));
+    }
+    return out.empty() ? out : out + ")";
+}
+
+// The merge report's line for a deck whose default text style isn't the base's.
+std::string text_style_warning(const DeckLayout& deck, const DeckLayout& base) {
+    std::string what;
+    if (deck.text_style.empty()) {
+        what = "no default text style, unlike the base deck";
+    } else if (base.text_style.empty()) {
+        what = "a default text style the base deck lacks";
+    } else {
+        what = "a default text style that differs from the base deck's" +
+               text_style_difference(deck, base);
+    }
+    return what +
+           ": its text boxes that set no size, font or spacing of their own take the base "
+           "deck's defaults";
 }
 
 std::string inches(std::int64_t emu) {
@@ -473,6 +548,20 @@ void concatenate(MergeTarget& target,
                     inches(l.cy),
                     inches(base_layout->cx),
                     inches(base_layout->cy)));
+            }
+        }
+    }
+
+    // --- default text style (#163) -------------------------------------------
+    // Text a slide doesn't style, through its own properties or a placeholder,
+    // falls back to the presentation's p:defaultTextStyle, and the output has
+    // only the base's. Under --theme that is what was asked for.
+    if (base_layout != nullptr) {
+        for (std::size_t i = 0; i < decks.size(); ++i) {
+            const auto& l = layouts[i];
+            if (decks[i].imported != nullptr && !decks[i].restyled &&
+                l.text_style != base_layout->text_style) {
+                decks[i].warnings.push_back(text_style_warning(l, *base_layout));
             }
         }
     }

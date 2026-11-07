@@ -1,11 +1,14 @@
 // Tests for the merged deck's presentation-level parts (#136): slide order,
-// masters, notes master, sections, slide size, app.xml counts.
+// masters, notes master, sections, slide size, default text style (#163),
+// app.xml counts.
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <iterator>
 #include <optional>
 #include <pptctl/integrity.hpp>
 #include <pptctl/merge.hpp>
@@ -16,6 +19,7 @@
 #include <random>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifndef PPTCTL_FIXTURES_DIR
@@ -377,4 +381,146 @@ TEST_CASE("merge: docProps/app.xml takes the newest input's AppVersion") {
     CHECK(version(Merged({old_base, fixture("merge_b.pptx")})) == "14.0000");
     // A base newer than every input keeps its own.
     CHECK(version(Merged({fixture("merge_b.pptx"), old_base})) == "14.0000");
+}
+
+namespace {
+
+// `name` with its presentation.xml passed through `edit`, saved in `dir`.
+std::string with_presentation(const ScratchDir& dir,
+                              const char* name,
+                              const std::function<void(std::string&)>& edit) {
+    pptctl::Package pkg;
+    REQUIRE(pkg.open(fixture(name)));
+    const auto bytes = pkg.read_part("ppt/presentation.xml");
+    std::string xml(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    const auto before = xml;
+    edit(xml);
+    REQUIRE(xml != before);
+    const auto* p = reinterpret_cast<const std::byte*>(xml.data());
+    pptctl::PartChanges changes;
+    changes.replaced["ppt/presentation.xml"] = std::vector<std::byte>(p, p + xml.size());
+    const auto out = (dir.path / ("edited_" + std::to_string(ScratchDir::counter++) + ".pptx"));
+    REQUIRE(pkg.write(out.string(), changes));
+    return out.string();
+}
+
+// Replace the first `from` in `xml` with `to`.
+void replace_first(std::string& xml, std::string_view from, std::string_view to) {
+    const auto at = xml.find(from);
+    REQUIRE(at != std::string::npos);
+    xml.replace(at, from.size(), to);
+}
+
+// Replace every `from` in `xml` with `to`.
+void replace_all(std::string& xml, std::string_view from, std::string_view to) {
+    for (auto at = xml.find(from); at != std::string::npos; at = xml.find(from, at + to.size())) {
+        xml.replace(at, from.size(), to);
+    }
+}
+
+void drop_default_text_style(std::string& xml) {
+    const auto from = xml.find("<p:defaultTextStyle>");
+    const std::string_view end = "</p:defaultTextStyle>";
+    const auto to = xml.find(end);
+    REQUIRE(from != std::string::npos);
+    REQUIRE(to != std::string::npos);
+    xml.erase(from, to + end.size() - from);
+}
+
+// The input's warnings that are about the default text style.
+std::vector<std::string> text_style_warnings(const pptctl::MergeInputReport& input) {
+    std::vector<std::string> out;
+    std::copy_if(input.warnings.begin(),
+                 input.warnings.end(),
+                 std::back_inserter(out),
+                 [](const std::string& w) { return w.find("default text style") != w.npos; });
+    return out;
+}
+
+constexpr std::string_view kTakesBase =
+    ": its text boxes that set no size, font or spacing of their own take the base deck's "
+    "defaults";
+
+}  // namespace
+
+TEST_CASE("merge: decks from one template have the same default text style, no warning") {
+    const Merged m(abc());
+    for (const auto& input : m.report.inputs) {
+        CHECK(text_style_warnings(input).empty());
+    }
+}
+
+TEST_CASE("merge: a deck with another default text style is reported, naming size and font") {
+    ScratchDir dir;
+    const auto b = with_presentation(dir, "merge_b.pptx", [](std::string& xml) {
+        replace_first(xml, R"(sz="1800" kern="1200")", R"(sz="1400" kern="1200")");
+        replace_first(xml, R"(<a:latin typeface="+mn-lt"/>)", R"(<a:latin typeface="Arial"/>)");
+    });
+    const Merged m({fixture("merge_a.pptx"), b});
+    CHECK(text_style_warnings(m.report.inputs[0]).empty());
+    CHECK(text_style_warnings(m.report.inputs[1]) ==
+          std::vector<std::string>{
+              "a default text style that differs from the base deck's (level 1: 14 pt vs 18 pt; "
+              "Arial vs the theme's body font)" +
+              std::string(kTakesBase)});
+    // Reported, not changed: the imported slides are as they were.
+    CHECK(m.titles() ==
+          std::vector<std::string>{"Deck A", "A: bullets", "A: picture", "B: bullets", "B: chart"});
+}
+
+TEST_CASE("merge: theme font references are named; other differences aren't itemized") {
+    ScratchDir dir;
+    const auto heading = with_presentation(dir, "merge_b.pptx", [](std::string& xml) {
+        replace_first(xml, R"(<a:latin typeface="+mn-lt"/>)", R"(<a:latin typeface="+mj-lt"/>)");
+    });
+    const auto kern = with_presentation(dir, "merge_c.pptx", [](std::string& xml) {
+        replace_first(xml, R"(kern="1200")", R"(kern="0")");
+    });
+    const Merged m({fixture("merge_a.pptx"), heading, kern});
+    CHECK(text_style_warnings(m.report.inputs[1]) ==
+          std::vector<std::string>{"a default text style that differs from the base deck's "
+                                   "(level 1: the theme's heading font vs the theme's body font)" +
+                                   std::string(kTakesBase)});
+    CHECK(text_style_warnings(m.report.inputs[2]) ==
+          std::vector<std::string>{"a default text style that differs from the base deck's" +
+                                   std::string(kTakesBase)});
+}
+
+TEST_CASE("merge: proofing language and tab spacing don't count as a different text style") {
+    ScratchDir dir;
+    const auto b = with_presentation(dir, "merge_b.pptx", [](std::string& xml) {
+        replace_all(xml, R"(lang="en-US")", R"(lang="fr-FR")");
+        replace_all(xml, R"(defTabSz="457200")", R"(defTabSz="914400")");
+    });
+    const Merged m({fixture("merge_a.pptx"), b});
+    CHECK(text_style_warnings(m.report.inputs[1]).empty());
+}
+
+TEST_CASE("merge: a missing default text style, in an input or in the base") {
+    ScratchDir dir;
+    const auto none = with_presentation(dir, "merge_b.pptx", drop_default_text_style);
+    SUBCASE("the input has none") {
+        const Merged m({fixture("merge_a.pptx"), none});
+        CHECK(text_style_warnings(m.report.inputs[1]) ==
+              std::vector<std::string>{"no default text style, unlike the base deck" +
+                                       std::string(kTakesBase)});
+    }
+    SUBCASE("the base has none") {
+        const Merged m({none, fixture("merge_a.pptx")});
+        CHECK(text_style_warnings(m.report.inputs[0]).empty());
+        CHECK(text_style_warnings(m.report.inputs[1]) ==
+              std::vector<std::string>{"a default text style the base deck lacks" +
+                                       std::string(kTakesBase)});
+    }
+}
+
+TEST_CASE("merge: --theme takes the base deck's look, text defaults included, silently") {
+    ScratchDir dir;
+    const auto b = with_presentation(dir, "merge_b.pptx", [](std::string& xml) {
+        replace_first(xml, R"(sz="1800" kern="1200")", R"(sz="1400" kern="1200")");
+    });
+    pptctl::MergeOptions opts;
+    opts.theme = 1;
+    const Merged m({fixture("merge_a.pptx"), b}, opts);
+    CHECK(text_style_warnings(m.report.inputs[1]).empty());
 }
