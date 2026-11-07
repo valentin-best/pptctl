@@ -16,6 +16,16 @@ ROADMAP phase and a GitHub milestone.
   renderer-compatibility corpus have them, and both open in Keynote once the
   element is added. Slides and layouts without it open fine.
 
+- `merge` reports each deck whose default text style (`p:defaultTextStyle`)
+  differs from the base deck's (#163). Text boxes that set no size, font or
+  spacing of their own fall back to it, and the output keeps only the
+  base's; the warning names the level-1 size and font where they differ.
+  Proofing language and tab spacing are ignored, so decks from recent
+  PowerPoint versions don't trip it; Google Slides, Keynote, LibreOffice and
+  ONLYOFFICE decks usually do. Not reported under `--theme`. The slides are
+  left as they are; rewriting their text to keep the source look is
+  deferred until it matters in practice.
+
 ### Changed
 
 - `merge` adds `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>`, the

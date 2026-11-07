@@ -156,6 +156,7 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         if (i == base) {
             continue;
         }
+        deck.restyled = opts.theme != 0;
         const auto& source = packages[i];
         auto& input = report.inputs[i];
         auto& res = resolved[i];

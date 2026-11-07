@@ -34,7 +34,8 @@ base deck's `AppVersion`, so PowerPoint opened a merge onto an Office 2007 deck
 in compatibility mode and redrew a newer deck's chart with different colours
 ([below](#defect-found-compatibility-mode-from-the-base-deck)). It also found
 one fidelity gap, filed as #163: text that relies on the deck-wide default
-text style picks up the base deck's ([below](#rendering-differences)). And it
+text style picks up the base deck's ([below](#rendering-differences)); merge
+now reports each deck this can affect, without changing its slides. And it
 found two renderer quirks that are not merge defects: Google Slides draws every
 chart in the presentation's first theme, and Keynote refuses LibreOffice's
 speaker notes ([below](#libreoffice-as-a-producer)).

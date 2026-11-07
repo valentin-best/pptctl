@@ -269,6 +269,7 @@ struct ConcatDeck {
     // whose slides are already in the output.
     const std::map<std::string, std::string>* imported = nullptr;
     std::vector<std::string> masters;  // slide masters imported from this deck (output names)
+    bool restyled = false;             // --theme: its slides were moved onto the base's layouts
 
     // Filled in by concatenate():
     std::size_t slides = 0;             // slides this deck has in the output's slide list
@@ -282,7 +283,8 @@ struct ConcatDeck {
 // id space, list the notes master in p:notesMasterIdLst (`imported_notes_master`
 // when non-empty, else the base's if it has one but doesn't list it),
 // carry sections over (a deck without sections gets one named after its
-// file), warn about decks whose slide size differs from the base's, and
+// file), warn about decks whose slide size differs from the base's, and,
+// unless restyled, those whose p:defaultTextStyle does (#163), and
 // update the Slides and Notes counts in docProps/app.xml.
 void concatenate(MergeTarget& target,
                  std::span<ConcatDeck> decks,
