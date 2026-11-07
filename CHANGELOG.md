@@ -5,7 +5,13 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
-## [Unreleased]
+## [0.8.0] — 2026-11-07
+
+Hardening from the Phase 6 merge validation: a lint rule and a merge repair
+for notes slides Keynote refuses, and merge warnings for the two remaining
+cross-deck rendering differences. `lint` can now fail on decks that passed
+before (LibreOffice and ONLYOFFICE decks with speaker notes), hence a minor
+version.
 
 ### Added
 
@@ -414,6 +420,7 @@ Phase 1: `pptctl info`, quick metadata.
   MSVC 2022, plus a clang-tidy job; pre-commit hook running clang-format and
   clang-tidy.
 
+[0.8.0]: https://github.com/valentin-best/pptctl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/valentin-best/pptctl/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/valentin-best/pptctl/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/valentin-best/pptctl/compare/v0.5.0...v0.6.0
