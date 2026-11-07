@@ -2,8 +2,8 @@
 
 All notable changes to `pptctl` are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
-[Semantic Versioning](https://semver.org/). Each version corresponds to a
-ROADMAP phase and a GitHub milestone.
+[Semantic Versioning](https://semver.org/). Versions 0.1.0 to 0.7.0 each
+closed one development phase and its GitHub milestone.
 
 ## [Unreleased]
 
@@ -283,8 +283,7 @@ displayed size. See `docs/phase5-optimize-validation.md`.
 - CI wall time cut with ccache, a working dependency cache and PR-scoped
   clang-tidy.
 - Positioning: pptctl is static analysis and safe surgery for decks (lint,
-  diff, optimize, merge); `fill` and library extraction are deferred
-  (ROADMAP).
+  diff, optimize, merge); `fill` and library extraction are deferred.
 
 ## [0.4.0] — 2026-09-30
 

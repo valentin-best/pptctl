@@ -42,8 +42,6 @@ The dominant libraries for working with `.pptx` files programmatically — pytho
 
 Editors and generators — python-pptx, PptxGenJS, agent tools like OfficeCLI — write decks. `pptctl` is what you run on them afterwards: it finds problems (`lint`), shows what changed (`diff`), shrinks them (`optimize`) and combines them (`merge`) without breaking the relationship graph. It is a single C++ binary meant for CI, git hooks and pipelines; it edits only the parts it has to and never round-trips a whole deck.
 
-See [PLAN.md](./PLAN.md) for the long version.
-
 ## Subcommands
 
 | Command | What it does | Status |
@@ -54,7 +52,7 @@ See [PLAN.md](./PLAN.md) for the long version.
 | `optimize` | Shrink a deck without changing what it shows: unused layouts/masters, embedded fonts, cropped-out image regions, oversized images, orphan media; `--dry-run`, `--json` | ✅ Implemented |
 | `diff` | Semantic diff: slides added/removed/moved/changed, text, shape and picture ops; `--format unified\|json\|html`, `--quiet`, exit codes like `git diff` | ✅ Implemented |
 | `merge` | Combine decks in order without breaking pictures, charts, notes or comments: each keeps its own theme, or `--theme=N` restyles all onto one; identical media and masters stored once; `--dry-run`, `--json` | ✅ Implemented |
-| `fill` | Template-fill from a `.pptx` template + JSON data | Deferred (see [ROADMAP.md](./ROADMAP.md)) |
+| `fill` | Template-fill from a `.pptx` template + JSON data | Deferred |
 
 ## `pptctl lint`
 

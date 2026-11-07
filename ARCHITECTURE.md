@@ -56,7 +56,7 @@ There are three layers, each with one job:
 A `.pptx` is a ZIP archive containing XML "parts" plus `[Content_Types].xml` plus `_rels/` relationship files. This layer:
 - Opens a `.pptx` as a stream of parts (name → bytes).
 - Resolves relationships ("which slide does this reference?").
-- Writes a package back to disk without re-serializing parts that weren't touched (crucial for avoiding round-trip data loss — see PLAN.md).
+- Writes a package back to disk without re-serializing parts that weren't touched (crucial for avoiding round-trip data loss).
 
 **Key design choice:** **lazy parsing**. We do *not* parse all XML on load. Parts are read into a byte buffer; only when a subcommand asks for them do we parse with pugixml. This is how we'll handle 1000+ slide decks without blowing memory.
 

@@ -70,8 +70,12 @@ tests/real_world/
 # Python bytecode from the fixture generator
 __pycache__/
 
-# Claude Code agent worktrees
-.claude/worktrees/
+# Local-only: Claude Code config (the /next command, settings, agent
+# worktrees) and the planning documents, kept out of the public repository
+.claude/
+ROADMAP.md
+PLAN.md
+docs/superpowers/
 tests/real_world/.work-diff/
 
 # Renderer-compatibility corpus downloads (scripts/renderer_compat.py fetch)

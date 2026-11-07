@@ -259,7 +259,7 @@ int main(int argc, char** argv) {
         [&]() { std::exit(pptctl::cmd::merge(merge_inputs, merge_opts, merge_out)); });
 
     // --- placeholders for future subcommands ---------------------------------
-    // Each of these is a TODO in ROADMAP.md. They're listed here so `--help`
+    // Each of these is deferred, not abandoned. They're listed here so `--help`
     // shows the full planned surface area to users.
     app.add_subcommand("fill", "Template-fill a .pptx from JSON data (not yet implemented)")
         ->callback([] { std::exit(not_implemented("fill")); });
