@@ -31,7 +31,9 @@
       "parts_added": 21,
       "path": "merge_b.pptx",
       "slides": 2,
-      "warnings": []
+      "warnings": [
+        "1 chart on slides with another theme than the first deck's: Google Slides draws it in the first deck's theme colours and fonts"
+      ]
     },
     {
       "base": false,

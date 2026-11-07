@@ -145,6 +145,8 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
     std::vector<Resolved> resolved(packages.size());
     // Imported comments keep their authors.
     detail::CommentAuthors comment_authors(target);
+    // Charts on another theme than the output's first are reported (#167).
+    const auto first_look = detail::first_theme_look(packages[base]);
 
     std::vector<detail::PartImporter> importers;
     importers.reserve(packages.size());
@@ -211,6 +213,17 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
             }
         }
         input.warnings = importer.warnings();
+        if (!theme_layouts) {
+            if (const auto n = detail::charts_off_theme(source, slide_parts[i], first_look)) {
+                input.warnings.push_back(
+                    std::format("{} chart{} on slides with another theme than the first deck's: "
+                                "Google Slides draws {} in the first deck's theme colours and "
+                                "fonts",
+                                n,
+                                n == 1 ? "" : "s",
+                                n == 1 ? "it" : "them"));
+            }
+        }
         std::vector<std::string> comments;
         for (const auto& part : importer.copied()) {
             const auto type = source.content_type(part);

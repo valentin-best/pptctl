@@ -142,7 +142,9 @@ slides out of 300 (75 per renderer):
 The other three renderers resolve charts against their slide's own theme. For
 Google Slides, `merge` could write the resolved colours into the charts it
 imports; that would be a change to chart parts, so it is left for after
-v0.6.0 (#167).
+v0.6.0 (#167). Since then the merge report counts, per deck, the charts on a
+slide whose theme differs from the first deck's (both charts above), and the
+charts are left as they are.
 
 ## LibreOffice as a producer
 

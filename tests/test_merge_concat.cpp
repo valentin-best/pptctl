@@ -120,9 +120,10 @@ TEST_CASE("merge: slides in input order, and every integrity rule passes") {
     CHECK(m.report.slides == 7);
     CHECK(m.report.inputs[1].slides == 2);
     CHECK(m.report.inputs[2].slides == 2);
-    for (const auto& input : m.report.inputs) {
-        CHECK_MESSAGE(input.warnings.empty(), input.path);
-    }
+    // Only merge's chart report (#167): b's chart is on b's own theme.
+    CHECK(m.report.inputs[0].warnings.empty());
+    CHECK(m.report.inputs[1].warnings.size() == 1);
+    CHECK(m.report.inputs[2].warnings.empty());
     const auto ds = m.integrity();
     CHECK_MESSAGE(ds.empty(), messages(ds));
 }

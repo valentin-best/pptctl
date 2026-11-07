@@ -26,6 +26,13 @@ ROADMAP phase and a GitHub milestone.
   left as they are; rewriting their text to keep the source look is
   deferred until it matters in practice.
 
+- `merge` reports, for each imported deck, how many of its charts sit on a
+  slide whose theme has other colours or major/minor fonts than the
+  output's first theme (#167). Google Slides draws every chart in that
+  first theme; PowerPoint, Keynote and LibreOffice use the chart's own. The
+  charts are left as they are; `--theme` avoids the difference and doesn't
+  report it.
+
 ### Changed
 
 - `merge` adds `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>`, the

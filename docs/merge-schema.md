@@ -60,6 +60,7 @@ bump. Current ones:
 | `the deck's modern comments have no authors.xml; …` | Likewise for modern (PowerPoint 365) comments. |
 | `a default text style that differs from the base deck's (level 1: 14 pt vs 18 pt; …): its text boxes …` | Text boxes that set no size, font or spacing of their own fall back to the presentation's `p:defaultTextStyle`, and the output keeps only the base's. The parenthesis names the level-1 size and font where both decks set them and they differ. Proofing language (`lang`) and tab spacing (`defTabSz`) are ignored. Not reported under `--theme`. |
 | `no default text style, unlike the base deck: …` / `a default text style the base deck lacks: …` | The same, when one of the two has none (LibreOffice writes none). |
+| `N chart(s) on slides with another theme than the first deck's: Google Slides draws …` | Google Slides draws every chart in the presentation's first theme (the base deck's first master's), so series colours and fonts a chart takes from its own theme change there; PowerPoint, Keynote and LibreOffice use the chart's own. Counted when the slide's theme has other scheme colours or major/minor fonts than that first theme; the theme's name doesn't count. The charts are left as they are. Not reported under `--theme`, nor for the base deck's own charts. |
 | `added p:clrMapOvr to N notes slide(s) that lacked it (Keynote refuses to open a deck without it)` | The input's notes slides (LibreOffice and ONLYOFFICE write them this way) were given the colour-map override PowerPoint writes; nothing else in them changed. Also reported for the base deck. |
 
 ---
@@ -92,7 +93,9 @@ the test fixtures (`merge_a` and `merge_c` share a template and a logo,
       "parts_added": 21,
       "path": "merge_b.pptx",
       "slides": 2,
-      "warnings": []
+      "warnings": [
+        "1 chart on slides with another theme than the first deck's: Google Slides draws it in the first deck's theme colours and fonts"
+      ]
     },
     {
       "base": false,
