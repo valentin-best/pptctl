@@ -1,0 +1,13 @@
+# Keeps the GitHub Actions used by the workflows and by action.yml current,
+# grouped into one weekly pull request. The C++ dependencies are pinned in
+# CMakeLists.txt / cmake/ (FetchContent), which Dependabot doesn't read: bump
+# those by hand, and THIRD_PARTY_NOTICES.md with them.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
