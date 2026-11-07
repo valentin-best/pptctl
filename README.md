@@ -333,7 +333,7 @@ No `fmt` — we use C++20 `std::format` directly.
 
 ## Contributing
 
-Not accepting feature PRs yet — the API is in too much flux. Bug reports, design feedback, and "I wish pptctl could…" issues are very welcome.
+Not accepting feature PRs yet — the API is in too much flux. Bug reports, bug-fix PRs, design feedback, and "I wish pptctl could…" issues are very welcome. [CONTRIBUTING.md](./CONTRIBUTING.md) covers building, testing and the conventions.
 
 ## License
 
