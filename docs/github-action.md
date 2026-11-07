@@ -128,11 +128,9 @@ the same release; otherwise set the `version` input.
 
 When there is no archive for the runner, or the download is refused, the
 Action builds pptctl from its own source instead (Linux and macOS runners;
-a few minutes). That is what happens while the pptctl repository is private
-and the workflow runs in another repository: its `github.token` can't read
-pptctl's releases. To download instead, pass a token that can as `token`.
-A private action is only usable from other repositories of the same owner
-once pptctl's *Settings › Actions › General › Access* allows it.
+a few minutes). The download is refused when the Action comes from a private
+fork of pptctl, whose releases the workflow's `github.token` can't read; pass
+a token that can as `token`.
 
 ## Running it by hand
 
