@@ -42,7 +42,7 @@ jobs:
             os: windows-2022
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Static against musl, in Alpine: runs on any distribution, whatever
       # its glibc. See the script for the static-link check.
@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: scripts/release/package.sh "$BIN" ${{ matrix.target }} dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: dist/*
@@ -122,9 +122,9 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

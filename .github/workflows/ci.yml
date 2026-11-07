@@ -53,7 +53,7 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: ccache
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build tools (Linux)
         if: runner.os == 'Linux'
@@ -83,7 +83,7 @@ jobs:
       # changes with any CMake change; restore-keys falls back to the newest
       # older entry, and FetchContent/the stamp redo only what actually changed.
       - name: Cache dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             build/${{ matrix.preset }}/_deps/*-src
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # A pull_request checkout is a merge commit; its first parent is the
           # base branch, so HEAD^1..HEAD is exactly what the PR changes.
@@ -170,7 +170,7 @@ jobs:
 
       - name: Cache dependencies
         if: steps.select.outputs.files != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             build/linux-release/_deps/*-src

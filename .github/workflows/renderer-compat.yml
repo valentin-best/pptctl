@@ -30,7 +30,7 @@ jobs:
       CMAKE_C_COMPILER_LAUNCHER: ccache
       CMAKE_CXX_COMPILER_LAUNCHER: ccache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build tools, LibreOffice and poppler
         run: |
@@ -45,7 +45,7 @@ jobs:
           max-size: 500M
 
       - name: Cache dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             build/linux-release/_deps/*-src
@@ -62,7 +62,7 @@ jobs:
 
       # The decks don't change (each is pinned by sha256), so download them once.
       - name: Cache the corpus
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: tests/corpus/decks
           key: corpus-${{ hashFiles('tests/corpus/manifest.json') }}
