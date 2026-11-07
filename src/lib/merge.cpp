@@ -100,7 +100,9 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         const auto& path = in_paths[i];
         auto& pkg = packages[i];
         if (!pkg.open(path)) {
-            error = std::format("cannot open '{}'", path);
+            error = std::format("cannot open '{}'{}",
+                                path,
+                                pkg.error().empty() ? std::string() : ": " + pkg.error());
             return std::nullopt;
         }
         Presentation pres(pkg);

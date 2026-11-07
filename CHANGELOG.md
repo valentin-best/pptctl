@@ -7,6 +7,18 @@ closed one development phase and its GitHub milestone.
 
 ## [Unreleased]
 
+### Security
+
+- Decompression limits (`Package::open()`): a part of 64 KiB or more that
+  declares more than 200 times its compressed size, or parts that together
+  declare more than 4 GiB, make the file refused with a message naming the
+  part. Before, a part's buffer was sized from its declared size alone: a
+  1 MB deck whose slide inflates to 1 GiB took `lint` 26 s and 2.1 GB of
+  memory; it is now refused in milliseconds. Real decks stay far below the
+  limits (highest ratio over 58 decks: 26:1).
+- `SECURITY.md`: how to report a vulnerability (GitHub private reporting)
+  and what pptctl defends against.
+
 ### Added
 
 - `THIRD_PARTY_NOTICES.md`, shipped in every release archive: the licence

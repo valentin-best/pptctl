@@ -157,7 +157,9 @@ std::optional<OptimizeReport> optimize(const std::string& in_path,
     Scratch scratch;
     Package current;
     if (!current.open(in_path)) {
-        error = std::format("cannot open '{}'", in_path);
+        error = std::format("cannot open '{}'{}",
+                            in_path,
+                            current.error().empty() ? std::string() : ": " + current.error());
         return std::nullopt;
     }
     OptimizeReport report;

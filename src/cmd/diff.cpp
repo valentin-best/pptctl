@@ -51,7 +51,9 @@ struct Deck {
 
     bool open(const std::string& path) {
         if (!pkg.open(path)) {
-            eprintln("error: cannot open '{}'", path);
+            eprintln("error: cannot open '{}'{}",
+                     path,
+                     pkg.error().empty() ? std::string() : ": " + pkg.error());
             return false;
         }
         Presentation pres(pkg);

@@ -86,6 +86,20 @@ struct PartChanges {
     std::set<std::string> removed;                           // part names to drop
 };
 
+// Decompression limits, checked by Package::open() against the sizes the ZIP
+// declares, before anything is inflated. A part's buffer is sized from its
+// declared size, so a small hostile archive (pptctl runs on decks from pull
+// requests) could otherwise ask for gigabytes. Real decks stay far below
+// both: over 58 decks from 7 producers the highest ratio was 26:1, and the
+// largest deck held 18 MiB.
+//
+// A part of at least kInflateRatioMinBytes may not declare more than
+// kMaxInflateRatio times its compressed size (deflate bombs reach ~1000:1).
+inline constexpr std::uint64_t kMaxInflateRatio = 200;
+inline constexpr std::uint64_t kInflateRatioMinBytes = std::uint64_t{64} << 10;  // 64 KiB
+// All parts together may not declare more than this.
+inline constexpr std::uint64_t kMaxPackageBytes = std::uint64_t{4} << 30;  // 4 GiB
+
 class Package {
  public:
     Package();
@@ -96,8 +110,13 @@ class Package {
     Package(Package&& other) noexcept;
     Package& operator=(Package&& other) noexcept;
 
-    // Open a .pptx file. Returns false on error.
+    // Open a .pptx file. Returns false on error: an unreadable archive, or one
+    // that exceeds the decompression limits below (see error()).
     [[nodiscard]] bool open(const std::string& path);
+
+    // Why the last open() refused the file, when it was the limits: names the
+    // part and the limit. Empty otherwise.
+    [[nodiscard]] const std::string& error() const noexcept;
 
     // True if a package is currently open.
     [[nodiscard]] bool is_open() const noexcept;

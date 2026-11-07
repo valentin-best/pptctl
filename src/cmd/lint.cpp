@@ -919,7 +919,9 @@ int report(const std::string& path,
 int lint_to(const std::string& path, std::ostream& os, const LintOptions& opts) {
     Package pkg;
     if (!pkg.open(path)) {
-        eprintln("error: cannot open '{}'", path);
+        eprintln("error: cannot open '{}'{}",
+                 path,
+                 pkg.error().empty() ? std::string() : ": " + pkg.error());
         return 1;
     }
 

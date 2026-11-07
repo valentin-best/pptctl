@@ -303,6 +303,7 @@ add_executable(pptctl_tests
     tests/test_merge_comments.cpp
     tests/test_merge_notes.cpp
     tests/test_merge_charts.cpp
+    tests/test_package_limits.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

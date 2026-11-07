@@ -422,7 +422,9 @@ int extract_to(const std::string& path, const std::string& format_str, std::ostr
 
     pptctl::Package pkg;
     if (!pkg.open(path)) {
-        pptctl::eprintln("error: could not open {}", path);
+        pptctl::eprintln("error: could not open {}{}",
+                         path,
+                         pkg.error().empty() ? std::string() : ": " + pkg.error());
         return 1;
     }
     pptctl::Presentation pres(pkg);
