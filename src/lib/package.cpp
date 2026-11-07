@@ -12,6 +12,7 @@
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <map>
 #include <optional>
@@ -28,6 +29,33 @@
 namespace pptctl {
 
 namespace {
+
+// "12.5 MiB"-style size for limit messages.
+std::string mib(std::uint64_t bytes) {
+    return std::format("{:.1f} MiB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+}
+
+// nullopt if `info` keeps the package within the decompression limits
+// (package.hpp), adding its declared size to `total`; else why not.
+std::optional<std::string> check_limits(const mz_zip_file& info, std::uint64_t& total) {
+    const auto size = static_cast<std::uint64_t>(std::max<std::int64_t>(info.uncompressed_size, 0));
+    const auto packed = static_cast<std::uint64_t>(std::max<std::int64_t>(info.compressed_size, 0));
+    if (size >= kInflateRatioMinBytes && size > packed * kMaxInflateRatio) {
+        return std::format(
+            "part \"{}\" would inflate from {} to {} (over {}:1), more than any real deck; "
+            "refusing it as a likely decompression bomb",
+            info.filename,
+            packed < 1024 ? std::format("{} B", packed) : mib(packed),
+            mib(size),
+            kMaxInflateRatio);
+    }
+    total += size;
+    if (total > kMaxPackageBytes) {
+        return std::format("its parts would inflate to more than {} in all; refusing it",
+                           mib(kMaxPackageBytes));
+    }
+    return std::nullopt;
+}
 
 std::string to_lower(std::string_view s) {
     std::string out(s);
@@ -335,6 +363,7 @@ struct Package::Impl {
     void* reader = nullptr;
     std::string path;
     std::vector<std::string> parts;
+    std::string error;  // why open() refused the file, when it was the limits
 
     // Lazily-populated caches (see lazy-parsing note in the header).
     bool ct_loaded = false;
@@ -387,6 +416,7 @@ bool Package::open(const std::string& path) {
     impl_->close();
     impl_->path = path;
     impl_->parts.clear();
+    impl_->error.clear();
 
     impl_->reader = mz_zip_reader_create();
     if (impl_->reader == nullptr) {
@@ -397,12 +427,20 @@ bool Package::open(const std::string& path) {
         return false;
     }
 
-    // Enumerate entries to build the part list.
+    // Enumerate entries to build the part list, checking the declared sizes
+    // against the decompression limits as we go.
+    std::uint64_t total = 0;
     int err = mz_zip_reader_goto_first_entry(impl_->reader);
     while (err == MZ_OK) {
         mz_zip_file* info = nullptr;
         if (mz_zip_reader_entry_get_info(impl_->reader, &info) == MZ_OK && info != nullptr &&
             info->filename != nullptr) {
+            if (auto refused = check_limits(*info, total)) {
+                impl_->error = std::move(*refused);
+                impl_->close();
+                impl_->parts.clear();
+                return false;
+            }
             // Skip directory entries.
             const std::size_t len = std::strlen(info->filename);
             if (len > 0 && info->filename[len - 1] != '/') {
@@ -412,6 +450,10 @@ bool Package::open(const std::string& path) {
         err = mz_zip_reader_goto_next_entry(impl_->reader);
     }
     return true;
+}
+
+const std::string& Package::error() const noexcept {
+    return impl_->error;
 }
 
 bool Package::is_open() const noexcept {

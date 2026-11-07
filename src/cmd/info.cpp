@@ -31,7 +31,9 @@ std::string join(const std::vector<std::string>& xs, std::string_view sep) {
 int info(const std::string& path, bool json) {
     pptctl::Package pkg;
     if (!pkg.open(path)) {
-        pptctl::eprintln("error: could not open {}", path);
+        pptctl::eprintln("error: could not open {}{}",
+                         path,
+                         pkg.error().empty() ? std::string() : ": " + pkg.error());
         return 1;
     }
 

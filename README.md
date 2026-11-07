@@ -335,6 +335,10 @@ No `fmt` — we use C++20 `std::format` directly.
 
 Not accepting feature PRs yet — the API is in too much flux. Bug reports, design feedback, and "I wish pptctl could…" issues are very welcome.
 
+## Security
+
+pptctl is built to read decks from people you don't trust, as the GitHub Action does on pull requests. See [SECURITY.md](./SECURITY.md) for what it defends against and how to report a vulnerability privately.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).
