@@ -5,6 +5,17 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [Unreleased]
+
+### Added
+
+- `THIRD_PARTY_NOTICES.md`, shipped in every release archive: the licence
+  notices of the libraries statically linked into the binaries (pugixml,
+  nlohmann/json, CLI11, minizip-ng, libpng, libjpeg-turbo; zlib and musl on
+  Linux, zlib-ng on Windows), including the Independent JPEG Group
+  acknowledgement libjpeg-turbo's licence requires. Releases up to 0.8.0
+  shipped only pptctl's own `LICENSE`.
+
 ## [0.8.0] — 2026-11-07
 
 Hardening from the Phase 6 merge validation: a lint rule and a merge repair

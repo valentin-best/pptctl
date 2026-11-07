@@ -43,6 +43,9 @@ set(FETCHCONTENT_QUIET OFF)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING
     "Minimum policy version for FetchContent dependencies" FORCE)
 
+# Release binaries ship THIRD_PARTY_NOTICES.md with every dependency linked
+# into them: update it when adding, removing or bumping one.
+
 # CLI11 — argument parsing. Header-only.
 FetchContent_Declare(
     cli11

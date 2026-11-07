@@ -340,3 +340,5 @@ Not accepting feature PRs yet — the API is in too much flux. Bug reports, desi
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+The release binaries include third-party libraries (pugixml, nlohmann/json, CLI11, minizip-ng, libpng, libjpeg-turbo, and zlib and musl on some platforms) under their own permissive licences: see [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md). This software is based in part on the work of the Independent JPEG Group.
