@@ -74,6 +74,7 @@ output and decks written by other tools are verified.
 | `orphan-part` | No relationship reaches a part. |
 | `shared-part` | A part that must have a single owner (notes, comments, tags, charts and their style parts) is targeted from several. |
 | `unlisted-part` | The presentation relates a slide, slide master, notes master or handout master but doesn't list it in the matching `p:…IdLst`. A slide left out isn't shown; a notes master left out (python-pptx output with speaker notes) makes Keynote refuse the deck. |
+| `notes-clrmap` | A notes slide (`p:notes`) has no `p:clrMapOvr`. The schema makes it optional and PowerPoint and LibreOffice accept it, but Keynote refuses the whole deck. LibreOffice and ONLYOFFICE write notes slides this way. Slides and layouts without it are fine. |
 
 ### Selecting rules
 

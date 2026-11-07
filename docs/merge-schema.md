@@ -58,6 +58,7 @@ bump. Current ones:
 | `…: no content type declared` | The input itself has a part with no content type; it is copied without one. |
 | `comment author N isn't in the deck's commentAuthors.xml; …` | The input's comments name an author it doesn't list; they are attributed to "Unknown author". |
 | `the deck's modern comments have no authors.xml; …` | Likewise for modern (PowerPoint 365) comments. |
+| `added p:clrMapOvr to N notes slide(s) that lacked it (Keynote refuses to open a deck without it)` | The input's notes slides (LibreOffice and ONLYOFFICE write them this way) were given the colour-map override PowerPoint writes; nothing else in them changed. Also reported for the base deck. |
 
 ---
 

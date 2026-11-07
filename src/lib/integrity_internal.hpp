@@ -62,6 +62,17 @@ void integrity_unlisted_part(const Package& pkg,
                              const LintOptions& opts,
                              std::vector<Diagnostic>& out);
 
+// #166 — a notes slide without p:clrMapOvr, which Keynote refuses.
+void integrity_notes_clrmap(const Package& pkg,
+                            const PartGraph& graph,
+                            const LintOptions& opts,
+                            std::vector<Diagnostic>& out);
+
+// True when `xml` is a p:notes part whose root has no p:clrMapOvr child
+// (namespace prefixes ignored). False for anything else, or if it doesn't
+// parse. Shared with merge, which adds the element (#166).
+[[nodiscard]] bool notes_lack_clr_map_ovr(std::span<const std::byte> xml);
+
 // #133 — a part that must have one owner, targeted from several.
 void integrity_shared_part(const Package& pkg,
                            const PartGraph& graph,

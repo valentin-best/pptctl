@@ -5,6 +5,24 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Each version corresponds to a
 ROADMAP phase and a GitHub milestone.
 
+## [Unreleased]
+
+### Added
+
+- `notes-clrmap` integrity rule (#166, error): a speaker-notes slide without
+  `p:clrMapOvr`. The schema makes it optional and PowerPoint and LibreOffice
+  open such decks, but Keynote refuses the whole deck without a message.
+  LibreOffice and ONLYOFFICE write notes slides this way; two decks in the
+  renderer-compatibility corpus have them, and both open in Keynote once the
+  element is added. Slides and layouts without it open fine.
+
+### Changed
+
+- `merge` adds `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>`, the
+  value PowerPoint writes, to every notes slide in its output that lacks it,
+  the base deck's included, and reports it per input (#166). Notes slides
+  that already have it are still copied byte for byte.
+
 ## [0.7.0] — 2026-11-04
 
 Phase 7: integrations. pptctl now runs where decks already move: on pull

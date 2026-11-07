@@ -107,6 +107,7 @@ const std::vector<RegisteredIntegrityRule>& integrity_rules() {
         {"orphan-part", detail::integrity_orphan_part},
         {"shared-part", detail::integrity_shared_part},
         {"unlisted-part", detail::integrity_unlisted_part},
+        {"notes-clrmap", detail::integrity_notes_clrmap},
     };
     return rules;
 }

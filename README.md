@@ -75,15 +75,17 @@ Static analysis: finds what will look wrong on screen, or break in another app, 
 | `orphan-part` | A part nothing references. |
 | `shared-part` | A part that must have one owner (notes, comments, charts, …) referenced from several. |
 | `unlisted-part` | A slide or master the presentation relates but doesn't list: a slide that isn't shown, or a notes master Keynote refuses (python-pptx writes these for any deck with speaker notes). |
+| `notes-clrmap` | A speaker-notes slide without `p:clrMapOvr`, which makes Keynote refuse the whole deck (LibreOffice and ONLYOFFICE write these). |
 
 ```
 $ pptctl lint --only integrity broken.pptx
 broken.pptx:ppt/slides/_rels/slide1.xml.rels: error[dangling-rel]: relationship rId4 (image) targets "ppt/media/missing.png", which does not exist
 broken.pptx:ppt/notesSlides/notesSlide1.xml: error[shared-part]: notesSlide part "ppt/notesSlides/notesSlide1.xml" is shared by ppt/slides/slide1.xml, ppt/slides/slide2.xml; each needs its own copy
 broken.pptx:ppt/presentation.xml: error[unlisted-part]: relationship rId11 (slide) targets "ppt/slides/slide9.xml", but ppt/presentation.xml doesn't list it in p:sldIdLst: it is not part of the slide show
+broken.pptx:ppt/notesSlides/notesSlide1.xml: error[notes-clrmap]: notes slide has no p:clrMapOvr: Keynote refuses to open the deck (PowerPoint writes <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>)
 broken.pptx:ppt/slides/slide1.xml: error[broken-rid]: r:embed="rId99" is not defined in ppt/slides/_rels/slide1.xml.rels
 …
-broken.pptx: 2 warnings, 6 errors
+broken.pptx: 2 warnings, 7 errors
 ```
 
 `--only` takes rule ids and the group `integrity` (comma-separated or repeated). `--only integrity` is how to **verify a deck another tool wrote** (python-pptx, PptxGenJS, agent tools like OfficeCLI) before it reaches PowerPoint's repair prompt or Keynote's refusal; it never parses slide content, so it also runs on decks whose `presentation.xml` is broken. `--strict` exits `2` when anything is found, for CI:
@@ -207,6 +209,8 @@ total: 7 slides, 65.7 KiB
 **Storage.** A picture, video or audio file identical to one already in the output is stored once (`media deduplicated`). Single-owner parts (notes, charts, workbooks, diagrams, comments) are always copied, one per slide.
 
 **The base deck.** The output is built on the `--theme` deck, or the first: its parts are copied byte for byte, and only `[Content_Types].xml`, `presentation.xml`, its relationships and `docProps/app.xml` are rewritten. Presentation-wide settings come from it too.
+
+**Notes that Keynote refuses.** LibreOffice and ONLYOFFICE write speaker-notes slides without `p:clrMapOvr`, and Keynote then won't open the deck at all. `merge` adds the element PowerPoint writes (`<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>`) to those notes slides, in any input including the base, and says so in the report. It is the only change merge makes inside a slide-level part; notes slides that already have it are copied byte for byte.
 
 | Flag | Meaning |
 |---|---|

@@ -798,7 +798,9 @@ def inject_integrity_problems(path: Path) -> None:
       shared-part       slide 2 also targets slide 1's notesSlide; both charts
                         target one chartStyle part
       unlisted-part     ppt/slides/slide9.xml, a blank slide presentation.xml
-                        relates but leaves out of p:sldIdLst"""
+                        relates but leaves out of p:sldIdLst
+      notes-clrmap      slide 1's notesSlide loses its p:clrMapOvr, as
+                        LibreOffice and ONLYOFFICE write notes slides"""
     with zipfile.ZipFile(path) as zf:
         parts = {n: zf.read(n) for n in zf.namelist()}
 
@@ -820,6 +822,11 @@ def inject_integrity_problems(path: Path) -> None:
     parts[slide2_rels], _ = _add_rel(
         parts[slide2_rels], f"{_REL_NS}/notesSlide", f"../notesSlides/{notes.group(1)}"
     )
+    notes_part = f"ppt/notesSlides/{notes.group(1)}"
+    notes_xml = parts[notes_part].decode("utf-8")
+    stripped = re.sub(r"<p:clrMapOvr>.*?</p:clrMapOvr>", "", notes_xml, count=1)
+    assert stripped != notes_xml, "slide 1's notes slide has no p:clrMapOvr"
+    parts[notes_part] = stripped.encode("utf-8")
 
     style_rel = "http://schemas.microsoft.com/office/2011/relationships/chartStyle"
     parts["ppt/charts/style1.xml"] = (

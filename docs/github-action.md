@@ -52,7 +52,7 @@ For a pull request that edits one deck, deletes one, renames one and adds two:
 | Deck                  | Change                              | Lint                 |
 |-----------------------|-------------------------------------|----------------------|
 | `clean.pptx`          | added                               | clean                |
-| `decks/Bad.PPTX`      | added                               | 6 errors, 3 warnings |
+| `decks/Bad.PPTX`      | added                               | 7 errors, 3 warnings |
 | `decks/a.pptx`        | modified                            | 1 warning            |
 | `decks/gone.pptx`     | deleted                             | —                    |
 | `decks/new-name.pptx` | renamed from `decks/old name.pptx`  | 1 warning            |
