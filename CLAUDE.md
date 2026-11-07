@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project workflow & status
 
-Work is planned in `ROADMAP.md` / `PLAN.md` (local-only: git-ignored, not in the repository, like `.claude/` and `docs/superpowers/`) and tracked in GitHub **milestones** (`Phase 0` … `Phase 8`, version-tagged) and **Project #5** (`valentin-best/pptctl`, a private repo). Phases are sequential: each is a shippable version (`Phase 1` → v0.1.0 `info`, `Phase 2` → v0.2.0 `extract`, …).
+Work is planned in `ROADMAP.md` / `PLAN.md` (local-only: git-ignored, not in the repository, like `.claude/` and `docs/superpowers/`) and tracked in GitHub **milestones** (`Phase 0` … `Phase 8`, version-tagged) and **Project #5** (`valentin-best/pptctl`, public since 2026-11-07). Phases are sequential: each is a shippable version (`Phase 1` → v0.1.0 `info`, `Phase 2` → v0.2.0 `extract`, …).
 
 - **To see where things stand and what to do next, run `/next`** — it reports the current phase, its open issues, and a recommended next task. Prefer it over re-deriving status by hand.
 - Work issue-by-issue within the current phase. Reference the issue number in commits/PRs.
 - Phases 0–7 are done and tagged (v0.1.0 … v0.7.0, plus v0.6.1 with the first prebuilt binaries; see `CHANGELOG.md`). v0.8.0 is a hardening release on top: the Phase 6 validation follow-ups #166 (`notes-clrmap` rule + merge repair), #163 and #167 (merge warnings). Phase 7 shipped the integrations: GitHub Action (`action.yml`), pre-commit hooks (`.pre-commit-hooks.yaml`), git diff driver and difftool, agent skill (`skills/pptctl/`), and the LibreOffice renderer-compat job (`scripts/renderer_compat.py`). Phase 8 (deferred `fill`, library) is a single **epic** tracking issue (label `epic`) — break it into granular issues if it becomes current.
 - **Positioning (since 2026-10-28):** pptctl is static analysis and safe surgery for decks — `lint`, `diff`, `optimize`, `merge` — not a general deck editor (that's OfficeCLI's ground). Phase 6 adds package-integrity lint rules alongside `merge`; Phase 7 is integrations (GitHub Action, pre-commit, agent skill); `fill` and library extraction are deferred. See the Positioning section of `ROADMAP.md`.
-- The planning files stay out of the repository (decided 2026-11-07, ahead of going public). Making the repo public and posting launch content are the maintainer's call.
+- The planning files stay out of the repository (decided 2026-11-07, ahead of going public). The repository and `pptctl-sample-decks` are public since 2026-11-07; launch content (posts, announcements) is the maintainer's call. `main` is protected against force-pushes and deletion; no checks are required (CI skips docs-only changes).
 
 ## Build, test, run
 
