@@ -159,7 +159,8 @@ merge containing it then opens too. `merge` copies the notes slide as it is, so
 the merged deck inherits the problem from its input; the Keynote checks above
 used the patched copy. It is the same family as the missing
 `p:notesMasterIdLst` in python-pptx decks (#136), which `unlisted-part` now
-catches. A lint rule and a merge fix for this one are proposed in #166.
+catches. A lint rule and a merge fix for this one were proposed in #166; both
+have since landed (`notes-clrmap`, and merge adds the element).
 
 **`--theme=1` harness note.** `merge_edge` is in the set twice in effect: once
 as itself and once as LibreOffice's re-save, with the same content. Restyled

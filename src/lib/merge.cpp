@@ -24,6 +24,8 @@ constexpr std::string_view kSlideMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml";
 constexpr std::string_view kNotesMasterType =
     "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
+constexpr std::string_view kNotesSlideType =
+    "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml";
 constexpr std::string_view kNotesMasterRel =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster";
 constexpr std::string_view kLegacyCommentsType =
@@ -238,6 +240,30 @@ std::optional<MergeReport> merge(std::span<const std::string> in_paths,
         input.slides = decks[i].slides;
         input.warnings.insert(
             input.warnings.end(), decks[i].warnings.begin(), decks[i].warnings.end());
+
+        // Notes slides Keynote would refuse get the colour map they lack: the
+        // base's own as well as imported ones.
+        std::vector<std::string> notes;
+        if (decks[i].imported == nullptr) {
+            for (const auto& part : packages[i].part_names()) {
+                if (packages[i].content_type(part) == kNotesSlideType) {
+                    notes.push_back(part);
+                }
+            }
+        } else {
+            for (const auto& [from, to] : *decks[i].imported) {
+                if (packages[i].content_type(from) == kNotesSlideType) {
+                    notes.push_back(to);
+                }
+            }
+        }
+        if (const auto n = detail::add_notes_clr_map_ovr(target, notes); n != 0) {
+            input.warnings.push_back(
+                std::format("added p:clrMapOvr to {} notes slide{} that lacked it "
+                            "(Keynote refuses to open a deck without it)",
+                            n,
+                            n == 1 ? "" : "s"));
+        }
     }
     const auto changes = target.changes();
     for (const auto& input : report.inputs) {

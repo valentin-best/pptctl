@@ -57,6 +57,14 @@
       "slide": null
     },
     {
+      "message": "notes slide has no p:clrMapOvr: Keynote refuses to open the deck (PowerPoint writes <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>)",
+      "part": "ppt/notesSlides/notesSlide1.xml",
+      "rule": "notes-clrmap",
+      "severity": "error",
+      "shape": null,
+      "slide": null
+    },
+    {
       "message": "part \"ppt/printerSettings/printerSettings1.bin\" has suspect content type \"application/vnd.openxmlformats-officedocument.presentationml.printerSettings\"",
       "part": null,
       "rule": "ctype",
@@ -76,7 +84,7 @@
   "file": "<path>",
   "schema_version": 1,
   "summary": {
-    "errors": 6,
+    "errors": 7,
     "warnings": 3
   }
 }

@@ -201,6 +201,7 @@ add_library(pptctl_lib STATIC
     src/lib/integrity_orphan_part.cpp
     src/lib/integrity_shared_part.cpp
     src/lib/integrity_unlisted_part.cpp
+    src/lib/integrity_notes_clrmap.cpp
     src/lib/presentation.cpp
     src/lib/slide.cpp
     src/lib/image.cpp
@@ -225,6 +226,7 @@ add_library(pptctl_lib STATIC
     src/lib/merge_masters.cpp
     src/lib/merge_theme.cpp
     src/lib/merge_comments.cpp
+    src/lib/merge_notes.cpp
 )
 target_include_directories(pptctl_lib PUBLIC include)
 target_link_libraries(pptctl_lib
@@ -269,6 +271,7 @@ add_executable(pptctl_tests
     tests/test_integrity_orphan_part.cpp
     tests/test_integrity_shared_part.cpp
     tests/test_integrity_unlisted_part.cpp
+    tests/test_integrity_notes_clrmap.cpp
     tests/test_slide.cpp
     tests/test_extract.cpp
     tests/test_lint.cpp
@@ -294,6 +297,7 @@ add_executable(pptctl_tests
     tests/test_merge_theme.cpp
     tests/test_merge_golden.cpp
     tests/test_merge_comments.cpp
+    tests/test_merge_notes.cpp
     src/cmd/extract.cpp
     src/cmd/lint.cpp
     src/cmd/diff.cpp

@@ -8,7 +8,7 @@
 # edited (diff_base -> diff_text_edit), decks/gone.pptx is deleted,
 # "decks/old name.pptx" is renamed unchanged, and decks/Bad.PPTX
 # (integrity_problems) and clean.pptx (lint_clean) are added; notes.txt
-# changes too and must be ignored. Expected: 5 decks changed, 6 lint errors,
+# changes too and must be ignored. Expected: 5 decks changed, 7 lint errors,
 # 5 lint warnings.
 
 set -euo pipefail

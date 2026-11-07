@@ -21,7 +21,7 @@ std::string fixture(const char* name) {
 
 }  // namespace
 
-TEST_CASE("integrity: registry lists the six rules in run order") {
+TEST_CASE("integrity: registry lists the seven rules in run order") {
     std::vector<std::string> ids;
     for (const auto& rule : pptctl::integrity_rules()) {
         ids.push_back(rule.id);
@@ -31,7 +31,8 @@ TEST_CASE("integrity: registry lists the six rules in run order") {
                                           "undeclared-ctype",
                                           "orphan-part",
                                           "shared-part",
-                                          "unlisted-part"});
+                                          "unlisted-part",
+                                          "notes-clrmap"});
 }
 
 TEST_CASE("integrity: a clean deck has no findings") {

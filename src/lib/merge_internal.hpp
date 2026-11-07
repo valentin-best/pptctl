@@ -288,4 +288,11 @@ void concatenate(MergeTarget& target,
                  std::span<ConcatDeck> decks,
                  const std::string& imported_notes_master);
 
+// Add <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>, the value PowerPoint
+// writes, to each of the output's notes slides `notes` that lacks it:
+// LibreOffice and ONLYOFFICE leave it out and Keynote then refuses the whole
+// deck (#166). Notes slides that have it stay byte for byte. Returns how many
+// were changed.
+std::size_t add_notes_clr_map_ovr(MergeTarget& target, std::span<const std::string> notes);
+
 }  // namespace pptctl::detail

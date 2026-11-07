@@ -150,6 +150,7 @@ zip:
 | `orphan-part` | No relationship reaches a part. | Usually harmless leftovers. `pptctl optimize` removes orphaned media. |
 | `shared-part` | A notes slide, chart or comment part is used by several slides. | Each slide needs its own copy. Typical of duplicating a slide by copying its relationships. |
 | `unlisted-part` | The presentation relates a slide or master but doesn't list it in `presentation.xml`. | See python-pptx below for the notes-master case. For a slide, add it to `p:sldIdLst` (the library's `add_slide` does this). |
+| `notes-clrmap` | A speaker-notes slide has no `p:clrMapOvr`; Keynote refuses the deck. | Typical of decks saved by LibreOffice or ONLYOFFICE. Add `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>` as the last child of `p:notes` (before any `p:extLst`). `pptctl merge` adds it to every notes slide it writes. |
 
 Content rules (warnings):
 
