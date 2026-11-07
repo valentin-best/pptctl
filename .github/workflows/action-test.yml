@@ -45,15 +45,22 @@ jobs:
           fail-on: never
           html-diff: true
 
+      # The Action lints with a released pptctl, while Bad.PPTX comes from this
+      # checkout and gains a defect with each new integrity rule, so its error
+      # count is whatever that release finds in it: one per rule it knows (6 in
+      # v0.7.0), and all of the run's errors, as the other decks have none.
       - name: Check outputs
         shell: bash
+        working-directory: ${{ steps.repo.outputs.dir }}
         env:
           CHANGED: ${{ steps.review.outputs.decks-changed }}
           ERRORS: ${{ steps.review.outputs.lint-errors }}
           WARNINGS: ${{ steps.review.outputs.lint-warnings }}
         run: |
-          echo "decks-changed=$CHANGED lint-errors=$ERRORS lint-warnings=$WARNINGS"
-          [ "$CHANGED" = 5 ] && [ "$ERRORS" = 7 ] && [ "$WARNINGS" = 5 ]
+          bad=$(jq .summary.errors <<< "$(pptctl lint --json decks/Bad.PPTX || true)")
+          echo "BAD_ERRORS=$bad" >> "$GITHUB_ENV"
+          echo "decks-changed=$CHANGED lint-errors=$ERRORS lint-warnings=$WARNINGS bad-errors=$bad"
+          [ "$bad" -ge 6 ] && [ "$CHANGED" = 5 ] && [ "$ERRORS" = "$bad" ] && [ "$WARNINGS" = 5 ]
 
       # The step summary isn't readable from a later step, so render it again
       # into a file (pptctl is on PATH from the review above) and check it.
@@ -74,7 +81,7 @@ jobs:
           check "| \`decks/a.pptx\` | modified | 1 warning |" "$GITHUB_STEP_SUMMARY"
           check "| \`decks/gone.pptx\` | deleted | — |" "$GITHUB_STEP_SUMMARY"
           check "renamed from \`decks/old name.pptx\`" "$GITHUB_STEP_SUMMARY"
-          check "| \`decks/Bad.PPTX\` | added | 7 errors, 3 warnings |" "$GITHUB_STEP_SUMMARY"
+          check "| \`decks/Bad.PPTX\` | added | $BAD_ERRORS errors, 3 warnings |" "$GITHUB_STEP_SUMMARY"
           check '--- a/decks/a.pptx' "$GITHUB_STEP_SUMMARY"
           check '+Review of this quarter' "$GITHUB_STEP_SUMMARY"
           check 'No changes to slide content.' "$GITHUB_STEP_SUMMARY"

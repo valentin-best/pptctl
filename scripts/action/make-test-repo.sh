@@ -8,8 +8,9 @@
 # edited (diff_base -> diff_text_edit), decks/gone.pptx is deleted,
 # "decks/old name.pptx" is renamed unchanged, and decks/Bad.PPTX
 # (integrity_problems) and clean.pptx (lint_clean) are added; notes.txt
-# changes too and must be ignored. Expected: 5 decks changed, 7 lint errors,
-# 5 lint warnings.
+# changes too and must be ignored. Expected: 5 decks changed, 5 lint
+# warnings, and one lint error per integrity rule the pptctl release knows
+# (6 in v0.7.0, 7 since notes-clrmap), all in decks/Bad.PPTX.
 
 set -euo pipefail
 
