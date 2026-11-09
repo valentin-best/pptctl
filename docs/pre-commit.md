@@ -21,7 +21,7 @@ pptctl version without thinking about it.
 ```yaml
 repos:
   - repo: https://github.com/valentin-best/pptctl
-    rev: v0.8.0
+    rev: v0.8.1
     hooks:
       - id: pptctl-lint
 ```
@@ -92,8 +92,8 @@ To skip some decks, use pre-commit's own `exclude` (a Python regex):
       - id: pptctl-lint-fetch
 ```
 
-It runs the release whose version matches the hook's `rev` (`rev: v0.8.0`
-runs pptctl 0.8.0, even if another pptctl is on `PATH`). On first use it
+It runs the release whose version matches the hook's `rev` (`rev: v0.8.1`
+runs pptctl 0.8.1, even if another pptctl is on `PATH`). On first use it
 downloads that release's archive for the machine (Linux x86_64 or aarch64,
 macOS arm64, Windows x86_64), checks it against the release's `SHA256SUMS`, and
 unpacks it into `~/.cache/pptctl/` (`$XDG_CACHE_HOME/pptctl/` when that is set).

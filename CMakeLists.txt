@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(pptctl
-    VERSION 0.8.0
+    VERSION 0.8.1
     DESCRIPTION "A fast CLI for .pptx files"
     LANGUAGES C CXX
 )
