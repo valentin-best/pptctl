@@ -28,6 +28,9 @@ jobs:
   build:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    env:
+      # macOS signing needs the repository's secrets, which forks don't get.
+      MACOS_SIGNING: ${{ secrets.MACOS_CERT_P12 != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +62,25 @@ jobs:
           cmake --build build/dist --parallel
           ctest --test-dir build/dist --output-on-failure
           strip build/dist/pptctl
+
+      # Developer ID signature and Apple notarization, so a downloaded binary
+      # runs without Gatekeeper's warning. A release must be signed; other
+      # runs sign when they can (not on pull requests from forks).
+      - name: Check signing secrets (macOS)
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/') && env.MACOS_SIGNING != 'true'
+        run: |
+          echo "::error::a release needs the macOS signing secrets (see scripts/release/sign-macos.sh)"
+          exit 1
+
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS' && env.MACOS_SIGNING == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: scripts/release/sign-macos.sh build/dist/pptctl
 
       - name: Set up MSVC (Windows)
         if: runner.os == 'Windows'

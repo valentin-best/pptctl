@@ -287,7 +287,7 @@ install pptctl-*-"$target"/pptctl ~/.local/bin/
 install pptctl-*-"$target"/git-pptx-diff*.sh ~/.local/bin/    # optional: git diff driver and difftool
 ```
 
-With no tag, `gh release download` takes the newest release; name one (`gh release download v0.8.0 …`) to pin it. The macOS binary is not notarized: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.
+With no tag, `gh release download` takes the newest release; name one (`gh release download v0.8.0 …`) to pin it. From the release after 0.8.0, the macOS binary is signed with a Developer ID and notarized by Apple, so it runs however it was downloaded. Up to 0.8.0 it isn't: one downloaded with a browser instead of `gh` or `curl` gets quarantined, and `xattr -d com.apple.quarantine pptctl` clears that.
 
 ## Building
 
