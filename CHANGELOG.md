@@ -21,6 +21,9 @@ closed one development phase and its GitHub milestone.
 
 ### Added
 
+- The macOS release binary is signed with a Developer ID and notarized by
+  Apple (`scripts/release/sign-macos.sh`), so Gatekeeper accepts it however
+  it was downloaded. A tag's release fails rather than ship it unsigned.
 - `THIRD_PARTY_NOTICES.md`, shipped in every release archive: the licence
   notices of the libraries statically linked into the binaries (pugixml,
   nlohmann/json, CLI11, minizip-ng, libpng, libjpeg-turbo; zlib and musl on
