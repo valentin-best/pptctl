@@ -37,7 +37,7 @@ int merge(const std::vector<std::string>& inputs,
 
 namespace {
 
-constexpr auto kVersion = "0.8.0";
+constexpr auto kVersion = "0.8.1";
 
 pptctl::FontTarget parse_font_target(const std::string& s) {
     if (s == "windows") {

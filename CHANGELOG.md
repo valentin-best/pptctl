@@ -5,7 +5,12 @@ All notable changes to `pptctl` are recorded here. The format follows
 [Semantic Versioning](https://semver.org/). Versions 0.1.0 to 0.7.0 each
 closed one development phase and its GitHub milestone.
 
-## [Unreleased]
+## [0.8.1] — 2026-11-09
+
+A security release, for running pptctl on decks you don't trust, as the
+GitHub Action does on pull requests: hostile archives that would inflate
+to gigabytes are refused. Also the first macOS binary signed and notarized
+by Apple, and the libraries' licence notices in every archive.
 
 ### Security
 
@@ -30,6 +35,7 @@ closed one development phase and its GitHub milestone.
   Linux, zlib-ng on Windows), including the Independent JPEG Group
   acknowledgement libjpeg-turbo's licence requires. Releases up to 0.8.0
   shipped only pptctl's own `LICENSE`.
+- `CONTRIBUTING.md`: reporting bugs, building and testing, conventions.
 
 ## [0.8.0] — 2026-11-07
 
@@ -445,6 +451,7 @@ Phase 1: `pptctl info`, quick metadata.
   MSVC 2022, plus a clang-tidy job; pre-commit hook running clang-format and
   clang-tidy.
 
+[0.8.1]: https://github.com/valentin-best/pptctl/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/valentin-best/pptctl/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/valentin-best/pptctl/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/valentin-best/pptctl/compare/v0.6.0...v0.6.1
